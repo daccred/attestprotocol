@@ -124,6 +124,13 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         return Err(Error::NotAuthorized);
     }
 
+    // CRITICAL: Verify the schema_uid in the request matches the attestation's actual schema.
+    // This prevents an attacker from bypassing revocability by providing a different
+    // revocable schema_uid while revoking an attestation from a non-revocable schema.
+    if attestation.schema_uid != request.schema_uid {
+        return Err(Error::InvalidReference);
+    }
+
     // Verify schema is revocable
     let schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
     if !schema.revocable {
