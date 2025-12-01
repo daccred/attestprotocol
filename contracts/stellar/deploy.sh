@@ -34,6 +34,10 @@ set -o pipefail  # Catch pipe failures (important for cmd | tee log.txt)
 DEFAULT_NETWORK="testnet"      # Options: testnet, futurenet, mainnet
 CONTRACTS_JSON_FILE="deployments.json"  # JSON: {network: {contract: {id, hash, timestamp}}}
 
+# Debug mode - set to true to enable verbose logging including sensitive values
+# Can be overridden by setting DEBUG=true in env.sh or environment
+DEBUG="${DEBUG:-false}"
+
 # --- Source env.sh for Defaults ---
 # Look for env.sh in the project root (two levels up from stellar directory)
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
@@ -106,8 +110,10 @@ verify_network_configuration() {
 
         # Add the network with provided parameters
         echo "Adding network: ${network}"
-        echo "  RPC URL: ${rpc}"
-        echo "  Passphrase: ${passphrase}"
+        if [[ "$DEBUG" = "true" ]]; then
+            echo "  RPC URL: ${rpc}"
+            echo "  Passphrase: ${passphrase}"
+        fi
 
         set +e
         local add_output
@@ -567,7 +573,7 @@ fi
 
 # Confirm deployment settings to prevent accidents
 echo "Selected Network: ${network_name}"
-if [[ -n "$rpc_url" && -n "$network_passphrase" ]]; then
+if [[ "$DEBUG" = "true" && -n "$rpc_url" && -n "$network_passphrase" ]]; then
     echo "RPC URL: ${rpc_url}"
     echo "Network Passphrase: ${network_passphrase}"
 fi
