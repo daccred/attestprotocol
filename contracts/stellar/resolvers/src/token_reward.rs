@@ -77,7 +77,7 @@ impl TokenRewardResolver {
     /// # Arguments
     /// * `admin` - The admin address that can manage the resolver
     /// * `reward_token` - The token contract used for rewards
-    /// * `reward_amount` - The amount of tokens to reward per attestation
+    /// * `reward_amount` - The amount of tokens to reward per attestation (must be >= 0)
     /// * `protocol_contract` - The authorized protocol contract that can call onresolve
     pub fn initialize(
         env: Env,
@@ -88,6 +88,11 @@ impl TokenRewardResolver {
     ) -> Result<(), ResolverError> {
         if env.storage().instance().has(&DataKey::Initialized) {
             return Err(ResolverError::CustomError); // Already initialized
+        }
+
+        // Validate reward amount is non-negative
+        if reward_amount < 0 {
+            return Err(ResolverError::ValidationFailed);
         }
 
         admin.require_auth();
@@ -115,8 +120,16 @@ impl TokenRewardResolver {
     }
 
     /// Update reward amount (admin only)
+    ///
+    /// # Arguments
+    /// * `new_amount` - The new reward amount (must be >= 0)
     pub fn set_reward_amount(env: Env, admin: Address, new_amount: i128) -> Result<(), ResolverError> {
         Self::require_admin(&env, &admin)?;
+
+        // Validate reward amount is non-negative
+        if new_amount < 0 {
+            return Err(ResolverError::ValidationFailed);
+        }
 
         env.storage().instance().set(&DataKey::RewardAmount, &new_amount);
 

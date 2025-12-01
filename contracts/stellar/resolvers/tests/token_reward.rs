@@ -193,3 +193,39 @@ fn test_replay_protection_prevents_double_reward() {
     assert_eq!(resolver_client.get_user_rewards(&attester), REWARD_AMOUNT);
     assert_eq!(resolver_client.get_total_rewarded(), REWARD_AMOUNT);
 }
+
+#[test]
+fn test_negative_reward_amount_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set(LedgerInfo {
+        timestamp: 0,
+        protocol_version: 22,
+        sequence_number: 1,
+        network_id: Default::default(),
+        base_reserve: 1,
+        min_temp_entry_ttl: 16 * 60 * 60 * 24,
+        min_persistent_entry_ttl: 30 * 60 * 60 * 24,
+        max_entry_ttl: 365 * 60 * 60 * 24,
+    });
+
+    let admin = Address::generate(&env);
+    let protocol_contract = Address::generate(&env);
+    let (token_address, _token_client, _token_admin_client) = create_token_contract(&env, &admin);
+
+    let resolver_address = env.register(TokenRewardResolver, ());
+    let resolver_client = TokenRewardResolverClient::new(&env, &resolver_address);
+
+    // Attempt to initialize with negative reward amount
+    let result = resolver_client.try_initialize(&admin, &token_address, &-100, &protocol_contract);
+    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+}
+
+#[test]
+fn test_set_negative_reward_amount_rejected() {
+    let (env, admin, _token_address, _token_client, _token_admin_client, _resolver_address, resolver_client, _protocol_contract) = setup();
+
+    // Attempt to set negative reward amount
+    let result = resolver_client.try_set_reward_amount(&admin, &-50);
+    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+}
