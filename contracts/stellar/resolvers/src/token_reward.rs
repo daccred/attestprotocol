@@ -139,6 +139,7 @@ impl TokenRewardResolver {
         }
 
         env.storage().instance().set(&DataKey::RewardAmount, &new_amount);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events()
@@ -175,6 +176,7 @@ impl TokenRewardResolver {
         // Transfer tokens from admin to contract
         let token_client = token::Client::new(&env, &reward_token);
         token_client.transfer(&admin, &env.current_contract_address(), &amount);
+        Self::extend_instance_ttl(&env);
 
         // Emit funding event
         env.events()
@@ -207,6 +209,14 @@ impl TokenRewardResolver {
         }
 
         Ok(())
+    }
+
+    /// Extends the TTL of instance storage to prevent expiration.
+    /// Should be called on any method that relies on instance storage.
+    fn extend_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(env.storage().max_ttl() - 100, env.storage().max_ttl());
     }
 }
 
@@ -364,6 +374,9 @@ impl ResolverInterface for TokenRewardResolver {
         env.storage()
             .instance()
             .set(&DataKey::TotalRewarded, &(total + reward_amount));
+
+        // Extend instance storage TTL to prevent expiration
+        TokenRewardResolver::extend_instance_ttl(&env);
 
         // STEP 6: Update individual user reward totals
         let user_key = (DataKey::UserRewards, attester.clone());

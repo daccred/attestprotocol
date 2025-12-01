@@ -83,6 +83,7 @@ impl FeeCollectionResolver {
         }
 
         env.storage().instance().set(&DataKey::AttestationFee, &new_fee);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events().publish((String::from_str(&env, "FEE_UPDATED"),), new_fee);
@@ -95,6 +96,7 @@ impl FeeCollectionResolver {
         Self::require_admin(&env, &admin)?;
 
         env.storage().instance().set(&DataKey::FeeRecipient, &new_recipient);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events()
@@ -137,6 +139,7 @@ impl FeeCollectionResolver {
 
         // Reset collected amount
         env.storage().persistent().set(&key, &0i128);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events()
@@ -170,6 +173,14 @@ impl FeeCollectionResolver {
         }
 
         Ok(())
+    }
+
+    /// Extends the TTL of instance storage to prevent expiration.
+    /// Should be called on any method that relies on instance storage.
+    fn extend_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(env.storage().max_ttl() - 100, env.storage().max_ttl());
     }
 }
 
@@ -219,6 +230,9 @@ impl ResolverInterface for FeeCollectionResolver {
         env.storage()
             .instance()
             .set(&DataKey::TotalCollected, &(total + attestation_fee));
+
+        // Extend instance storage TTL to prevent expiration
+        FeeCollectionResolver::extend_instance_ttl(&env);
 
         // Emit event
         env.events().publish(
