@@ -88,11 +88,6 @@ pub mod token_reward;
 #[cfg(any(not(target_arch = "wasm32"), feature = "export-fee-collection-resolver"))]
 pub mod fee_collection;
 
-/// Factory pattern implementation for creating multiple resolver instances.
-/// This module demonstrates how to use env.register_at() to deploy contracts
-/// at predetermined addresses and manage multiple resolver configurations.
-#[cfg(any(not(target_arch = "wasm32"), feature = "export-factory"))]
-pub mod factory;
 
 // ============================================================================
 // PUBLIC RE-EXPORTS
@@ -121,8 +116,3 @@ pub use token_reward::TokenRewardResolver;
 #[cfg(any(not(target_arch = "wasm32"), feature = "export-fee-collection-resolver"))]
 pub use fee_collection::FeeCollectionResolver;
 
-/// Re-export the ResolverFactory implementation when available.
-/// Only export to Wasm when the `export-factory` feature is enabled;
-/// always available on native builds for tests and integration.
-#[cfg(any(not(target_arch = "wasm32"), feature = "export-factory"))]
-pub use factory::ResolverFactory;

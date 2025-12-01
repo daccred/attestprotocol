@@ -22,7 +22,6 @@ default = []
 export-default-resolver = []
 export-token-reward-resolver = []
 export-fee-collection-resolver = []
-export-factory = []
 
 [dependencies]
 soroban-sdk = { workspace = true }
