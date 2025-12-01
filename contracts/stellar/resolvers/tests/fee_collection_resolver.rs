@@ -158,3 +158,67 @@ fn test_metadata() {
     assert_eq!(meta.name, SorobanString::from_str(&env, "Fee Collection Resolver"));
     assert_eq!(meta.resolver_type, ResolverType::FeeCollection);
 }
+
+#[test]
+fn test_negative_fee_in_initialize_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set(LedgerInfo {
+        timestamp: 0,
+        protocol_version: 22,
+        sequence_number: 1,
+        network_id: Default::default(),
+        base_reserve: 1,
+        min_temp_entry_ttl: 16 * 60 * 60 * 24,
+        min_persistent_entry_ttl: 30 * 60 * 60 * 24,
+        max_entry_ttl: 365 * 60 * 60 * 24,
+    });
+
+    let admin = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+    let (token_address, _token_client, _token_admin_client) = create_token_contract(&env, &admin);
+
+    let resolver_address = env.register(FeeCollectionResolver, ());
+    let resolver_client = FeeCollectionResolverClient::new(&env, &resolver_address);
+
+    // Attempt to initialize with negative fee should fail
+    let result = resolver_client.try_initialize(&admin, &token_address, &-100, &fee_recipient);
+    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+}
+
+#[test]
+fn test_negative_fee_in_set_attestation_fee_rejected() {
+    let (_env, admin, _fee_recipient, _token_client, _token_admin_client, _resolver_address, resolver_client) = setup();
+
+    // Attempt to set negative fee should fail
+    let result = resolver_client.try_set_attestation_fee(&admin, &-50);
+    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+}
+
+#[test]
+#[should_panic(expected = "HostError: Error(Storage, MissingValue)")]
+fn test_invalid_token_address_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set(LedgerInfo {
+        timestamp: 0,
+        protocol_version: 22,
+        sequence_number: 1,
+        network_id: Default::default(),
+        base_reserve: 1,
+        min_temp_entry_ttl: 16 * 60 * 60 * 24,
+        min_persistent_entry_ttl: 30 * 60 * 60 * 24,
+        max_entry_ttl: 365 * 60 * 60 * 24,
+    });
+
+    let admin = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+    // Use a random address that is NOT a token contract
+    let invalid_token_address = Address::generate(&env);
+
+    let resolver_address = env.register(FeeCollectionResolver, ());
+    let resolver_client = FeeCollectionResolverClient::new(&env, &resolver_address);
+
+    // Attempt to initialize with invalid token address should panic
+    resolver_client.initialize(&admin, &invalid_token_address, &FEE_AMOUNT, &fee_recipient);
+}
