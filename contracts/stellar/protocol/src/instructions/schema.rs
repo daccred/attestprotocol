@@ -86,6 +86,14 @@ pub fn register_schema(
     // Generate schema UID
     let schema_uid = utils::generate_schema_uid(env, &schema_definition, &caller, &resolver);
 
+    // Check if schema already exists (collision detection)
+    // This prevents accidental overwrites and detects when an identical schema
+    // (same definition, authority, and resolver) has already been registered.
+    let schema_key = DataKey::Schema(schema_uid.clone());
+    if env.storage().instance().has(&schema_key) {
+        return Err(Error::SchemaAlreadyExists);
+    }
+
     // Store schema
     let schema = Schema {
         authority: caller.clone(),
@@ -93,7 +101,6 @@ pub fn register_schema(
         resolver,
         revocable,
     };
-    let schema_key = DataKey::Schema(schema_uid.clone());
     env.storage().instance().set(&schema_key, &schema);
 
     // Publish schema registration event
