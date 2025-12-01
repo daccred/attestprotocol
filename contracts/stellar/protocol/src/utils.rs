@@ -134,26 +134,29 @@ pub fn get_next_nonce(env: &Env, attester: &Address) -> u64 {
     env.storage().persistent().get::<DataKey, u64>(&nonce_key).unwrap_or(0)
 }
 
-/// Creates a base64-encoded XDR string from a Soroban string value.
+/// Creates a deterministic XDR-prefixed string from a Soroban string value.
 ///
 /// This utility function takes a Soroban string, converts it to XDR bytes,
-/// hashes those bytes using SHA256, and then encodes the hash as a base64 XDR string.
-/// This is useful for creating deterministic identifiers or for XDR serialization
-/// in Soroban contracts.
+/// hashes those bytes using SHA256, and encodes the full hash as a hexadecimal
+/// string prefixed with "XDR:". This produces a unique 68-character string
+/// (4 prefix + 64 hex characters) that can be used as a deterministic identifier.
 ///
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `value` - A Soroban string value to process
 ///
-/// # Returns   
-/// * `String` - A Soroban string containing the base64-encoded XDR representation
-///   of the SHA256 hash of the input string's XDR bytes
+/// # Returns
+/// * `String` - A Soroban string in format "XDR:{64-char-hex-hash}"
+///
+/// # Collision Resistance
+/// Uses the full 256-bit SHA256 hash encoded as hex, providing cryptographic
+/// collision resistance. The probability of collision is negligible (2^-128).
 ///
 /// # Example
 /// ```ignore
 /// let some_string = String::from_str(&env, "hello world");
 /// let xdr_string = create_xdr_string(&env, &some_string);
-/// // Returns a base64-encoded XDR string of the SHA256 hash
+/// // Returns "XDR:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 /// ```
 pub fn create_xdr_string(env: &Env, value: &String) -> String {
     // Convert the input string to XDR bytes
@@ -161,40 +164,24 @@ pub fn create_xdr_string(env: &Env, value: &String) -> String {
 
     // Hash the XDR bytes using SHA256 to create a deterministic identifier
     let hash: BytesN<32> = env.crypto().sha256(&xdr_bytes).into();
-
-    // Convert the hash to a string representation
-    // Since we're in a no_std environment, we'll create a deterministic string
-    // based on the first few bytes of the hash
     let hash_array = hash.to_array();
 
-    // Convert prefix to a simple character representation
-    // We'll use the first byte of the hash as a simple identifier
-    let suffix_char = match hash_array[0] % 16 {
-        0 => "0",
-        1 => "1",
-        2 => "2",
-        3 => "3",
-        4 => "4",
-        5 => "5",
-        6 => "6",
-        7 => "7",
-        8 => "8",
-        9 => "9",
-        10 => "A",
-        11 => "B",
-        12 => "C",
-        13 => "D",
-        14 => "E",
-        _ => "F",
-    };
+    // Hex lookup table for efficient conversion
+    const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
 
-    // Build the final string
-    let mut result_str = [0u8; 5];
+    // Build the result: "XDR:" prefix (4 bytes) + 64 hex characters = 68 bytes
+    let mut result_str = [0u8; 68];
     result_str[0] = b'X';
     result_str[1] = b'D';
     result_str[2] = b'R';
     result_str[3] = b':';
-    result_str[4] = suffix_char.as_bytes()[0];
+
+    // Convert each byte of the hash to two hex characters
+    for i in 0..32 {
+        let byte = hash_array[i];
+        result_str[4 + i * 2] = HEX_CHARS[(byte >> 4) as usize];
+        result_str[4 + i * 2 + 1] = HEX_CHARS[(byte & 0x0f) as usize];
+    }
 
     String::from_bytes(env, &result_str)
 }

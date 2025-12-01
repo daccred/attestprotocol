@@ -26,6 +26,12 @@ pub struct FeeCollectionResolver;
 #[contractimpl]
 impl FeeCollectionResolver {
     /// Initialize the resolver with fee configuration
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address that can manage the resolver
+    /// * `fee_token` - The token contract used for fee collection
+    /// * `attestation_fee` - The fee amount per attestation (must be >= 0)
+    /// * `fee_recipient` - The address that receives collected fees
     pub fn initialize(
         env: Env,
         admin: Address,
@@ -37,7 +43,18 @@ impl FeeCollectionResolver {
             return Err(ResolverError::CustomError); // Already initialized
         }
 
+        // Validate attestation fee is non-negative to prevent reverse transfers
+        // that could drain the contract or corrupt accounting
+        if attestation_fee < 0 {
+            return Err(ResolverError::ValidationFailed);
+        }
+
         admin.require_auth();
+
+        // Validate that fee_token implements the token interface by querying its decimals.
+        // This prevents initialization with invalid or non-compliant token contracts.
+        let token_client = token::Client::new(&env, &fee_token);
+        let _ = token_client.decimals(); // Will trap if not a valid token contract
 
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::FeeToken, &fee_token);
@@ -54,10 +71,19 @@ impl FeeCollectionResolver {
     }
 
     /// Update attestation fee (admin only)
+    ///
+    /// # Arguments
+    /// * `new_fee` - The new fee amount (must be >= 0)
     pub fn set_attestation_fee(env: Env, admin: Address, new_fee: i128) -> Result<(), ResolverError> {
         Self::require_admin(&env, &admin)?;
 
+        // Validate fee is non-negative
+        if new_fee < 0 {
+            return Err(ResolverError::ValidationFailed);
+        }
+
         env.storage().instance().set(&DataKey::AttestationFee, &new_fee);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events().publish((String::from_str(&env, "FEE_UPDATED"),), new_fee);
@@ -70,6 +96,7 @@ impl FeeCollectionResolver {
         Self::require_admin(&env, &admin)?;
 
         env.storage().instance().set(&DataKey::FeeRecipient, &new_recipient);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events()
@@ -112,6 +139,7 @@ impl FeeCollectionResolver {
 
         // Reset collected amount
         env.storage().persistent().set(&key, &0i128);
+        Self::extend_instance_ttl(&env);
 
         // Emit event
         env.events()
@@ -145,6 +173,14 @@ impl FeeCollectionResolver {
         }
 
         Ok(())
+    }
+
+    /// Extends the TTL of instance storage to prevent expiration.
+    /// Should be called on any method that relies on instance storage.
+    fn extend_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(env.storage().max_ttl() - 100, env.storage().max_ttl());
     }
 }
 
@@ -194,6 +230,9 @@ impl ResolverInterface for FeeCollectionResolver {
         env.storage()
             .instance()
             .set(&DataKey::TotalCollected, &(total + attestation_fee));
+
+        // Extend instance storage TTL to prevent expiration
+        FeeCollectionResolver::extend_instance_ttl(&env);
 
         // Emit event
         env.events().publish(
