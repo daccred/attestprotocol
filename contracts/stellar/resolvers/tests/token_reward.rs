@@ -32,6 +32,7 @@ fn setup<'a>() -> (
     token::StellarAssetClient<'a>,
     Address,
     TokenRewardResolverClient<'a>,
+    Address, // protocol_contract (authorized caller for onresolve)
 ) {
     let env = Env::default();
     env.mock_all_auths();
@@ -47,11 +48,12 @@ fn setup<'a>() -> (
     });
 
     let admin = Address::generate(&env);
+    let protocol_contract = Address::generate(&env); // Mock protocol contract
     let (token_address, token_client, token_admin_client) = create_token_contract(&env, &admin);
 
     let resolver_address = env.register(TokenRewardResolver, ());
     let resolver_client = TokenRewardResolverClient::new(&env, &resolver_address);
-    resolver_client.initialize(&admin, &token_address, &REWARD_AMOUNT);
+    resolver_client.initialize(&admin, &token_address, &REWARD_AMOUNT, &protocol_contract);
 
     (
         env,
@@ -61,6 +63,7 @@ fn setup<'a>() -> (
         token_admin_client,
         resolver_address,
         resolver_client,
+        protocol_contract,
     )
 }
 
@@ -82,7 +85,7 @@ fn build_attestation(env: &Env, attester: &Address) -> ResolverAttestationData {
 
 #[test]
 fn test_reward_distribution_on_attestation() {
-    let (env, admin, _token_address, token_client, token_admin_client, _resolver_address, resolver_client) = setup();
+    let (env, admin, _token_address, token_client, token_admin_client, _resolver_address, resolver_client, _protocol_contract) = setup();
 
     // Fund reward pool
     token_admin_client.mint(&admin, &FUND_AMOUNT);
@@ -107,7 +110,7 @@ fn test_reward_distribution_on_attestation() {
 
 #[test]
 fn test_openzeppelin_token_compliance() {
-    let (env, admin, _token_address, token_client, token_admin_client, resolver_address, resolver_client) = setup();
+    let (env, admin, _token_address, token_client, token_admin_client, resolver_address, resolver_client, _protocol_contract) = setup();
 
     // Query metadata via standard token interface
     let resolver_token_client = token::Client::new(&env, &resolver_address);
@@ -136,7 +139,7 @@ fn test_openzeppelin_token_compliance() {
 
 #[test]
 fn test_insufficient_pool_handling() {
-    let (env, _admin, _token_address, _token_client, _token_admin_client, _resolver_address, resolver_client) = setup();
+    let (env, _admin, _token_address, _token_client, _token_admin_client, _resolver_address, resolver_client, _protocol_contract) = setup();
     let attester = Address::generate(&env);
     let attestation = build_attestation(&env, &attester);
 
@@ -150,7 +153,7 @@ fn test_insufficient_pool_handling() {
 
 #[test]
 fn test_non_admin_cannot_set_reward_amount() {
-    let (env, _admin, _token_address, _token_client, _token_admin_client, _resolver_address, resolver_client) = setup();
+    let (env, _admin, _token_address, _token_client, _token_admin_client, _resolver_address, resolver_client, _protocol_contract) = setup();
     let attacker = Address::generate(&env);
     let result = resolver_client.try_set_reward_amount(&attacker, &200);
     // If this assertion fails:
@@ -162,7 +165,7 @@ fn test_non_admin_cannot_set_reward_amount() {
 
 #[test]
 fn test_replay_protection_prevents_double_reward() {
-    let (env, admin, _token_address, token_client, token_admin_client, _resolver_address, resolver_client) = setup();
+    let (env, admin, _token_address, token_client, token_admin_client, _resolver_address, resolver_client, _protocol_contract) = setup();
 
     // Fund reward pool with enough for multiple rewards
     token_admin_client.mint(&admin, &(FUND_AMOUNT * 10));

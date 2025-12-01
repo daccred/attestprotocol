@@ -57,6 +57,7 @@ pub enum DataKey {
     TotalRewarded,
     UserRewards,
     ProcessedAttestation, // Tracks attestation UIDs that have been rewarded
+    ProtocolContract,     // Authorized protocol contract that can call onresolve
     // OpenZeppelin Fungible Token fields
     TokenName,
     TokenSymbol,
@@ -71,12 +72,19 @@ pub struct TokenRewardResolver;
 
 #[contractimpl]
 impl TokenRewardResolver {
-    /// Initialize the resolver with reward token and amount
+    /// Initialize the resolver with reward token, amount, and authorized protocol contract
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address that can manage the resolver
+    /// * `reward_token` - The token contract used for rewards
+    /// * `reward_amount` - The amount of tokens to reward per attestation
+    /// * `protocol_contract` - The authorized protocol contract that can call onresolve
     pub fn initialize(
         env: Env,
         admin: Address,
         reward_token: Address,
         reward_amount: i128,
+        protocol_contract: Address,
     ) -> Result<(), ResolverError> {
         if env.storage().instance().has(&DataKey::Initialized) {
             return Err(ResolverError::CustomError); // Already initialized
@@ -96,6 +104,7 @@ impl TokenRewardResolver {
         env.storage().instance().set(&DataKey::RewardToken, &reward_token);
         env.storage().instance().set(&DataKey::RewardAmount, &reward_amount);
         env.storage().instance().set(&DataKey::TotalRewarded, &0i128);
+        env.storage().instance().set(&DataKey::ProtocolContract, &protocol_contract);
         env.storage().instance().set(&DataKey::Initialized, &true);
 
         env.storage()
@@ -276,7 +285,16 @@ impl ResolverInterface for TokenRewardResolver {
     /// - **Natural Rate Limiting**: Economics provide automatic spam resistance
     /// - **Pool Sustainability**: Requires periodic refunding for continued operation
     fn onresolve(env: Env, attestation_uid: BytesN<32>, attester: Address) -> Result<(), ResolverError> {
-        // STEP 0: Check for replay attack - ensure this attestation hasn't been rewarded
+        // STEP 0a: Verify caller is the authorized protocol contract
+        // This prevents unauthorized direct calls that could drain the reward pool
+        let protocol_contract: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::ProtocolContract)
+            .ok_or(ResolverError::CustomError)?;
+        protocol_contract.require_auth();
+
+        // STEP 0b: Check for replay attack - ensure this attestation hasn't been rewarded
         let processed_key = (DataKey::ProcessedAttestation, attestation_uid.clone());
         if env.storage().persistent().has(&processed_key) {
             // Already processed - silently succeed to not break protocol flow
