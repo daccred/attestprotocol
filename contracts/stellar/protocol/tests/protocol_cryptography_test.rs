@@ -49,6 +49,7 @@ use protocol::{
 
 use soroban_sdk::{
     testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
+    xdr::ToXdr,
     Address, Bytes, BytesN, Env, IntoVal, String as SorobanString, TryIntoVal,
 };
 
@@ -659,8 +660,10 @@ fn test_end_to_end_bls_signature_verification() {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-        message_payload.extend_from_slice(&value_len_bytes);
+        // FIELD 5: Value Hash (32 bytes, SHA256 of value XDR)
+        let value_xdr = request.value.clone().to_xdr(&env);
+        let value_hash = env.crypto().sha256(&value_xdr);
+        message_payload.extend_from_slice(&value_hash.to_array());
 
         env.crypto().sha256(&message_payload).into()
     };
@@ -750,8 +753,10 @@ fn test_clean_room_attestation_message_hash() {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-        message_payload.extend_from_slice(&value_len_bytes);
+        // FIELD 5: Value Hash (32 bytes, SHA256 of value XDR)
+        let value_xdr = request.value.clone().to_xdr(&env);
+        let value_hash = env.crypto().sha256(&value_xdr);
+        message_payload.extend_from_slice(&value_hash.to_array());
 
         env.crypto().sha256(&message_payload).into()
     };

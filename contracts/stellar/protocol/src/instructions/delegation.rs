@@ -3,6 +3,7 @@ use crate::events;
 use crate::instructions::verify_bls_signature;
 use crate::state::{Attestation, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest};
 use crate::utils::{self, generate_attestation_uid};
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
 /// Domain separator for creating delegated attestation signatures.
@@ -242,12 +243,12 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 ///
 /// # Message Structure
 /// ```rust,ignore
-/// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (26 bytes)
+/// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (28 bytes)
 /// Schema UID:       32 bytes
 /// Nonce:            8 bytes (big-endian u64)
 /// Deadline:         8 bytes (big-endian u64)
 /// Expiration Time:  8 bytes (optional, big-endian u64)
-/// Value Length:     8 bytes (big-endian u64)
+/// Value Hash:       32 bytes (SHA256 of value content)
 /// ```
 ///
 /// # Cross-Platform Compatibility
@@ -310,11 +311,12 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
         message.extend_from_slice(&exp_bytes);
     }
 
-    // FIELD 5: Value Length (8 bytes, placeholder for actual value)
-    // TODO: In production, include actual value hash for complete security
-    // Currently using length as simplified placeholder for proof-of-concept
-    let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-    message.extend_from_slice(&value_len_bytes);
+    // FIELD 5: Value Hash (32 bytes, SHA256 of value content)
+    // This ensures the exact value content is cryptographically bound to the signature.
+    // Any modification to the value will invalidate the signature.
+    let value_xdr = request.value.clone().to_xdr(env);
+    let value_hash = env.crypto().sha256(&value_xdr);
+    message.extend_from_slice(&value_hash.to_array());
 
     // CRYPTOGRAPHIC HASH: SHA256 of complete message
     // This hash is what gets signed by BLS private key off-chain
