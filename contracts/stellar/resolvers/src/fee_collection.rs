@@ -25,9 +25,13 @@ pub struct FeeCollectionResolver;
 // when explicitly exporting this resolver contract to Wasm.
 #[contractimpl]
 impl FeeCollectionResolver {
-    /// Constructor - called atomically at deployment time.
+    /// Constructor - called atomically at deployment time (CAP-0058).
+    ///
     /// This prevents front-running attacks where an attacker could call
-    /// initialize() before the legitimate deployer.
+    /// initialize() before the legitimate deployer. The constructor is
+    /// guaranteed to run exactly once during contract creation.
+    ///
+    /// See: https://github.com/stellar/stellar-protocol/blob/master/core/cap-0058.md
     ///
     /// # Arguments
     /// * `admin` - The admin address that can manage the resolver
