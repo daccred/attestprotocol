@@ -97,6 +97,13 @@ impl TokenRewardResolver {
 
         admin.require_auth();
 
+        // Validate that reward_token implements the token interface by querying its decimals.
+        // This prevents initialization with invalid or non-compliant token contracts that could
+        // cause onresolve or fund_reward_pool to trap, potentially locking reward distribution.
+        // If the address doesn't implement the token interface, this call will trap.
+        let token_client = token::Client::new(&env, &reward_token);
+        let _ = token_client.decimals(); // Will trap if not a valid token contract
+
         // Set token metadata using OpenZeppelin Base
         Base::set_metadata(
             &env,
