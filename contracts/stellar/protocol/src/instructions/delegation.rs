@@ -53,14 +53,16 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Verify schema exists
     let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
-    // Verify and increment nonce
-    verify_and_increment_nonce(env, &request.attester, request.nonce)?;
-
     // Create message for signature verification
     let message = create_attestation_message(env, &request);
 
-    // Verify BLS12-381 signature
+    // CRITICAL: Verify BLS12-381 signature BEFORE incrementing nonce.
+    // If we increment nonce first, an attacker can submit invalid signatures
+    // to permanently skip nonces, causing DoS on legitimate attesters.
     verify_bls_signature(env, &message, &request.signature, &request.attester)?;
+
+    // Only increment nonce AFTER signature is verified to prevent DoS attacks
+    verify_and_increment_nonce(env, &request.attester, request.nonce)?;
 
     let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, request.nonce);
 
