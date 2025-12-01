@@ -15,11 +15,6 @@
     "vitest": "^3.2.4"
   },
   "exports": {
-    "./authority": {
-      "types": "./dist/authority.d.ts",
-      "import": "./dist/authority.js",
-      "require": "./dist/authority.js"
-    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "import": "./dist/protocol.js",
