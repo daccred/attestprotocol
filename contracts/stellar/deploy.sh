@@ -7,12 +7,11 @@
 # Features: Multi-contract support, deployment history tracking, network selection,
 # clean build mode, automatic initialization, and robust error handling.
 #
-# Usage: ./deploy.sh [--authority] [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--mode <default|clean>] [--initialize] [--token-id <token_id>] [--bindings] [-h|--help]
+# Usage: ./deploy.sh [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--mode <default|clean>] [--initialize] [--bindings] [-h|--help]
 # Configuration can be set via command-line flags or by creating an env.sh file
 # in the parent directory (flags override env.sh).
 # Required env.sh variables if not using flags:
 #   - SOURCE_IDENTITY (for --source)
-#   - TOKEN_CONTRACT_ID (for --token-id when initializing authority)
 # Optional env.sh variables:
 #   - RPC_URL (for --rpc-url)
 #   - NETWORK_PASSPHRASE (for --network-passphrase)
@@ -57,26 +56,21 @@ fi
 # Command-line flags will override these later if provided.
 network_name="${SOROBAN_NETWORK:-$DEFAULT_NETWORK}" # Use SOROBAN_NETWORK from env if set
 source_identity="${SOURCE_IDENTITY:-}" # Use SOURCE_IDENTITY from env if set
-token_contract_id="${TOKEN_CONTRACT_ID:-}" # Use TOKEN_CONTRACT_ID from env if set
 rpc_url="${RPC_URL:-}" # Use RPC_URL from env if set
 network_passphrase="${NETWORK_PASSPHRASE:-}" # Use NETWORK_PASSPHRASE from env if set
 fee_stroops="${STELLAR_FEE:-10000000}" # Default 10M stroops (1 XLM) for mainnet deployments
 
 # Contract definitions (WASM paths relative to project root)
-AUTHORITY_CONTRACT_NAME="authority"    # Handles permissions/access control
 PROTOCOL_CONTRACT_NAME="protocol"      # Implements core business logic
-AUTHORITY_WASM_PATH="target/wasm32v1-none/release/${AUTHORITY_CONTRACT_NAME}.wasm"
 PROTOCOL_WASM_PATH="target/wasm32v1-none/release/${PROTOCOL_CONTRACT_NAME}.wasm"
 
 # === Runtime Variables ===
-deploy_authority=false   # Deploy authority contract flag
 deploy_protocol=false    # Deploy protocol contract flag
-# network_name, source_identity, token_contract_id now initialized above from env or empty
+# network_name, source_identity now initialized above from env or empty
 mode="default"           # Mode: 'default' (build+deploy) or 'clean' (clean+test+build+deploy)
 initialize_contracts=false # Initialize contracts after deployment flag
 generate_bindings=false # Generate TypeScript bindings after deployment flag
 skip_confirmation=false # Skip interactive confirmation prompt
-# token_contract_id is now initialized above
 
 # === Helper Functions ===
 
@@ -234,13 +228,12 @@ verify_network_configuration() {
 
 # Display usage info (exit: 1 = help displayed)
 usage() {
-  echo "Usage: $0 [--authority] [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--fee <stroops>] [--mode <default|clean>] [--initialize] [--token-id <token_id>] [--bindings] [--yes] [-h|--help]"
+  echo "Usage: $0 [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--fee <stroops>] [--mode <default|clean>] [--initialize] [--bindings] [--yes] [-h|--help]"
   echo ""
   echo "Builds, tests (optional), deploys, and optionally initializes Soroban contracts, storing details in ${CONTRACTS_JSON_FILE}."
   echo "Configuration defaults can be set in '${ENV_FILE_PATH}'. Command-line flags override environment settings."
   echo ""
   echo "Options:"
-  echo "  --authority                Deploy the authority contract."
   echo "  --protocol                 Deploy the protocol contract."
   echo "  --network <name>           Specify the network (e.g., testnet, mainnet). Default: ${DEFAULT_NETWORK} (or from SOROBAN_NETWORK in env.sh)"
   echo "  --rpc-url <url>            RPC URL for the network. If provided with --network-passphrase, will configure/update the network."
@@ -251,7 +244,6 @@ usage() {
   echo "  --fee <stroops>            Transaction fee in stroops (1 XLM = 10,000,000 stroops). Default: 10000000 (1 XLM). (Can be set via STELLAR_FEE in env.sh)"
   echo "  --mode <mode>              Deployment mode: 'clean' (clean, test, build, deploy) or 'default' (build, deploy). Default: default"
   echo "  --initialize               Initialize deployed contracts using the source identity as admin. Default: false"
-  echo "  --token-id <id>            The contract ID of the token for the authority contract (required if --initialize and --authority). (Can be set via TOKEN_CONTRACT_ID in env.sh)"
   echo "  --bindings                 Generate TypeScript bindings for deployed contracts and organize them in bindings/src/. Default: false"
   echo "  --yes, -y                  Skip confirmation prompt and proceed with deployment automatically. Default: false"
   echo "  -h, --help                 Display this help message."
@@ -479,10 +471,6 @@ cleanup_bindings_temp() {
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
-    --authority)
-      deploy_authority=true
-      shift # past argument
-      ;;
     --protocol)
       deploy_protocol=true
       shift # past argument
@@ -529,11 +517,6 @@ while [[ $# -gt 0 ]]; do
       generate_bindings=true
       shift # past argument
       ;;
-    --token-id)
-      token_contract_id="$2" # Override value from env if flag is used
-      shift # past argument
-      shift # past value
-      ;;
     --yes|-y)
       skip_confirmation=true
       shift # past argument
@@ -577,15 +560,9 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Prevent accidental empty runs
-if [[ "$deploy_authority" = false && "$deploy_protocol" = false ]]; then
-  echo "Error: No contracts specified for deployment. Use --authority and/or --protocol."
+if [[ "$deploy_protocol" = false ]]; then
+  echo "Error: No contracts specified for deployment. Use --protocol."
   usage
-fi
-
-# Validate token ID if initializing authority - check variable state AFTER flags are parsed
-if [[ "$initialize_contracts" = true && "$deploy_authority" = true && -z "$token_contract_id" ]]; then
-    echo "Error: --token-id flag or TOKEN_CONTRACT_ID in ${ENV_FILE_PATH} is required when using --initialize with --authority."
-    usage
 fi
 
 # Confirm deployment settings to prevent accidents
@@ -596,13 +573,9 @@ if [[ -n "$rpc_url" && -n "$network_passphrase" ]]; then
 fi
 echo "Deployment Identity: ${source_identity}"
 echo "Mode: ${mode}"
-echo "Deploy Authority: ${deploy_authority}"
 echo "Deploy Protocol: ${deploy_protocol}"
 echo "Initialize Contracts: ${initialize_contracts}"
 echo "Generate Bindings: ${generate_bindings}"
-if [[ "$initialize_contracts" = true && "$deploy_authority" = true ]]; then
-    echo "Authority Token ID: ${token_contract_id}"
-fi
 echo "Contracts JSON: ${CONTRACTS_JSON_FILE}"
 echo ""
 
@@ -760,7 +733,7 @@ deploy_contract() {
 # === Contract Initialization Function ===
 # Initialize a deployed contract
 # Args: contract_name, contract_id, admin_address
-# Uses global: source_identity, network_name, token_contract_id (if authority)
+# Uses global: source_identity, network_name
 # Exit: 0=success, 1=failure
 initialize_contract() {
     local contract_name="$1"
@@ -769,7 +742,7 @@ initialize_contract() {
 
     log_step "Initializing ${contract_name} Contract (${contract_id})"
 
-    local invoke_cmd_base=(
+    local invoke_cmd_full=(
         stellar contract invoke
         --id "$contract_id"
         --source "$source_identity" # Use the source identity for the invoke call
@@ -778,24 +751,6 @@ initialize_contract() {
         initialize
         --admin "$admin_address" # The public address derived from source_identity
     )
-
-    local invoke_cmd_full=()
-    if [[ "$contract_name" == "$AUTHORITY_CONTRACT_NAME" ]]; then
-        # Ensure token_contract_id is set (should be validated earlier)
-        if [[ -z "$token_contract_id" ]]; then
-             echo "Internal Error: Token contract ID is missing for authority initialization."
-             return 1
-        fi
-        # Use the standard SAC wasm hash for Stellar Asset Contracts
-        # This is the hash for the built-in Stellar Asset Contract
-        local token_wasm_hash="d93f5c7bb0ebc4a9c8f727c5ceec4e0db9cc7c5ec9d14bcffad56e96ccf24fcb"
-        invoke_cmd_full=("${invoke_cmd_base[@]}" --token_contract_id "$token_contract_id" --token_wasm_hash "$token_wasm_hash")
-    elif [[ "$contract_name" == "$PROTOCOL_CONTRACT_NAME" ]]; then
-        invoke_cmd_full=("${invoke_cmd_base[@]}")
-    else
-        echo "Error: Unknown contract name '${contract_name}' for initialization."
-        return 1
-    fi
 
     echo "Running command: ${invoke_cmd_full[*]}"
 
@@ -821,32 +776,14 @@ initialize_contract() {
 }
 
 # === Deployment Execution ===
-# Allow both deployments to attempt even if one fails
+# Allow deployment to attempt even if it fails
 set +e
 
 # Initialize tracking variables
 DEPLOYED_CONTRACT_ID="" # Used by deploy_contract
 DEPLOYED_TX_HASH="" # Used by deploy_contract
-authority_contract_id=""
-authority_tx_hash=""
 protocol_contract_id=""
 protocol_tx_hash=""
-
-# Deploy Authority if requested
-if [[ "$deploy_authority" = true ]]; then
-  deploy_contract "$AUTHORITY_CONTRACT_NAME" "$AUTHORITY_WASM_PATH"
-  if [[ $? -eq 0 ]]; then
-    authority_contract_id="$DEPLOYED_CONTRACT_ID"
-    authority_tx_hash="$DEPLOYED_TX_HASH"
-  else
-    echo "ERROR: Authority contract deployment failed. Summary might be incomplete."
-  fi
-fi
-
-# Reset tracking (prevent cross-contamination if deploying both)
-# Note: deploy_contract resets these internally now, but keeping explicit reset for clarity
-DEPLOYED_CONTRACT_ID=""
-DEPLOYED_TX_HASH=""
 
 # Deploy Protocol if requested
 if [[ "$deploy_protocol" = true ]]; then
@@ -889,20 +826,8 @@ if [[ "$initialize_contracts" = true ]]; then
         echo "Using Admin Address: ${ADMIN_ADDRESS}"
     fi
 
-    # Initialize Authority Contract
-    if [[ "$initialize_contracts" = true && "$deploy_authority" = true && -n "$authority_contract_id" ]]; then
-        set +e # Allow initialization failure without stopping the script
-        initialize_contract "$AUTHORITY_CONTRACT_NAME" "$authority_contract_id" "$ADMIN_ADDRESS"
-        if [[ $? -ne 0 ]]; then
-             echo "WARNING: Authority contract initialization failed. Check logs."
-        fi
-        set -e
-    elif [[ "$initialize_contracts" = true && "$deploy_authority" = true && -z "$authority_contract_id" ]]; then
-         echo "Skipping Authority initialization: Deployment failed or ID not found."
-    fi
-
     # Initialize Protocol Contract
-     if [[ "$initialize_contracts" = true && "$deploy_protocol" = true && -n "$protocol_contract_id" ]]; then
+    if [[ "$initialize_contracts" = true && "$deploy_protocol" = true && -n "$protocol_contract_id" ]]; then
         set +e # Allow initialization failure without stopping the script
         initialize_contract "$PROTOCOL_CONTRACT_NAME" "$protocol_contract_id" "$ADMIN_ADDRESS"
          if [[ $? -ne 0 ]]; then
@@ -931,18 +856,6 @@ if [[ "$generate_bindings" = true ]]; then
     mkdir -p "$TEMP_BINDINGS_DIR"
     echo "Created temporary bindings directory: ${TEMP_BINDINGS_DIR}"
 
-    # Generate Authority Bindings
-    if [[ "$deploy_authority" = true && -n "$authority_contract_id" ]]; then
-        set +e # Allow bindings generation failure without stopping the script
-        generate_single_contract_bindings "$AUTHORITY_CONTRACT_NAME" "$authority_contract_id" "$TEMP_BINDINGS_DIR"
-        if [[ $? -ne 0 ]]; then
-             echo "WARNING: Authority contract bindings generation failed. Check logs."
-        fi
-        set -e
-    elif [[ "$generate_bindings" = true && "$deploy_authority" = true && -z "$authority_contract_id" ]]; then
-         echo "Skipping Authority bindings generation: Deployment failed or ID not found."
-    fi
-
     # Generate Protocol Bindings
     if [[ "$deploy_protocol" = true && -n "$protocol_contract_id" ]]; then
         set +e # Allow bindings generation failure without stopping the script
@@ -968,13 +881,6 @@ fi
 log_step "Deployment Summary"
 echo "Network: ${network_name}"
 echo "Mode: ${mode}"
-if [[ "$deploy_authority" = true && -n "$authority_contract_id" ]]; then
-  echo "Authority Contract ID: ${authority_contract_id}"
-  echo "Authority Tx Hash: ${authority_tx_hash:-Not Found}"
-  if [[ -n "$authority_tx_hash" ]]; then
-    echo "Authority Tx URL: https://stellar.expert/explorer/${network_name}/tx/${authority_tx_hash}"
-  fi
-fi
 if [[ "$deploy_protocol" = true && -n "$protocol_contract_id" ]]; then
   echo "Protocol Contract ID: ${protocol_contract_id}"
   echo "Protocol Tx Hash: ${protocol_tx_hash:-Not Found}"
