@@ -48,9 +48,12 @@ fn setup<'a>() -> (
     let fee_recipient = Address::generate(&env);
     let (token_address, token_client, token_admin_client) = create_token_contract(&env, &admin);
 
-    let resolver_address = env.register(FeeCollectionResolver, ());
+    // Use constructor args - this prevents front-running attacks
+    let resolver_address = env.register(
+        FeeCollectionResolver,
+        (&admin, &token_address, &FEE_AMOUNT, &fee_recipient),
+    );
     let resolver_client = FeeCollectionResolverClient::new(&env, &resolver_address);
-    resolver_client.initialize(&admin, &token_address, &FEE_AMOUNT, &fee_recipient);
 
     (
         env,
@@ -160,7 +163,8 @@ fn test_metadata() {
 }
 
 #[test]
-fn test_negative_fee_in_initialize_rejected() {
+#[should_panic(expected = "attestation_fee must be non-negative")]
+fn test_negative_fee_in_constructor_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set(LedgerInfo {
@@ -178,12 +182,11 @@ fn test_negative_fee_in_initialize_rejected() {
     let fee_recipient = Address::generate(&env);
     let (token_address, _token_client, _token_admin_client) = create_token_contract(&env, &admin);
 
-    let resolver_address = env.register(FeeCollectionResolver, ());
-    let resolver_client = FeeCollectionResolverClient::new(&env, &resolver_address);
-
-    // Attempt to initialize with negative fee should fail
-    let result = resolver_client.try_initialize(&admin, &token_address, &-100, &fee_recipient);
-    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+    // Attempt to deploy with negative fee should panic
+    let _resolver_address = env.register(
+        FeeCollectionResolver,
+        (&admin, &token_address, &-100i128, &fee_recipient),
+    );
 }
 
 #[test]
@@ -196,8 +199,8 @@ fn test_negative_fee_in_set_attestation_fee_rejected() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Storage, MissingValue)")]
-fn test_invalid_token_address_rejected() {
+#[should_panic(expected = "HostError: Error(Context, InvalidAction)")]
+fn test_invalid_token_address_in_constructor_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set(LedgerInfo {
@@ -216,9 +219,9 @@ fn test_invalid_token_address_rejected() {
     // Use a random address that is NOT a token contract
     let invalid_token_address = Address::generate(&env);
 
-    let resolver_address = env.register(FeeCollectionResolver, ());
-    let resolver_client = FeeCollectionResolverClient::new(&env, &resolver_address);
-
-    // Attempt to initialize with invalid token address should panic
-    resolver_client.initialize(&admin, &invalid_token_address, &FEE_AMOUNT, &fee_recipient);
+    // Attempt to deploy with invalid token address should panic
+    let _resolver_address = env.register(
+        FeeCollectionResolver,
+        (&admin, &invalid_token_address, &FEE_AMOUNT, &fee_recipient),
+    );
 }

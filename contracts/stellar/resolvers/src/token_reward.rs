@@ -72,7 +72,56 @@ pub struct TokenRewardResolver;
 
 #[contractimpl]
 impl TokenRewardResolver {
+    /// Constructor - called atomically at deployment time.
+    /// This prevents front-running attacks where an attacker could call
+    /// initialize() before the legitimate deployer.
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address that can manage the resolver
+    /// * `reward_token` - The token contract used for rewards
+    /// * `reward_amount` - The amount of tokens to reward per attestation (must be >= 0)
+    /// * `protocol_contract` - The authorized protocol contract that can call onresolve
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        reward_token: Address,
+        reward_amount: i128,
+        protocol_contract: Address,
+    ) {
+        // Validate reward amount is non-negative
+        if reward_amount < 0 {
+            panic!("reward_amount must be non-negative");
+        }
+
+        // Validate that reward_token implements the token interface
+        let token_client = token::Client::new(&env, &reward_token);
+        let _ = token_client.decimals(); // Will trap if not a valid token contract
+
+        // Set token metadata using OpenZeppelin Base
+        Base::set_metadata(
+            &env,
+            7, // 7 decimals (Stellar standard)
+            String::from_str(&env, "Attestation Reward Token"),
+            String::from_str(&env, "AREWARD"),
+        );
+
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::RewardToken, &reward_token);
+        env.storage().instance().set(&DataKey::RewardAmount, &reward_amount);
+        env.storage().instance().set(&DataKey::TotalRewarded, &0i128);
+        env.storage().instance().set(&DataKey::ProtocolContract, &protocol_contract);
+        env.storage().instance().set(&DataKey::Initialized, &true);
+
+        env.storage()
+            .instance()
+            .extend_ttl(env.storage().max_ttl() - 100, env.storage().max_ttl());
+    }
+
     /// Initialize the resolver with reward token, amount, and authorized protocol contract
+    /// (legacy, for already-deployed contracts)
+    ///
+    /// NOTE: For new deployments, use the constructor instead. This function exists
+    /// for backwards compatibility with contracts deployed before the constructor was added.
     ///
     /// # Arguments
     /// * `admin` - The admin address that can manage the resolver

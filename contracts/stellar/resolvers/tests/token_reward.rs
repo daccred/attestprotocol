@@ -51,9 +51,12 @@ fn setup<'a>() -> (
     let protocol_contract = Address::generate(&env); // Mock protocol contract
     let (token_address, token_client, token_admin_client) = create_token_contract(&env, &admin);
 
-    let resolver_address = env.register(TokenRewardResolver, ());
+    // Use constructor args - this prevents front-running attacks
+    let resolver_address = env.register(
+        TokenRewardResolver,
+        (&admin, &token_address, &REWARD_AMOUNT, &protocol_contract),
+    );
     let resolver_client = TokenRewardResolverClient::new(&env, &resolver_address);
-    resolver_client.initialize(&admin, &token_address, &REWARD_AMOUNT, &protocol_contract);
 
     (
         env,
@@ -195,7 +198,8 @@ fn test_replay_protection_prevents_double_reward() {
 }
 
 #[test]
-fn test_negative_reward_amount_rejected() {
+#[should_panic(expected = "reward_amount must be non-negative")]
+fn test_negative_reward_amount_in_constructor_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set(LedgerInfo {
@@ -213,12 +217,11 @@ fn test_negative_reward_amount_rejected() {
     let protocol_contract = Address::generate(&env);
     let (token_address, _token_client, _token_admin_client) = create_token_contract(&env, &admin);
 
-    let resolver_address = env.register(TokenRewardResolver, ());
-    let resolver_client = TokenRewardResolverClient::new(&env, &resolver_address);
-
-    // Attempt to initialize with negative reward amount
-    let result = resolver_client.try_initialize(&admin, &token_address, &-100, &protocol_contract);
-    assert!(matches!(result.err().unwrap(), Ok(ResolverError::ValidationFailed)));
+    // Attempt to deploy with negative reward amount should panic
+    let _resolver_address = env.register(
+        TokenRewardResolver,
+        (&admin, &token_address, &-100i128, &protocol_contract),
+    );
 }
 
 #[test]
@@ -231,8 +234,8 @@ fn test_set_negative_reward_amount_rejected() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Storage, MissingValue)")]
-fn test_invalid_token_address_rejected() {
+#[should_panic(expected = "HostError: Error(Context, InvalidAction)")]
+fn test_invalid_token_address_in_constructor_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set(LedgerInfo {
@@ -251,10 +254,10 @@ fn test_invalid_token_address_rejected() {
     // Use a random address that is NOT a token contract
     let invalid_token_address = Address::generate(&env);
 
-    let resolver_address = env.register(TokenRewardResolver, ());
-    let resolver_client = TokenRewardResolverClient::new(&env, &resolver_address);
-
-    // Attempt to initialize with invalid token address should panic
+    // Attempt to deploy with invalid token address should panic
     // because decimals() call will fail on non-token contract
-    resolver_client.initialize(&admin, &invalid_token_address, &REWARD_AMOUNT, &protocol_contract);
+    let _resolver_address = env.register(
+        TokenRewardResolver,
+        (&admin, &invalid_token_address, &REWARD_AMOUNT, &protocol_contract),
+    );
 }

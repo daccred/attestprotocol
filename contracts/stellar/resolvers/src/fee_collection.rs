@@ -25,7 +25,47 @@ pub struct FeeCollectionResolver;
 // when explicitly exporting this resolver contract to Wasm.
 #[contractimpl]
 impl FeeCollectionResolver {
-    /// Initialize the resolver with fee configuration
+    /// Constructor - called atomically at deployment time.
+    /// This prevents front-running attacks where an attacker could call
+    /// initialize() before the legitimate deployer.
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address that can manage the resolver
+    /// * `fee_token` - The token contract used for fee collection
+    /// * `attestation_fee` - The fee amount per attestation (must be >= 0)
+    /// * `fee_recipient` - The address that receives collected fees
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        fee_token: Address,
+        attestation_fee: i128,
+        fee_recipient: Address,
+    ) {
+        // Validate attestation fee is non-negative
+        if attestation_fee < 0 {
+            panic!("attestation_fee must be non-negative");
+        }
+
+        // Validate that fee_token implements the token interface
+        let token_client = token::Client::new(&env, &fee_token);
+        let _ = token_client.decimals(); // Will trap if not a valid token contract
+
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::FeeToken, &fee_token);
+        env.storage().instance().set(&DataKey::AttestationFee, &attestation_fee);
+        env.storage().instance().set(&DataKey::FeeRecipient, &fee_recipient);
+        env.storage().instance().set(&DataKey::TotalCollected, &0i128);
+        env.storage().instance().set(&DataKey::Initialized, &true);
+
+        env.storage()
+            .instance()
+            .extend_ttl(env.storage().max_ttl() - 100, env.storage().max_ttl());
+    }
+
+    /// Initialize the resolver with fee configuration (legacy, for already-deployed contracts)
+    ///
+    /// NOTE: For new deployments, use the constructor instead. This function exists
+    /// for backwards compatibility with contracts deployed before the constructor was added.
     ///
     /// # Arguments
     /// * `admin` - The admin address that can manage the resolver
