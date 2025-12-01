@@ -66,6 +66,7 @@ fn create_resolver_attestation(
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
     _value: &String,
+    revocable: bool,
 ) -> ResolverAttestation {
     // Generate a UID for this attestation (protocol doesn't store UIDs currently)
     let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.nonce);
@@ -78,9 +79,9 @@ fn create_resolver_attestation(
         time: attestation.timestamp,
         expiration_time: attestation.expiration_time.unwrap_or(0), // Flattened: 0 = not set
         revocation_time: attestation.revocation_time.unwrap_or(0), // Flattened: 0 = not set
-        revocable: true,                                           // Will be set based on schema
-        ref_uid: Bytes::new(env),                                  // Flattened: empty bytes = not set
-        data: Bytes::from_slice(env, b"placeholder"),              // TODO: Convert string to bytes properly
+        revocable,
+        ref_uid: Bytes::new(env),                     // Flattened: empty bytes = not set
+        data: Bytes::from_slice(env, b"placeholder"), // TODO: Convert string to bytes properly
         value: 0, // Flattened: 0 = not set (protocol doesn't support value field yet)
     }
 }
@@ -150,7 +151,8 @@ pub fn attest(
     // Call resolver onattest hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation = create_resolver_attestation(env, &attestation, &schema_uid, &value);
+        let resolver_attestation =
+            create_resolver_attestation(env, &attestation, &schema_uid, &value, schema.revocable);
 
         // Call onattest hook - this is CRITICAL for access control
         let allowed = call_resolver_onattest(env, resolver_address, &resolver_attestation)?;
@@ -180,7 +182,8 @@ pub fn attest(
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation = create_resolver_attestation(env, &attestation, &schema_uid, &value);
+        let resolver_attestation =
+            create_resolver_attestation(env, &attestation, &schema_uid, &value, schema.revocable);
 
         // Call onresolve hook for side effects (rewards, registration, etc.)
         // Note: Failures here don't revert the attestation
@@ -280,8 +283,13 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
     // Call resolver onrevoke hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &attestation.schema_uid, &attestation.value);
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &attestation.schema_uid,
+            &attestation.value,
+            schema.revocable,
+        );
 
         // Call onrevoke hook - this is CRITICAL for access control
         let allowed = call_resolver_onrevoke(env, resolver_address, &resolver_attestation)?;
@@ -309,8 +317,13 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format with updated revocation status
-        let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &attestation.schema_uid, &attestation.value);
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &attestation.schema_uid,
+            &attestation.value,
+            schema.revocable,
+        );
 
         // Call onresolve hook for side effects (cleanup, notifications, etc.)
         // Note: Failures here don't revert the revocation
