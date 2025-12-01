@@ -292,7 +292,16 @@ update_contracts_json() {
     local contract_id=$3
     local tx_hash=$4
     local deploy_timestamp=$5
-    local tmp_json_file="${CONTRACTS_JSON_FILE}.tmp"
+
+    # Use mktemp for secure temporary file creation (prevents symlink attacks)
+    local tmp_json_file
+    tmp_json_file=$(mktemp) || {
+        echo "Error: Failed to create secure temporary file."
+        exit 1
+    }
+
+    # Ensure cleanup of temp file on function exit (success or failure)
+    trap 'rm -f "$tmp_json_file"' RETURN
 
     echo "Updating ${CONTRACTS_JSON_FILE} for network '${network}' with ${contract_name} details..."
 
