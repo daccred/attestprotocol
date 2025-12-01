@@ -810,16 +810,23 @@ fn test_clean_room_revocation_message_hash() {
 
     // 2. Simulate the OFF-CHAIN message construction.
     // This logic is a clean-room implementation that MUST perfectly mirror
-    // the production `create_attestation_message` function.
+    // the production `create_revocation_message` function.
     let off_chain_hash: [u8; 32] = {
         let mut payload = Bytes::new(&env);
 
         let revocation_domain_separator = instructions::delegation::get_revoke_dst();
         payload.extend_from_slice(revocation_domain_separator);
 
+        // Field 1: Schema UID
         payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Attestation UID (binds signature to specific attestation)
+        payload.extend_from_slice(&request.attestation_uid.to_array());
+
+        // Field 3: Nonce
         payload.extend_from_slice(&request.nonce.to_be_bytes());
 
+        // Field 4: Deadline
         payload.extend_from_slice(&request.deadline.to_be_bytes());
 
         env.crypto().sha256(&payload).into()

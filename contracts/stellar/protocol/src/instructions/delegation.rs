@@ -346,19 +346,35 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 ///
 /// # Returns
 /// * `BytesN<32>` - The hash of the message to be signed
+///
+/// # Message Structure
+/// ```rust,ignore
+/// Domain Separator:  "REVOKE_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Schema UID:        32 bytes
+/// Attestation UID:   32 bytes (binds signature to specific attestation)
+/// Nonce:             8 bytes (big-endian u64)
+/// Deadline:          8 bytes (big-endian u64)
+/// ```
 pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest) -> BytesN<32> {
     let mut message = Bytes::new(env);
 
     // DOMAIN SEPARATION: Use the defined constant.
     message.extend_from_slice(REVOKE_DOMAIN_SEPARATOR);
 
-    // Encode request data deterministically
+    // FIELD 1: Schema UID (32 bytes)
     message.extend_from_slice(&request.schema_uid.to_array());
 
-    // Add nonce and deadline as big-endian bytes
+    // FIELD 2: Attestation UID (32 bytes)
+    // CRITICAL: Binds the signature to the specific attestation being revoked.
+    // Without this, an attacker could reuse a revocation signature to revoke
+    // any attestation under the same schema.
+    message.extend_from_slice(&request.attestation_uid.to_array());
+
+    // FIELD 3: Nonce (8 bytes, big-endian)
     let nonce_bytes = request.nonce.to_be_bytes();
     message.extend_from_slice(&nonce_bytes);
 
+    // FIELD 4: Deadline (8 bytes, big-endian)
     let deadline_bytes = request.deadline.to_be_bytes();
     message.extend_from_slice(&deadline_bytes);
 
