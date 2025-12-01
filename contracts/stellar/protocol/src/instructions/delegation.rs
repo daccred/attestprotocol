@@ -252,6 +252,7 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 /// ```rust,ignore
 /// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (28 bytes)
 /// Schema UID:       32 bytes
+/// Subject Hash:     32 bytes (SHA256 of XDR-encoded subject address)
 /// Nonce:            8 bytes (big-endian u64)
 /// Deadline:         8 bytes (big-endian u64)
 /// Expiration Time:  8 bytes (optional, big-endian u64)
@@ -301,24 +302,31 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
     // FIELD 1: Schema UID (32 bytes, deterministic order)
     message.extend_from_slice(&request.schema_uid.to_array());
 
-    // FIELD 2: Nonce (8 bytes, big-endian for cross-platform consistency)
+    // FIELD 2: Subject (variable length, XDR serialized address)
+    // CRITICAL: Binds the signature to the specific subject being attested.
+    // Without this, an attacker could substitute any subject address.
+    let subject_xdr = request.subject.clone().to_xdr(env);
+    let subject_hash = env.crypto().sha256(&subject_xdr);
+    message.extend_from_slice(&subject_hash.to_array());
+
+    // FIELD 3: Nonce (8 bytes, big-endian for cross-platform consistency)
     // Big-endian ensures JavaScript/Rust produce identical byte sequences
     let nonce_bytes = request.nonce.to_be_bytes();
     message.extend_from_slice(&nonce_bytes);
 
-    // FIELD 3: Deadline (8 bytes, big-endian)
+    // FIELD 4: Deadline (8 bytes, big-endian)
     // Signature expiration time for temporal security
     let deadline_bytes = request.deadline.to_be_bytes();
     message.extend_from_slice(&deadline_bytes);
 
-    // FIELD 4: Expiration Time (optional, 8 bytes if present)
+    // FIELD 5: Expiration Time (optional, 8 bytes if present)
     // Conditional inclusion must match JavaScript logic exactly
     if let Some(exp_time) = request.expiration_time {
         let exp_bytes = exp_time.to_be_bytes();
         message.extend_from_slice(&exp_bytes);
     }
 
-    // FIELD 5: Value Hash (32 bytes, SHA256 of value content)
+    // FIELD 6: Value Hash (32 bytes, SHA256 of value content)
     // This ensures the exact value content is cryptographically bound to the signature.
     // Any modification to the value will invalidate the signature.
     let value_xdr = request.value.clone().to_xdr(env);

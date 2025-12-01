@@ -650,17 +650,25 @@ fn test_end_to_end_bls_signature_verification() {
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
 
+        // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        message_payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 3: Nonce (big-endian)
         message_payload.extend_from_slice(&request.nonce.to_be_bytes());
 
-        // Field 3: Deadline (big-endian)
+        // Field 4: Deadline (big-endian)
         message_payload.extend_from_slice(&request.deadline.to_be_bytes());
-        // Field 4: Expiration Time (optional, big-endian)
+        // Field 5: Expiration Time (optional, big-endian)
         if let Some(exp_time) = request.expiration_time {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        // FIELD 5: Value Hash (32 bytes, SHA256 of value XDR)
+        // FIELD 6: Value Hash (32 bytes, SHA256 of value XDR)
         let value_xdr = request.value.clone().to_xdr(&env);
         let value_hash = env.crypto().sha256(&value_xdr);
         message_payload.extend_from_slice(&value_hash.to_array());
@@ -743,17 +751,25 @@ fn test_clean_room_attestation_message_hash() {
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
 
+        // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        message_payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 3: Nonce (big-endian)
         message_payload.extend_from_slice(&request.nonce.to_be_bytes());
 
-        // Field 3: Deadline (big-endian)
+        // Field 4: Deadline (big-endian)
         message_payload.extend_from_slice(&request.deadline.to_be_bytes());
-        // Field 4: Expiration Time (optional, big-endian)
+        // Field 5: Expiration Time (optional, big-endian)
         if let Some(exp_time) = request.expiration_time {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        // FIELD 5: Value Hash (32 bytes, SHA256 of value XDR)
+        // FIELD 6: Value Hash (32 bytes, SHA256 of value XDR)
         let value_xdr = request.value.clone().to_xdr(&env);
         let value_hash = env.crypto().sha256(&value_xdr);
         message_payload.extend_from_slice(&value_hash.to_array());
