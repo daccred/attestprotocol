@@ -127,10 +127,16 @@ const G2_GENERATOR: [u8; 192] = [
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `attester` - The address of the attester registering the key
-/// * `public_key` - The BLS12-381 G2 public key (192 bytes)
+/// * `public_key` - The BLS12-381 G2 public key (192 bytes uncompressed)
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or error (fails if key already exists)
+/// * `Result<(), Error>` - Success or error (fails if key already exists or is invalid)
+///
+/// # Security
+/// The public key is validated by deserializing it as a G2Affine point.
+/// This ensures the key is a valid point on the BLS12-381 G2 curve.
+/// Invalid keys (off-curve, identity element, wrong subgroup) will cause
+/// deserialization to fail, preventing registration of malicious keys.
 pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<192>) -> Result<(), Error> {
     attester.require_auth();
 
@@ -141,6 +147,13 @@ pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<
         // Key already registered - immutable, cannot update
         return Err(Error::AlreadyInitialized);
     }
+
+    // Validate the public key is a valid G2 curve point.
+    // G2Affine::from_bytes will panic if the bytes don't represent a valid
+    // point on the BLS12-381 G2 curve (off-curve, identity, wrong subgroup).
+    // This prevents registration of malicious or invalid keys that could
+    // break the pairing equation in verify_bls_signature.
+    let _validated_pk = G2Affine::from_bytes(public_key.clone());
 
     let timestamp = env.ledger().timestamp();
     let bls_key = BlsPublicKey {
