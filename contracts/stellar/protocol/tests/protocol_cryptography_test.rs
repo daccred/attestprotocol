@@ -823,10 +823,15 @@ fn test_clean_room_revocation_message_hash() {
         // Field 2: Attestation UID (binds signature to specific attestation)
         payload.extend_from_slice(&request.attestation_uid.to_array());
 
-        // Field 3: Nonce
+        // Field 3: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 4: Nonce
         payload.extend_from_slice(&request.nonce.to_be_bytes());
 
-        // Field 4: Deadline
+        // Field 5: Deadline
         payload.extend_from_slice(&request.deadline.to_be_bytes());
 
         env.crypto().sha256(&payload).into()

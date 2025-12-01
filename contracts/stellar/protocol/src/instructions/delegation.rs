@@ -354,6 +354,7 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 /// Domain Separator:  "REVOKE_PROTOCOL_V1_DELEGATED" (28 bytes)
 /// Schema UID:        32 bytes
 /// Attestation UID:   32 bytes (binds signature to specific attestation)
+/// Subject Hash:      32 bytes (SHA256 of XDR-encoded subject address)
 /// Nonce:             8 bytes (big-endian u64)
 /// Deadline:          8 bytes (big-endian u64)
 /// ```
@@ -372,11 +373,19 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
     // any attestation under the same schema.
     message.extend_from_slice(&request.attestation_uid.to_array());
 
-    // FIELD 3: Nonce (8 bytes, big-endian)
+    // FIELD 3: Subject Hash (32 bytes, SHA256 of XDR-encoded subject address)
+    // CRITICAL: Explicitly binds the signature to the attestation subject.
+    // Defense in depth - even though attestation_uid includes subject, we
+    // bind it explicitly for additional protection against collision attacks.
+    let subject_xdr = request.subject.clone().to_xdr(env);
+    let subject_hash = env.crypto().sha256(&subject_xdr);
+    message.extend_from_slice(&subject_hash.to_array());
+
+    // FIELD 4: Nonce (8 bytes, big-endian)
     let nonce_bytes = request.nonce.to_be_bytes();
     message.extend_from_slice(&nonce_bytes);
 
-    // FIELD 4: Deadline (8 bytes, big-endian)
+    // FIELD 5: Deadline (8 bytes, big-endian)
     let deadline_bytes = request.deadline.to_be_bytes();
     message.extend_from_slice(&deadline_bytes);
 
