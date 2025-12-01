@@ -56,6 +56,7 @@ pub enum DataKey {
     RewardAmount,
     TotalRewarded,
     UserRewards,
+    ProcessedAttestation, // Tracks attestation UIDs that have been rewarded
     // OpenZeppelin Fungible Token fields
     TokenName,
     TokenSymbol,
@@ -275,6 +276,14 @@ impl ResolverInterface for TokenRewardResolver {
     /// - **Natural Rate Limiting**: Economics provide automatic spam resistance
     /// - **Pool Sustainability**: Requires periodic refunding for continued operation
     fn onresolve(env: Env, attestation_uid: BytesN<32>, attester: Address) -> Result<(), ResolverError> {
+        // STEP 0: Check for replay attack - ensure this attestation hasn't been rewarded
+        let processed_key = (DataKey::ProcessedAttestation, attestation_uid.clone());
+        if env.storage().persistent().has(&processed_key) {
+            // Already processed - silently succeed to not break protocol flow
+            // but don't distribute rewards again
+            return Ok(());
+        }
+
         // STEP 1: Load reward configuration from contract storage
         let reward_token: Address = env
             .storage()
@@ -298,7 +307,13 @@ impl ResolverInterface for TokenRewardResolver {
             return Err(ResolverError::InsufficientFunds);
         }
 
-        // STEP 3: Transfer reward tokens to attester
+        // STEP 3: Mark attestation as processed BEFORE transfer (prevents reentrancy)
+        env.storage().persistent().set(&processed_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&processed_key, env.storage().max_ttl() - 100, env.storage().max_ttl());
+
+        // STEP 4: Transfer reward tokens to attester
         // This is the core economic incentive - immediate token reward for attestation
         token_client.transfer(
             &env.current_contract_address(), // From: contract's reward pool
@@ -306,13 +321,13 @@ impl ResolverInterface for TokenRewardResolver {
             &reward_amount,                  // Amount: configured reward per attestation
         );
 
-        // STEP 4: Update total rewards distributed (audit trail)
+        // STEP 5: Update total rewards distributed (audit trail)
         let total: i128 = env.storage().instance().get(&DataKey::TotalRewarded).unwrap_or(0);
         env.storage()
             .instance()
             .set(&DataKey::TotalRewarded, &(total + reward_amount));
 
-        // STEP 5: Update individual user reward totals
+        // STEP 6: Update individual user reward totals
         let user_key = (DataKey::UserRewards, attester.clone());
         let user_total: i128 = env.storage().persistent().get(&user_key).unwrap_or(0);
         env.storage().persistent().set(&user_key, &(user_total + reward_amount));
@@ -322,7 +337,7 @@ impl ResolverInterface for TokenRewardResolver {
             .persistent()
             .extend_ttl(&user_key, env.storage().max_ttl() - 100, env.storage().max_ttl());
 
-        // STEP 6: Emit reward distribution event for monitoring
+        // STEP 7: Emit reward distribution event for monitoring
         env.events().publish(
             (String::from_str(&env, "REWARD_DISTRIBUTED"), &attester),
             (&attestation_uid, &reward_amount),

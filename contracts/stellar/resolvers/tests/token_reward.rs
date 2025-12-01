@@ -159,3 +159,34 @@ fn test_non_admin_cannot_set_reward_amount() {
     // IMPACT: Unauthorized users could change reward economics
     assert!(matches!(result.err().unwrap(), Ok(ResolverError::NotAuthorized)));
 }
+
+#[test]
+fn test_replay_protection_prevents_double_reward() {
+    let (env, admin, _token_address, token_client, token_admin_client, _resolver_address, resolver_client) = setup();
+
+    // Fund reward pool with enough for multiple rewards
+    token_admin_client.mint(&admin, &(FUND_AMOUNT * 10));
+    resolver_client.fund_reward_pool(&admin, &(FUND_AMOUNT * 10));
+
+    // First attestation triggers reward distribution
+    let attester = Address::generate(&env);
+    let attestation = build_attestation(&env, &attester);
+    resolver_client.onresolve(&attestation.uid, &attestation.attester);
+
+    // Verify attester received reward tokens
+    assert_eq!(token_client.balance(&attester), REWARD_AMOUNT);
+    assert_eq!(resolver_client.get_user_rewards(&attester), REWARD_AMOUNT);
+    assert_eq!(resolver_client.get_total_rewarded(), REWARD_AMOUNT);
+
+    // Attempt replay attack - call onresolve with same attestation UID
+    resolver_client.onresolve(&attestation.uid, &attestation.attester);
+
+    // Verify no additional rewards were distributed (replay protection)
+    // If this assertion fails:
+    // ISSUE: onresolve allows replay attacks - same UID can claim rewards multiple times
+    // RECOMMENDATION: Track processed attestation UIDs and reject duplicates
+    // IMPACT: Attacker could drain reward pool by replaying same attestation
+    assert_eq!(token_client.balance(&attester), REWARD_AMOUNT);
+    assert_eq!(resolver_client.get_user_rewards(&attester), REWARD_AMOUNT);
+    assert_eq!(resolver_client.get_total_rewarded(), REWARD_AMOUNT);
+}
