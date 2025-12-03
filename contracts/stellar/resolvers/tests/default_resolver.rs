@@ -103,3 +103,35 @@ fn test_metadata() {
     assert_eq!(metadata.version, SorobanString::from_str(&env, "1.0.0"));
     assert_eq!(metadata.resolver_type, ResolverType::Default);
 }
+
+#[test]
+fn test_reject_non_revocable_attestation_revocation() {
+    let (env, client) = setup();
+    let attester = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    // Create a non-revocable attestation
+    let mut attestation = build_attestation(&env, &attester, &recipient, 0);
+    attestation.revocable = false;
+
+    // Attempt to revoke should fail
+    let res = client.try_onrevoke(&attestation);
+    assert!(matches!(
+        res.err().unwrap(),
+        Ok(ResolverError::ValidationFailed)
+    ));
+}
+
+#[test]
+fn test_allow_revocable_attestation_revocation() {
+    let (env, client) = setup();
+    let attester = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    // Create a revocable attestation
+    let attestation = build_attestation(&env, &attester, &recipient, 0);
+    // revocable is true by default in build_attestation
+
+    // Revocation should succeed
+    assert!(client.onrevoke(&attestation));
+}

@@ -33,12 +33,18 @@ impl ResolverInterface for DefaultResolver {
         Ok(())
     }
 
-    /// Allow revocations if attestation is revocable
+    /// Allow revocations only if attestation is revocable
     fn onrevoke(_env: Env, attestation: ResolverAttestationData) -> Result<bool, ResolverError> {
         // Defense-in-depth: require attester authorization even though
         // the protocol already verifies this before calling the resolver.
         // This ensures the resolver cannot be exploited if called directly.
         attestation.attester.require_auth();
+
+        // Defense-in-depth: verify attestation is revocable even though
+        // the protocol should enforce this. Prevents revocation if called directly.
+        if !attestation.revocable {
+            return Err(ResolverError::ValidationFailed);
+        }
 
         Ok(true)
     }
