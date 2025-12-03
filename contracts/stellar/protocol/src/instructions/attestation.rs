@@ -200,21 +200,19 @@ pub fn attest(
 ///
 /// # Arguments
 /// * `env` - The Soroban environment
-/// * `schema_uid` - The unique identifier of the schema
-/// * `subject` - The address that is the subject of the attestation
-/// * `nonce` - The nonce of the attestation
+/// * `attestation_uid` - The unique identifier of the attestation
 ///
 /// # Returns
-/// * `Attestation` - The attestation record
+/// * `Result<Attestation, Error>` - The attestation record or error
 ///
-/// # Panics
-/// * If the attestation is not found
-/// * If the attestation is expired
+/// # Errors
+/// * `Error::AttestationNotFound` - If the attestation does not exist
+/// * `Error::AttestationExpired` - If the attestation has expired
 ///
 /// # Note
-/// We are using `panic_with_error!` for error handling, considerably acceptable for read operations
-/// as it allows for clear error propagation without requiring Result<> wrapping. The panics provide
-/// specific error information about what went wrong during the retrieval process.
+/// This function does NOT delete expired attestations. Read operations should be
+/// idempotent and free of side effects. Expired attestations remain in storage
+/// for historical reference - use a separate cleanup process if deletion is needed.
 pub fn get_attestation_record(env: &Env, attestation_uid: BytesN<32>) -> Result<Attestation, Error> {
     // Get attestation
     let attest_key = DataKey::AttestationUID(attestation_uid);
@@ -224,13 +222,9 @@ pub fn get_attestation_record(env: &Env, attestation_uid: BytesN<32>) -> Result<
         .get::<DataKey, Attestation>(&attest_key)
         .ok_or(Error::AttestationNotFound)?;
 
-    // Check if attestation is expired
+    // Check if attestation is expired (read-only check, no deletion)
     if let Some(exp_time) = attestation.expiration_time {
         if env.ledger().timestamp() > exp_time {
-            //clear this attestation from the storage
-            env.storage()
-                .persistent()
-                .remove(&DataKey::AttestationUID(attestation.uid.clone()));
             return Err(Error::AttestationExpired);
         }
     }
