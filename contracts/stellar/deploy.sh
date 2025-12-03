@@ -110,10 +110,12 @@ verify_network_configuration() {
 
         # Add the network with provided parameters
         echo "Adding network: ${network}"
-        if [[ "$DEBUG" = "true" ]]; then
-            echo "  RPC URL: ${rpc}"
-            echo "  Passphrase: ${passphrase}"
-        fi
+        # [SECURITY] Debug logging of sensitive credentials disabled
+        # See Finding 231e977a - RPC URLs and passphrases should not be logged
+        # if [[ "$DEBUG" = "true" ]]; then
+        #     echo "  RPC URL: ${rpc}"
+        #     echo "  Passphrase: ${passphrase}"
+        # fi
 
         set +e
         local add_output
@@ -582,10 +584,12 @@ fi
 
 # Confirm deployment settings to prevent accidents
 echo "Selected Network: ${network_name}"
-if [[ "$DEBUG" = "true" && -n "$rpc_url" && -n "$network_passphrase" ]]; then
-    echo "RPC URL: ${rpc_url}"
-    echo "Network Passphrase: ${network_passphrase}"
-fi
+# [SECURITY] Debug logging of sensitive credentials disabled
+# See Finding 231e977a - RPC URLs and passphrases should not be logged
+# if [[ "$DEBUG" = "true" && -n "$rpc_url" && -n "$network_passphrase" ]]; then
+#     echo "RPC URL: ${rpc_url}"
+#     echo "Network Passphrase: ${network_passphrase}"
+# fi
 echo "Deployment Identity: ${source_identity}"
 echo "Mode: ${mode}"
 echo "Deploy Protocol: ${deploy_protocol}"
