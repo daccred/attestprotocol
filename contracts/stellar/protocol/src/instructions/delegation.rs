@@ -3,6 +3,7 @@ use crate::events;
 use crate::instructions::verify_bls_signature;
 use crate::state::{Attestation, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest};
 use crate::utils::{self, generate_attestation_uid};
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
 /// Domain separator for creating delegated attestation signatures.
@@ -52,14 +53,16 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Verify schema exists
     let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
-    // Verify and increment nonce
-    verify_and_increment_nonce(env, &request.attester, request.nonce)?;
-
     // Create message for signature verification
     let message = create_attestation_message(env, &request);
 
-    // Verify BLS12-381 signature
+    // CRITICAL: Verify BLS12-381 signature BEFORE incrementing nonce.
+    // If we increment nonce first, an attacker can submit invalid signatures
+    // to permanently skip nonces, causing DoS on legitimate attesters.
     verify_bls_signature(env, &message, &request.signature, &request.attester)?;
+
+    // Only increment nonce AFTER signature is verified to prevent DoS attacks
+    verify_and_increment_nonce(env, &request.attester, request.nonce)?;
 
     let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, request.nonce);
 
@@ -121,6 +124,13 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // Verify the revoker is the original attester
     if attestation.attester != request.revoker {
         return Err(Error::NotAuthorized);
+    }
+
+    // CRITICAL: Verify the schema_uid in the request matches the attestation's actual schema.
+    // This prevents an attacker from bypassing revocability by providing a different
+    // revocable schema_uid while revoking an attestation from a non-revocable schema.
+    if attestation.schema_uid != request.schema_uid {
+        return Err(Error::InvalidReference);
     }
 
     // Verify schema is revocable
@@ -242,12 +252,13 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 ///
 /// # Message Structure
 /// ```rust,ignore
-/// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (26 bytes)
+/// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (28 bytes)
 /// Schema UID:       32 bytes
+/// Subject Hash:     32 bytes (SHA256 of XDR-encoded subject address)
 /// Nonce:            8 bytes (big-endian u64)
 /// Deadline:         8 bytes (big-endian u64)
 /// Expiration Time:  8 bytes (optional, big-endian u64)
-/// Value Length:     8 bytes (big-endian u64)
+/// Value Hash:       32 bytes (SHA256 of value content)
 /// ```
 ///
 /// # Cross-Platform Compatibility
@@ -293,28 +304,36 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
     // FIELD 1: Schema UID (32 bytes, deterministic order)
     message.extend_from_slice(&request.schema_uid.to_array());
 
-    // FIELD 2: Nonce (8 bytes, big-endian for cross-platform consistency)
+    // FIELD 2: Subject (variable length, XDR serialized address)
+    // CRITICAL: Binds the signature to the specific subject being attested.
+    // Without this, an attacker could substitute any subject address.
+    let subject_xdr = request.subject.clone().to_xdr(env);
+    let subject_hash = env.crypto().sha256(&subject_xdr);
+    message.extend_from_slice(&subject_hash.to_array());
+
+    // FIELD 3: Nonce (8 bytes, big-endian for cross-platform consistency)
     // Big-endian ensures JavaScript/Rust produce identical byte sequences
     let nonce_bytes = request.nonce.to_be_bytes();
     message.extend_from_slice(&nonce_bytes);
 
-    // FIELD 3: Deadline (8 bytes, big-endian)
+    // FIELD 4: Deadline (8 bytes, big-endian)
     // Signature expiration time for temporal security
     let deadline_bytes = request.deadline.to_be_bytes();
     message.extend_from_slice(&deadline_bytes);
 
-    // FIELD 4: Expiration Time (optional, 8 bytes if present)
+    // FIELD 5: Expiration Time (optional, 8 bytes if present)
     // Conditional inclusion must match JavaScript logic exactly
     if let Some(exp_time) = request.expiration_time {
         let exp_bytes = exp_time.to_be_bytes();
         message.extend_from_slice(&exp_bytes);
     }
 
-    // FIELD 5: Value Length (8 bytes, placeholder for actual value)
-    // TODO: In production, include actual value hash for complete security
-    // Currently using length as simplified placeholder for proof-of-concept
-    let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-    message.extend_from_slice(&value_len_bytes);
+    // FIELD 6: Value Hash (32 bytes, SHA256 of value content)
+    // This ensures the exact value content is cryptographically bound to the signature.
+    // Any modification to the value will invalidate the signature.
+    let value_xdr = request.value.clone().to_xdr(env);
+    let value_hash = env.crypto().sha256(&value_xdr);
+    message.extend_from_slice(&value_hash.to_array());
 
     // CRYPTOGRAPHIC HASH: SHA256 of complete message
     // This hash is what gets signed by BLS private key off-chain
@@ -329,19 +348,44 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 ///
 /// # Returns
 /// * `BytesN<32>` - The hash of the message to be signed
+///
+/// # Message Structure
+/// ```rust,ignore
+/// Domain Separator:  "REVOKE_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Schema UID:        32 bytes
+/// Attestation UID:   32 bytes (binds signature to specific attestation)
+/// Subject Hash:      32 bytes (SHA256 of XDR-encoded subject address)
+/// Nonce:             8 bytes (big-endian u64)
+/// Deadline:          8 bytes (big-endian u64)
+/// ```
 pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest) -> BytesN<32> {
     let mut message = Bytes::new(env);
 
     // DOMAIN SEPARATION: Use the defined constant.
     message.extend_from_slice(REVOKE_DOMAIN_SEPARATOR);
 
-    // Encode request data deterministically
+    // FIELD 1: Schema UID (32 bytes)
     message.extend_from_slice(&request.schema_uid.to_array());
 
-    // Add nonce and deadline as big-endian bytes
+    // FIELD 2: Attestation UID (32 bytes)
+    // CRITICAL: Binds the signature to the specific attestation being revoked.
+    // Without this, an attacker could reuse a revocation signature to revoke
+    // any attestation under the same schema.
+    message.extend_from_slice(&request.attestation_uid.to_array());
+
+    // FIELD 3: Subject Hash (32 bytes, SHA256 of XDR-encoded subject address)
+    // CRITICAL: Explicitly binds the signature to the attestation subject.
+    // Defense in depth - even though attestation_uid includes subject, we
+    // bind it explicitly for additional protection against collision attacks.
+    let subject_xdr = request.subject.clone().to_xdr(env);
+    let subject_hash = env.crypto().sha256(&subject_xdr);
+    message.extend_from_slice(&subject_hash.to_array());
+
+    // FIELD 4: Nonce (8 bytes, big-endian)
     let nonce_bytes = request.nonce.to_be_bytes();
     message.extend_from_slice(&nonce_bytes);
 
+    // FIELD 5: Deadline (8 bytes, big-endian)
     let deadline_bytes = request.deadline.to_be_bytes();
     message.extend_from_slice(&deadline_bytes);
 

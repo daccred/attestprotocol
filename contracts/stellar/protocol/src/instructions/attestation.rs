@@ -1,6 +1,6 @@
 use crate::errors::Error;
 use crate::state::{Attestation, DataKey};
-use soroban_sdk::{Address, Bytes, BytesN, Env, String};
+use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env, String};
 
 use crate::events;
 use crate::interfaces::resolver::{ResolverAttestation, ResolverClient};
@@ -65,10 +65,14 @@ fn create_resolver_attestation(
     env: &Env,
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
-    _value: &String,
+    revocable: bool,
 ) -> ResolverAttestation {
     // Generate a UID for this attestation (protocol doesn't store UIDs currently)
     let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.nonce);
+
+    // Convert attestation value (String) to Bytes for the resolver interface
+    // We use XDR serialization to ensure consistent encoding across platforms
+    let data = attestation.value.clone().to_xdr(env);
 
     ResolverAttestation {
         uid,
@@ -78,10 +82,10 @@ fn create_resolver_attestation(
         time: attestation.timestamp,
         expiration_time: attestation.expiration_time.unwrap_or(0), // Flattened: 0 = not set
         revocation_time: attestation.revocation_time.unwrap_or(0), // Flattened: 0 = not set
-        revocable: true,                                           // Will be set based on schema
-        ref_uid: Bytes::new(env),                                  // Flattened: empty bytes = not set
-        data: Bytes::from_slice(env, b"placeholder"),              // TODO: Convert string to bytes properly
-        value: 0, // Flattened: 0 = not set (protocol doesn't support value field yet)
+        revocable,
+        ref_uid: Bytes::new(env), // Flattened: empty bytes = not set
+        data,                     // XDR-encoded attestation value
+        value: 0,                 // Flattened: 0 = not set (protocol doesn't support numeric value field yet)
     }
 }
 
@@ -150,7 +154,8 @@ pub fn attest(
     // Call resolver onattest hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation = create_resolver_attestation(env, &attestation, &schema_uid, &value);
+        let resolver_attestation =
+            create_resolver_attestation(env, &attestation, &schema_uid, schema.revocable);
 
         // Call onattest hook - this is CRITICAL for access control
         let allowed = call_resolver_onattest(env, resolver_address, &resolver_attestation)?;
@@ -180,7 +185,8 @@ pub fn attest(
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation = create_resolver_attestation(env, &attestation, &schema_uid, &value);
+        let resolver_attestation =
+            create_resolver_attestation(env, &attestation, &schema_uid, schema.revocable);
 
         // Call onresolve hook for side effects (rewards, registration, etc.)
         // Note: Failures here don't revert the attestation
@@ -197,21 +203,19 @@ pub fn attest(
 ///
 /// # Arguments
 /// * `env` - The Soroban environment
-/// * `schema_uid` - The unique identifier of the schema
-/// * `subject` - The address that is the subject of the attestation
-/// * `nonce` - The nonce of the attestation
+/// * `attestation_uid` - The unique identifier of the attestation
 ///
 /// # Returns
-/// * `Attestation` - The attestation record
+/// * `Result<Attestation, Error>` - The attestation record or error
 ///
-/// # Panics
-/// * If the attestation is not found
-/// * If the attestation is expired
+/// # Errors
+/// * `Error::AttestationNotFound` - If the attestation does not exist
+/// * `Error::AttestationExpired` - If the attestation has expired
 ///
 /// # Note
-/// We are using `panic_with_error!` for error handling, considerably acceptable for read operations
-/// as it allows for clear error propagation without requiring Result<> wrapping. The panics provide
-/// specific error information about what went wrong during the retrieval process.
+/// This function does NOT delete expired attestations. Read operations should be
+/// idempotent and free of side effects. Expired attestations remain in storage
+/// for historical reference - use a separate cleanup process if deletion is needed.
 pub fn get_attestation_record(env: &Env, attestation_uid: BytesN<32>) -> Result<Attestation, Error> {
     // Get attestation
     let attest_key = DataKey::AttestationUID(attestation_uid);
@@ -221,13 +225,9 @@ pub fn get_attestation_record(env: &Env, attestation_uid: BytesN<32>) -> Result<
         .get::<DataKey, Attestation>(&attest_key)
         .ok_or(Error::AttestationNotFound)?;
 
-    // Check if attestation is expired
+    // Check if attestation is expired (read-only check, no deletion)
     if let Some(exp_time) = attestation.expiration_time {
         if env.ledger().timestamp() > exp_time {
-            //clear this attestation from the storage
-            env.storage()
-                .persistent()
-                .remove(&DataKey::AttestationUID(attestation.uid.clone()));
             return Err(Error::AttestationExpired);
         }
     }
@@ -280,8 +280,12 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
     // Call resolver onrevoke hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
-        let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &attestation.schema_uid, &attestation.value);
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &attestation.schema_uid,
+            schema.revocable,
+        );
 
         // Call onrevoke hook - this is CRITICAL for access control
         let allowed = call_resolver_onrevoke(env, resolver_address, &resolver_attestation)?;
@@ -309,8 +313,12 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format with updated revocation status
-        let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &attestation.schema_uid, &attestation.value);
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &attestation.schema_uid,
+            schema.revocable,
+        );
 
         // Call onresolve hook for side effects (cleanup, notifications, etc.)
         // Note: Failures here don't revert the revocation

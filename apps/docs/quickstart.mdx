@@ -88,7 +88,9 @@ The client automatically uses the correct contract addresses for testnet and mai
 Before issuing attestations, register your wallet as an authority:
 
 ```typescript
-const authority = await sdk.registerAuthority();
+const authority = await client.registerAuthority({
+  options: { signer }
+});
 
 if (authority.error) {
   console.error('Registration failed:', authority.error);
@@ -99,7 +101,7 @@ console.log('Authority registered successfully');
 ```
 
 <Info>
-Authority registration is a one-time process per wallet. You can check your status with `sdk.fetchAuthority()`.
+Authority registration is a one-time process per wallet. You can check your status with `client.fetchAuthority()`.
 </Info>
 
 ## Step 4: Create or Select Schema
@@ -109,21 +111,23 @@ Schemas define the structure of your attestations:
 <CodeGroup>
 ```typescript Use Existing Schema
 // Use pre-built KYC schema
-const schemaUID = 'kyc-basic-v1';
+const schemaUID = Buffer.from('kyc-basic-v1', 'utf-8');
 console.log('Using existing schema:', schemaUID);
 ```
 
 ```typescript Create Custom Schema
-const schema = await sdk.createSchema({
-  schemaName: 'user-verification',
-  schemaContent: 'verified:bool,level:string,score:uint8,timestamp:uint64',
-  revocable: true
+const schema = await client.createSchema({
+  name: 'user-verification',
+  description: 'User verification schema',
+  schema: 'verified:bool,level:string,score:uint8,timestamp:uint64',
+  revocable: true,
+  options: { signer }
 });
 
-if (schema.data) {
-  console.log('Schema created:', schema.data.schemaUID);
+if (schema.schemaUid) {
+  console.log('Schema created:', schema.schemaUid);
 } else {
-  console.error('Schema creation failed:', schema.error);
+  console.error('Schema creation failed');
 }
 ```
 </CodeGroup>
@@ -133,23 +137,24 @@ if (schema.data) {
 Create an attestation for a user:
 
 ```typescript
-const attestation = await sdk.attest({
-  schemaUID: 'kyc-basic-v1',
-  subject: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgHv1', // Target wallet
-  value: 'verified:true,level:enhanced,score:95,timestamp:1704067200',
-  reference: 'kyc-session-2024-001' // Optional reference
+const attestation = await client.attest({
+  schemaUid: Buffer.from('kyc-basic-v1', 'utf-8'),
+  subject: 'GSUBJECT...', // Target Stellar address
+  value: JSON.stringify({
+    verified: true,
+    level: 'enhanced',
+    score: 95,
+    timestamp: 1704067200
+  }),
+  options: { signer }
 });
 
-if (attestation.data) {
-  console.log('Attestation issued!');
-  console.log('UID:', attestation.data.attestationUID);
-} else {
-  console.error('Attestation failed:', attestation.error);
-}
+console.log('Attestation issued!');
+console.log('UID:', attestation.attestationUid);
 ```
 
 <Note>
-The `value` field must match your schema definition. Each field is separated by commas in `fieldName:value` format.
+The `value` field should be a JSON string that matches your schema definition.
 </Note>
 
 ## Step 6: Verify Attestations
@@ -158,39 +163,34 @@ Check if a user has valid attestations:
 
 <CodeGroup>
 ```typescript Simple Check
-const result = await sdk.fetchAttestation({
-  schemaUID: 'kyc-basic-v1',
-  subject: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgHv1'
+const result = await client.getAttestation({
+  schemaUid: Buffer.from('kyc-basic-v1', 'utf-8'),
+  subject: 'GSUBJECT...'
 });
 
-if (result.data && !result.data.revoked) {
+if (result && !result.revoked) {
   console.log('User has valid KYC attestation');
+  const data = JSON.parse(result.value);
+  console.log('Verified:', data.verified);
+  console.log('Level:', data.level);
 } else {
   console.log('No valid attestation found');
 }
 ```
 
-```typescript Parse Data
-function parseAttestationData(value: string) {
-  const parts = value.split(',');
-  const data: any = {};
-  
-  parts.forEach(part => {
-    const [key, val] = part.split(':');
-    data[key] = val === 'true' ? true : 
-                val === 'false' ? false : 
-                isNaN(Number(val)) ? val : Number(val);
-  });
-  
-  return data;
-}
+```typescript Query Multiple
+const attestations = await client.queryAttestations({
+  subject: 'GSUBJECT...'
+});
 
-// Usage
-if (result.data) {
-  const data = parseAttestationData(result.data.value);
-  console.log('Verified:', data.verified);
-  console.log('Level:', data.level);
-  console.log('Score:', data.score);
+console.log(`Found ${attestations.length} attestations`);
+
+for (const att of attestations) {
+  if (!att.revoked) {
+    const data = JSON.parse(att.value);
+    console.log('Schema:', att.schemaUid);
+    console.log('Data:', data);
+  }
 }
 ```
 </CodeGroup>
@@ -200,74 +200,66 @@ if (result.data) {
 Here's a complete working example:
 
 <CodeGroup>
-```typescript Node.js
-<<<<<<< HEAD
-import { AttestSDK } from '@attestprotocol/sdk';
-=======
-import { AttestProtocol } from '@attestprotocol/sdk';
->>>>>>> canary
+```typescript Basic
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+import { Keypair } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 async function main() {
   try {
-    // Initialize SDK
-<<<<<<< HEAD
-    const sdk = await AttestSDK.initializeStellar({
-=======
-    const sdk = await AttestProtocol.initializeStellar({
->>>>>>> canary
-      secretKeyOrCustomSigner: process.env.STELLAR_SECRET_KEY,
-      publicKey: process.env.STELLAR_PUBLIC_KEY,
-      url: 'https://soroban-testnet.stellar.org'
+    // Initialize client
+    const signer = Keypair.fromSecret(process.env.STELLAR_SECRET_KEY!);
+    const client = new StellarAttestationClient({
+      rpcUrl: 'https://soroban-testnet.stellar.org',
+      network: 'testnet',
+      publicKey: signer.publicKey()
     });
 
-    console.log('✅ SDK initialized');
+    console.log('✅ Client initialized');
 
     // Register authority (if needed)
-    const authority = await sdk.fetchAuthority();
-    if (authority.error) {
-      await sdk.registerAuthority();
-      console.log('✅ Authority registered');
-    }
+    await client.registerAuthority({ options: { signer } });
+    console.log('✅ Authority registered');
 
     // Issue attestation
-    const attestation = await sdk.attest({
-      schemaUID: 'kyc-basic-v1',
-      subject: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgHv1',
-      value: 'verified:true,level:basic,score:85,timestamp:' + Date.now(),
-      reference: 'demo-' + Date.now()
+    const attestation = await client.attest({
+      schemaUid: Buffer.from('kyc-basic-v1', 'utf-8'),
+      subject: 'GSUBJECT...',
+      value: JSON.stringify({
+        verified: true,
+        level: 'basic',
+        score: 85,
+        timestamp: Date.now()
+      }),
+      options: { signer }
     });
 
-    if (attestation.data) {
-      console.log('✅ Attestation created:', attestation.data.attestationUID);
-    }
+    console.log('✅ Attestation created:', attestation.attestationUid);
 
     // Verify attestation
-    const verification = await sdk.fetchAttestation({
-      schemaUID: 'kyc-basic-v1',
-      subject: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgHv1'
+    const verification = await client.getAttestation({
+      schemaUid: Buffer.from('kyc-basic-v1', 'utf-8'),
+      subject: 'GSUBJECT...'
     });
 
-    if (verification.data) {
+    if (verification && !verification.revoked) {
       console.log('✅ Attestation verified');
+      console.log('Data:', JSON.parse(verification.value));
     }
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Error:', error);
   }
 }
 
 main();
 ```
 
-```typescript TypeScript
-<<<<<<< HEAD
-import { AttestSDK, AttestSDKResponse } from '@attestprotocol/sdk';
-=======
-import { AttestSDK, AttestProtocolResponse } from '@attestprotocol/sdk';
->>>>>>> canary
+```typescript Advanced
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+import { Keypair } from '@stellar/stellar-sdk';
 
 interface KYCData {
   verified: boolean;
@@ -277,25 +269,29 @@ interface KYCData {
 }
 
 async function main(): Promise<void> {
-<<<<<<< HEAD
-  const sdk = await AttestSDK.initializeStellar({
-=======
-  const sdk = await AttestProtocol.initializeStellar({
->>>>>>> canary
-    secretKeyOrCustomSigner: process.env.STELLAR_SECRET_KEY!,
-    publicKey: process.env.STELLAR_PUBLIC_KEY!,
-    url: 'https://soroban-testnet.stellar.org'
+  const signer = Keypair.fromSecret(process.env.STELLAR_SECRET_KEY!);
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: signer.publicKey()
   });
 
   // Type-safe attestation
-  const attestation = await sdk.attest({
-    schemaUID: 'kyc-basic-v1',
-    subject: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgHv1',
-    value: 'verified:true,level:basic,score:85,timestamp:' + Date.now(),
-    reference: 'typed-demo'
+  const kycData: KYCData = {
+    verified: true,
+    level: 'basic',
+    score: 85,
+    timestamp: Date.now()
+  };
+
+  const attestation = await client.attest({
+    schemaUid: Buffer.from('kyc-basic-v1', 'utf-8'),
+    subject: 'GSUBJECT...',
+    value: JSON.stringify(kycData),
+    options: { signer }
   });
 
-  console.log('Attestation created:', attestation.data?.attestationUID);
+  console.log('Attestation created:', attestation.attestationUid);
 }
 
 main().catch(console.error);
@@ -307,16 +303,11 @@ main().catch(console.error);
 Create a `.env` file in your project root:
 
 ```bash .env
-# Stellar
+# Stellar credentials
 STELLAR_SECRET_KEY=your_stellar_secret_key
-STELLAR_PUBLIC_KEY=your_stellar_public_key
 
-# Solana
-SOLANA_SECRET_KEY=your_solana_secret_key
-
-# Optional: Custom RPC endpoints
+# Optional: Custom RPC endpoint (defaults to testnet)
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
 
 ## Next Steps

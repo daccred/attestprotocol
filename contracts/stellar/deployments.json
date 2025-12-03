@@ -4,11 +4,6 @@
       "id": "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP",
       "hash": "5f91a35f4629473c814c2e949a530f4d3dfe6b44a6426f0d26e69523d83f287d",
       "timestamp": "2025-11-07T12:44:26Z"
-    },
-    "authority": {
-      "id": "CCMJGCRSQRZ56BDSLCAYV4BNS3SLIDPIP4CQYNT5X2VOPZIQ2ZM7GBVV",
-      "hash": "fa5328baa04d7ed8ffa12bd1ac6a23cf1775a64c1a9f27364a9ebbba432b5d2f",
-      "timestamp": "2025-11-07T12:44:15Z"
     }
   },
   "mainnet": {
@@ -16,11 +11,6 @@
       "id": "CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI",
       "hash": "6eeaf6691748956417b7929951ff3789f499190b2c220d3e758e3b62ddc66e7f",
       "timestamp": "2025-11-05T07:12:13Z"
-    },
-    "authority": {
-      "id": "CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG",
-      "hash": "6bd7703a8bdef80d2a71483ef34f5682fec8df95e348c8b32d4140029d78cfaf",
-      "timestamp": "2025-11-05T07:22:15Z"
     }
   }
 }

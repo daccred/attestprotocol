@@ -49,30 +49,24 @@ main().catch(console.error);
 Add your configuration to a `.env` file:
 
 ```bash .env
-# Choose your blockchain
 STELLAR_SECRET_KEY=SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 STELLAR_PUBLIC_KEY=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-
-# Alternative: Solana configuration
-# SOLANA_SECRET_KEY=[1,2,3,...]
-# SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
 
 <Warning>
-**Get Test Credentials**: For Stellar, generate test credentials at [laboratory.stellar.org](https://laboratory.stellar.org). For Solana, use `solana-keygen new`.
+**Get Test Credentials**: Generate test credentials at [laboratory.stellar.org](https://laboratory.stellar.org) and fund your account using the friendbot.
 </Warning>
 
-Initialize the SDK:
+Initialize the Stellar SDK:
 
-<CodeGroup>
-```javascript Stellar
+```javascript
 import { AttestSDK } from '@attestprotocol/sdk';
 import 'dotenv/config';
 
 async function main() {
   console.log('Starting attestation tutorial...');
-  
+
   // Initialize Stellar SDK
   const sdk = await AttestSDK.initializeStellar({
     secretKeyOrCustomSigner: process.env.STELLAR_SECRET_KEY,
@@ -85,26 +79,6 @@ async function main() {
 
 main().catch(console.error);
 ```
-
-```javascript Solana
-import { AttestSDK } from '@attestprotocol/sdk';
-import 'dotenv/config';
-
-async function main() {
-  console.log('Starting attestation tutorial...');
-  
-  // Initialize Solana SDK
-  const sdk = await AttestSDK.initializeSolana({
-    walletOrSecretKey: JSON.parse(process.env.SOLANA_SECRET_KEY),
-    url: process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com'
-  });
-
-  console.log('Solana SDK initialized');
-}
-
-main().catch(console.error);
-```
-</CodeGroup>
 
 ## Step 3: Register as Authority
 
@@ -140,8 +114,7 @@ try {
 
 Schemas define the structure of your attestations:
 
-<CodeGroup>
-```javascript Stellar Schema
+```javascript
 // Add this after authority registration
 try {
   const schemaResult = await sdk.createSchema({
@@ -164,41 +137,16 @@ try {
 }
 ```
 
-```javascript Solana Schema
-// Add this after authority registration
-try {
-  const schemaResult = await sdk.createSchema({
-    schemaName: `user-verification-${Date.now()}`,
-    schemaContent: 'verified:bool,level:string,score:u8,timestamp:u64',
-    revocable: true
-  });
-
-  if (schemaResult.error) {
-    console.error('Schema creation failed:', schemaResult.error);
-    return;
-  }
-
-  const schemaPDA = schemaResult.data;
-  console.log('Schema created:', schemaPDA.toBase58());
-
-} catch (error) {
-  console.error('Schema creation error:', error);
-  return;
-}
-```
-</CodeGroup>
-
 ## Step 5: Issue an Attestation
 
 Now let's create an attestation using our schema:
 
-<CodeGroup>
-```javascript Stellar Attestation
+```javascript
 // Add this after schema creation
 try {
   // Example subject address (replace with actual address)
   const subjectAddress = 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-  
+
   const attestResult = await sdk.attest({
     schemaUID: schemaUID,
     subject: subjectAddress,
@@ -220,50 +168,11 @@ try {
 }
 ```
 
-```javascript Solana Attestation
-// Add this after schema creation
-try {
-  // Get wallet balance for account setup
-  const balanceResult = await sdk.getWalletBalance();
-  
-  if (balanceResult.error) {
-    console.error('Balance check failed:', balanceResult.error);
-    return;
-  }
-
-  const attestResult = await sdk.attest({
-    schemaData: schemaPDA,
-    data: 'verified:true,level:enhanced,score:95,timestamp:' + Math.floor(Date.now() / 1000),
-    expirationTime: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year
-    revocable: true,
-    accounts: {
-      recipient: balanceResult.data.address, // Using own address for demo
-      levyReceipent: balanceResult.data.address,
-      mintAccount: new PublicKey('So11111111111111111111111111111111111111112') // SOL mint
-    }
-  });
-
-  if (attestResult.error) {
-    console.error('Attestation failed:', attestResult.error);
-    return;
-  }
-
-  console.log('Attestation created');
-  console.log('Attestation PDA:', attestResult.data.toBase58());
-
-} catch (error) {
-  console.error('Attestation error:', error);
-  return;
-}
-```
-</CodeGroup>
-
 ## Step 6: Verify the Attestation
 
 The most common operation - checking if a subject has a valid attestation:
 
-<CodeGroup>
-```javascript Stellar Verification
+```javascript
 // Add this after attestation creation
 try {
   // Wait a moment for indexing
@@ -293,37 +202,11 @@ try {
 }
 ```
 
-```javascript Solana Verification
-// Add this after attestation creation
-try {
-  const fetchResult = await sdk.fetchAttestation(attestResult.data);
-
-  if (fetchResult.error) {
-    console.error('Verification failed:', fetchResult.error);
-    return;
-  }
-
-  if (fetchResult.data) {
-    console.log('Attestation verified');
-    console.log('Attestation data:', fetchResult.data.data);
-    console.log('Attester:', fetchResult.data.attester.toBase58());
-    console.log('Created at:', new Date(fetchResult.data.timestamp * 1000).toLocaleString());
-  } else {
-    console.log('No attestation found');
-  }
-
-} catch (error) {
-  console.error('Verification error:', error);
-}
-```
-</CodeGroup>
-
 ## Complete Example
 
-Here's the complete working example for Stellar:
+Here's the complete working example:
 
-<CodeGroup>
-```javascript Complete Stellar Example
+```javascript
 import { AttestSDK } from '@attestprotocol/sdk';
 import 'dotenv/config';
 
@@ -395,62 +278,6 @@ async function main() {
 
 main().catch(console.error);
 ```
-
-```typescript TypeScript Version
-import { AttestSDK, StellarAttestSDK } from '@attestprotocol/sdk';
-import 'dotenv/config';
-
-async function main(): Promise<void> {
-  console.log('Starting attestation tutorial...');
-  
-  try {
-    const sdk: StellarAttestSDK = await AttestSDK.initializeStellar({
-      secretKeyOrCustomSigner: process.env.STELLAR_SECRET_KEY!,
-      publicKey: process.env.STELLAR_PUBLIC_KEY!,
-      url: 'https://soroban-testnet.stellar.org'
-    });
-    console.log('Stellar SDK initialized');
-
-    // Register as authority if needed
-    const existingAuthority = await sdk.fetchAuthority();
-    if (existingAuthority.error) {
-      const authResult = await sdk.registerAuthority();
-      if (authResult.error) throw new Error(String(authResult.error));
-      console.log('Authority registered');
-    }
-
-    // Create schema
-    const schemaResult = await sdk.createSchema({
-      schemaName: `user-verification-${Date.now()}`,
-      schemaContent: 'verified:bool,level:string,score:uint8,timestamp:uint64',
-      revocable: true
-    });
-    
-    if (schemaResult.error) throw new Error(String(schemaResult.error));
-    console.log('Schema created:', schemaResult.data!.schemaUID);
-
-    // Create and verify attestation
-    const subjectAddress = 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-    const attestResult = await sdk.attest({
-      schemaUID: schemaResult.data!.schemaUID,
-      subject: subjectAddress,
-      value: `verified:true,level:enhanced,score:95,timestamp:${Math.floor(Date.now() / 1000)}`,
-      reference: `demo-${Date.now()}`
-    });
-    
-    if (attestResult.error) throw new Error(String(attestResult.error));
-    console.log('Attestation created:', attestResult.data);
-
-    console.log('Tutorial completed successfully');
-
-  } catch (error) {
-    console.error('Error:', error);
-  }
-}
-
-main();
-```
-</CodeGroup>
 
 ## Run Your Example
 
@@ -553,14 +380,12 @@ Now that you've created your first attestation, explore these topics:
 <Accordion title="Insufficient Balance">
 If you see "insufficient balance" errors:
 - Ensure your wallet has test tokens for transaction fees
-- For Stellar: Use the [friendbot](https://laboratory.stellar.org/#account-creator?network=test) to fund your account
-- For Solana: Use `solana airdrop 2` to get test SOL
+- Use the [friendbot](https://laboratory.stellar.org/#account-creator?network=test) to fund your account
 </Accordion>
 
 <Accordion title="Invalid Secret Key">
 - Double-check your secret key format and ensure it's valid
-- For Stellar: Secret keys start with 'S' and are 56 characters
-- For Solana: Secret keys are 64-number arrays
+- Secret keys start with 'S' and are 56 characters
 - Never expose secret keys in production code
 </Accordion>
 

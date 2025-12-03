@@ -90,6 +90,12 @@ const signature = signaturePoint.toRawBytes(false); // -> 96-byte Uint8Array
 - **Revocation Message Prefix**: "REVOKE_PROTOCOL_V1_DELEGATED"
 - **On-chain `hash_to_g1` DST**: "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_"
 
+------------------------------------------------------------------------------------------
+    References
+------------------------------------------------------------------------------------------
+- **CAP-0059**: Stellar BLS12-381 Host Functions specification
+  https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md
+
 */
 use crate::errors::Error;
 use crate::state::{BlsPublicKey, DataKey};
@@ -127,10 +133,16 @@ const G2_GENERATOR: [u8; 192] = [
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `attester` - The address of the attester registering the key
-/// * `public_key` - The BLS12-381 G2 public key (192 bytes)
+/// * `public_key` - The BLS12-381 G2 public key (192 bytes uncompressed)
 ///
 /// # Returns
-/// * `Result<(), Error>` - Success or error (fails if key already exists)
+/// * `Result<(), Error>` - Success or error (fails if key already exists or is invalid)
+///
+/// # Security
+/// The public key is validated by deserializing it as a G2Affine point.
+/// This ensures the key is a valid point on the BLS12-381 G2 curve.
+/// Invalid keys (off-curve, identity element, wrong subgroup) will cause
+/// deserialization to fail, preventing registration of malicious keys.
 pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<192>) -> Result<(), Error> {
     attester.require_auth();
 
@@ -141,6 +153,13 @@ pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<
         // Key already registered - immutable, cannot update
         return Err(Error::AlreadyInitialized);
     }
+
+    // Validate the public key is a valid G2 curve point.
+    // G2Affine::from_bytes will panic if the bytes don't represent a valid
+    // point on the BLS12-381 G2 curve (off-curve, identity, wrong subgroup).
+    // This prevents registration of malicious or invalid keys that could
+    // break the pairing equation in verify_bls_signature.
+    let _validated_pk = G2Affine::from_bytes(public_key.clone());
 
     let timestamp = env.ledger().timestamp();
     let bls_key = BlsPublicKey {
@@ -205,8 +224,14 @@ pub fn get_bls_public_key(env: &Env, attester: &Address) -> Result<BlsPublicKey,
 ///
 /// # Returns
 /// * `Ok(())` if the signature is cryptographically valid for the given message and attester.
-/// * `Err(Error::InvalidSignature)` if the attester has no registered key or if the pairing check fails.
+/// * `Err(Error::InvalidSignature)` if the pairing check fails (signature doesn't match).
 /// * `Err(Error::BlsPubKeyNotRegistered)` if the attester has no registered key.
+///
+/// # Panics
+/// The function will trap (panic) if the signature bytes do not represent a valid G1 curve
+/// point. This is enforced by the Soroban host's BLS12-381 implementation which validates
+/// that deserialized points are on the curve and in the correct subgroup. Invalid signatures
+/// should be validated off-chain before submission to avoid wasted gas.
 ///
 /// # Cross-Platform Compatibility
 /// This on-chain function is designed to verify signatures created by standard off-chain
@@ -240,11 +265,17 @@ pub fn verify_bls_signature(
      * STEP 1: Negate the message point for the pairing equation.
      * STEP 2: Deserialize the signature and public key into curve points.
      * The signature is a G1 point, and the public key is a G2 point.
+     *
+     * NOTE: from_bytes will trap if the bytes don't represent valid curve points.
+     * - signature: User-provided, will trap on invalid G1 point (DoS protection)
+     * - bls_key.key: Validated during registration, always valid G2 point
      */
     let neg_hashed_message = -hashed_message;
 
+    // Deserialize signature - traps on invalid G1 point (malformed input)
     let s = G1Affine::from_bytes(signature.clone());
 
+    // Deserialize public key - already validated during registration
     let pk = G2Affine::from_bytes(bls_key.key);
 
     /*

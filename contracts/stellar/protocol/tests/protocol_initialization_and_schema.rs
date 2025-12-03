@@ -1,4 +1,4 @@
-use protocol::{state::Schema, utils::create_xdr_string, AttestationContract, AttestationContractClient};
+use protocol::{errors::Error, state::Schema, utils::create_xdr_string, AttestationContract, AttestationContractClient};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
@@ -115,4 +115,62 @@ fn initialize_and_register_schema() {
         assert_eq!(event_data.1.resolver, case.resolver);
         assert_eq!(event_data.1.revocable, case.revocable);
     }
+}
+
+/// Test that registering an identical schema (same definition, authority, resolver)
+/// returns SchemaAlreadyExists error to prevent accidental overwrites and detect collisions.
+#[test]
+fn test_duplicate_schema_registration_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let authority = Address::generate(&env);
+
+    // Initialize contract
+    client.initialize(&admin);
+
+    // Define a schema
+    let schema_definition = SorobanString::from_str(
+        &env,
+        r#"{"name":"Degree","version":"1.0","description":"University degree","fields":[{"name":"degree","type":"string"}]}"#,
+    );
+
+    // First registration should succeed
+    let _schema_uid = client.register(&authority, &schema_definition, &None, &true);
+
+    // Second registration with identical parameters should fail with SchemaAlreadyExists
+    let result = client.try_register(&authority, &schema_definition, &None, &true);
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap(), Ok(Error::SchemaAlreadyExists));
+}
+
+/// Test that the same schema definition with different authorities produces different UIDs
+/// and both registrations succeed (no collision).
+#[test]
+fn test_same_definition_different_authority_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let authority1 = Address::generate(&env);
+    let authority2 = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    let schema_definition = SorobanString::from_str(
+        &env,
+        r#"{"name":"Certificate","version":"1.0","fields":[{"name":"type","type":"string"}]}"#,
+    );
+
+    // Both registrations should succeed because they have different authorities
+    let uid1 = client.register(&authority1, &schema_definition, &None, &true);
+    let uid2 = client.register(&authority2, &schema_definition, &None, &true);
+
+    // UIDs should be different since authority is part of the hash input
+    assert_ne!(uid1, uid2);
 }

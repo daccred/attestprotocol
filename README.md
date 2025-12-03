@@ -10,6 +10,83 @@
 [![Solana Radar Award](https://img.shields.io/badge/Solana%20Radar-Public%20Goods%20Award-yellow)](https://x.com/solana/status/1856362113561964676)
 [![GitHub Issues](https://img.shields.io/github/issues/daccred/attest.so)](https://github.com/daccred/attest.so/issues)
 
+---
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🌐 Website & Docs
+- **[🏠 Website](https://attestprotocol.org)**
+  Official attestprotocol.org home
+- **[📚 Developer Docs](https://docs.attestprotocol.org)**
+  Complete integration guides & API reference
+
+### 🛠️ Live Environments
+
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Stellar</th>
+<th>Solana</th>
+<th>Starknet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><b>Sandbox</b></td>
+<td colspan="3" align="center"><a href="https://sandbox.attest.so">🧪 Try it now</a></td>
+</tr>
+<tr>
+<td><b>Testnet</b></td>
+<td align="center"><a href="https://testnet.attestprotocol.org">🔗 Launch</a></td>
+<td align="center">🚧 Soon</td>
+<td align="center">🚧 Soon</td>
+</tr>
+<tr>
+<td><b>Mainnet</b></td>
+<td align="center"><a href="https://stellar.attestprotocol.org">🚀 Launch</a></td>
+<td align="center">🚧 Soon</td>
+<td align="center">🚧 Soon</td>
+</tr>
+</tbody>
+</table>
+
+</td>
+<td width="50%" valign="top">
+
+### 📜 Smart Contracts
+
+**Stellar (Mainnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/public)
+- [Protocol Contract](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
+- [Authority Contract](https://stellar.expert/explorer/public/contract/CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG) · `CBKOB...`
+
+**Stellar (Testnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/testnet)
+- [Protocol Contract](https://stellar.expert/explorer/testnet/contract/CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP) · `CBFE5...`
+- [Authority Contract](https://stellar.expert/explorer/testnet/contract/CCMJGCRSQRZ56BDSLCAYV4BNS3SLIDPIP4CQYNT5X2VOPZIQ2ZM7GBVV) · `CCMJG...`
+
+### 📦 NPM Packages
+
+```bash
+npm install @attestprotocol/stellar-sdk
+npm install @attestprotocol/solana-sdk
+npm install @attestprotocol/starknet-sdk
+npm install @attestprotocol/cli
+```
+
+**Browse on npm:**
+[stellar-sdk](https://www.npmjs.com/package/@attestprotocol/stellar-sdk) ·
+[solana-sdk](https://www.npmjs.com/package/@attestprotocol/solana-sdk) ·
+[starknet-sdk](https://www.npmjs.com/package/@attestprotocol/starknet-sdk) ·
+[cli](https://www.npmjs.com/package/@attestprotocol/cli)
+
+</td>
+</tr>
+</table>
+
+---
+
 </div>
 
 ## 🌐 Overview
@@ -253,11 +330,44 @@ This configuration ensures that Rust Analyzer can correctly interpret the depend
 
 ---
 
-## �� Resources & Links
+## 🔗 Resources & Links
 
 - [Product Development Log](https://daccred.notion.site/We-re-building-https-on-the-blockchain-df20b05cb5a04e379a165714aab024fb?pvs=4)
 - [Technical Documentation](https://attest.so) (Coming Soon)
 - [API Reference](https://attest.so) (Coming Soon)
+
+---
+
+## 🏆 Awards & Recognition
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="https://cryptologos.cc/logos/solana-sol-logo.png" width="80" alt="Solana Logo"/>
+<h3>🎖️ Solana Radar Hackathon</h3>
+<p><b>Public Goods Award Winner</b></p>
+<p>Recognized for building critical public infrastructure for the Solana ecosystem</p>
+<a href="https://x.com/solana/status/1856362113561964676">
+  <img src="https://img.shields.io/badge/View%20Announcement-black?style=for-the-badge&logo=x" alt="View on X"/>
+</a>
+</td>
+<td align="center" width="50%">
+<img src="https://cryptologos.cc/logos/stellar-xlm-logo.png" width="80" alt="Stellar Logo"/>
+<h3>⭐ Stellar Community Fund</h3>
+<p><b>SCF Award Recipient</b></p>
+<p>Selected for advancing attestation infrastructure on the Stellar network</p>
+<a href="https://communityfund.stellar.org/submissions/recIHN98Ja7MMb4DX">
+  <img src="https://img.shields.io/badge/View%20Submission-090020?style=for-the-badge&logo=stellar" alt="View on SCF"/>
+</a>
+</td>
+</tr>
+</table>
+
+</div>
+
+---
 
 ## 📝 License
 

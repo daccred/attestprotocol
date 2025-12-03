@@ -14,7 +14,6 @@ export interface TestConfig {
   adminSecretKey: string
   rpcUrl: string
   protocolContractId: string
-  authorityContractId: string
 }
 
 /**
@@ -70,25 +69,19 @@ export function loadTestConfig(): TestConfig {
     }
     
     const protocolContractId = testnetDeployments.protocol?.id
-    const authorityContractId = testnetDeployments.authority?.id
-    
+
     if (!protocolContractId) {
       throw new Error('Protocol contract ID not found in deployments.json')
     }
-    
-    if (!authorityContractId) {
-      throw new Error('Authority contract ID not found in deployments.json')
-    }
-    
+
     /** MUST COME from .env file */
     const adminSecretKey = process.env.ADMIN_SECRET_KEY as string;
     const rpcUrl = 'https://soroban-testnet.stellar.org'
-    
+
     return {
       adminSecretKey,
       rpcUrl,
-      protocolContractId,
-      authorityContractId
+      protocolContractId
     }
   } catch (error) {
     throw new Error(`Failed to load test configuration: ${error}`)

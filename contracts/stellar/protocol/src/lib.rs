@@ -24,11 +24,12 @@ impl AttestationContract {
     /// Initializes the contract with an administrative address.
     ///
     /// This function can only be called once. Subsequent calls will result in an
-    /// `AlreadyInitialized` error.
+    /// `AlreadyInitialized` error. The admin address must authorize the initialization
+    /// to prevent front-running attacks.
     ///
     /// # Arguments
     ///
-    /// * `admin` - The address to be set as the contract administrator.
+    /// * `admin` - The address to be set as the contract administrator. Must authorize this call.
     ///
     /// # Errors
     ///
@@ -37,6 +38,10 @@ impl AttestationContract {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(errors::Error::AlreadyInitialized);
         }
+
+        // Require authorization from the admin to prevent front-running attacks
+        admin.require_auth();
+
         env.storage().instance().set(&DataKey::Admin, &admin);
 
         // Emit contract initialization event

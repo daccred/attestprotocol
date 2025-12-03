@@ -18,7 +18,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
             "group": "Introduction",
@@ -45,145 +45,50 @@
               "concepts/schemas",
               "concepts/authorities",
               "concepts/verification",
-              "concepts/storage",
-              "concepts/bls-delegation",
-              "concepts/resolvers"
+              "concepts/storage"
             ]
           },
           {
-            "group": "Stellar Architecture",
+            "group": "Supported Chains",
             "pages": [
               "chains/stellar/overview",
-              "chains/stellar/protocol-contract",
-              "chains/stellar/authority-contract",
-              "chains/stellar/deployment",
-              "chains/stellar/horizon-indexer"
+              "chains/solana/overview",
+              "chains/starknet/overview"
             ]
           },
           {
-            "group": "Workflow Guides",
+            "group": "Guides",
             "pages": [
               "guides/kyc-integration",
-              "guides/enterprise-verification",
-              "guides/delegated-attestations",
-              "guides/payment-gated-authority",
               "guides/custom-schemas",
-              "guides/resolver-development"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Stellar SDK",
-        "groups": [
-          {
-            "group": "Getting Started",
-            "pages": [
-              "sdks/stellar/installation",
-              "sdks/stellar/initialization",
-              "sdks/stellar/configuration"
+              "guides/asset-ownership",
+              "guides/dao-voting",
+              "guides/event-attendance",
+              "guides/github-credentials",
+              "guides/privacy-options"
             ]
           },
           {
-            "group": "Core Operations",
+            "group": "SDK Reference",
             "pages": [
-              "sdks/stellar/attestations",
-              "sdks/stellar/schemas",
-              "sdks/stellar/revocation",
-              "sdks/stellar/queries"
+              "sdks/typescript/installation",
+              "sdks/typescript/initialization",
+              "sdks/typescript/methods",
+              "sdks/typescript/examples",
+              "sdks/cli",
+              "sdks/delegated-signatories"
             ]
           },
           {
-            "group": "Advanced Features",
+            "group": "API Reference",
             "pages": [
-              "sdks/stellar/bls-signatures",
-              "sdks/stellar/delegated-attestations",
-              "sdks/stellar/delegated-revocations",
-              "sdks/stellar/uid-generation"
-            ]
-          },
-          {
-            "group": "Data & Indexing",
-            "pages": [
-              "sdks/stellar/fetching-data",
-              "sdks/stellar/horizon-api",
-              "sdks/stellar/registry-operations"
-            ]
-          },
-          {
-            "group": "Tools & Utilities",
-            "pages": [
-              "sdks/stellar/cli",
-              "sdks/stellar/schema-encoder",
-              "sdks/stellar/examples"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API Reference",
-        "groups": [
-          {
-            "group": "Client Methods",
-            "pages": [
-              "reference/client-initialization",
-              "reference/attestation-methods",
-              "reference/schema-methods",
-              "reference/delegation-methods"
-            ]
-          },
-          {
-            "group": "Contract Interfaces",
-            "pages": [
-              "reference/protocol-contract",
-              "reference/authority-contract",
-              "reference/resolver-interface"
-            ]
-          },
-          {
-            "group": "Horizon Indexer API",
-            "pages": [
-              "reference/horizon-endpoints",
-              "reference/horizon-events",
-              "reference/horizon-operations"
-            ]
-          },
-          {
-            "group": "Types & Errors",
-            "pages": [
-              "reference/types",
+              "reference/overview",
+              "reference/attest",
+              "reference/schema",
+              "reference/authority",
+              "reference/administration",
+              "reference/webhooks",
               "reference/errors"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Architecture",
-        "groups": [
-          {
-            "group": "System Design",
-            "pages": [
-              "architecture/overview",
-              "architecture/contracts",
-              "architecture/resolver-pattern",
-              "architecture/data-flow"
-            ]
-          },
-          {
-            "group": "Security",
-            "pages": [
-              "architecture/security-model",
-              "architecture/trust-boundaries",
-              "architecture/threat-analysis",
-              "architecture/economic-security"
-            ]
-          },
-          {
-            "group": "Infrastructure",
-            "pages": [
-              "architecture/horizon-indexer",
-              "architecture/deployment",
-              "architecture/monitoring"
             ]
           }
         ]

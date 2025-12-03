@@ -5,7 +5,7 @@ use protocol::{
     AttestationContract, AttestationContractClient,
 };
 use soroban_sdk::{
-    panic_with_error, symbol_short,
+    symbol_short,
     testutils::{Address as _, Events, Ledger, LedgerInfo, MockAuth, MockAuthInvoke},
     Address, BytesN, Env, IntoVal, String as SorobanString, TryIntoVal,
 };
@@ -798,16 +798,38 @@ fn test_handling_expired_attestations() {
     let result = client.try_get_attestation(&attestation_uid);
     assert_eq!(result, Err(Ok(protocol::errors::Error::AttestationExpired.into())));
 
-    let record = env.as_contract(&contract_id, || {
+    // CRITICAL: Verify that reading an expired attestation does NOT delete it from storage.
+    // Read operations must be idempotent - no side effects on storage.
+    // This prevents attackers from scraping and erasing expired attestations.
+    let record_after_read = env.as_contract(&contract_id, || {
         env.storage()
             .persistent()
-            .get::<DataKey, Attestation>(&DataKey::AttestationUID(attestation_uid))
-            .unwrap_or_else(|| {
-                panic_with_error!(env, Error::AttestationNotFound);
-            })
+            .get::<DataKey, Attestation>(&DataKey::AttestationUID(attestation_uid.clone()))
     });
 
-    dbg!(&record);
-    dbg!(&result);
-    // assert_eq!(new_result, Err(Ok(protocol::errors::Error::AttestationNotFound.into())));
+    // The attestation should still exist in storage after the read
+    assert!(
+        record_after_read.is_some(),
+        "Expired attestation should NOT be deleted by get_attestation - read ops must be idempotent"
+    );
+
+    // Verify the attestation data is intact
+    let record = record_after_read.unwrap();
+    assert_eq!(record.uid, attestation_uid);
+    assert_eq!(record.expiration_time, expiration_time);
+
+    // Call get_attestation again to ensure repeated reads don't cause deletion
+    let result2 = client.try_get_attestation(&attestation_uid);
+    assert_eq!(result2, Err(Ok(protocol::errors::Error::AttestationExpired.into())));
+
+    // Verify still in storage after second read
+    let record_after_second_read = env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .get::<DataKey, Attestation>(&DataKey::AttestationUID(attestation_uid.clone()))
+    });
+    assert!(
+        record_after_second_read.is_some(),
+        "Attestation should persist across multiple reads"
+    );
 }

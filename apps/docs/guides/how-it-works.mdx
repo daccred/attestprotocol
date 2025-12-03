@@ -304,21 +304,4 @@ webhookManager.subscribe({
 - **Caching Layer**: Frequently accessed attestations are cached for performance
 - **Pagination Support**: Large result sets are handled through cursor-based pagination
 
----
-
-## Integration Best Practices
-
-### Development Workflow
-1. **Environment Setup**: Configure SDK with appropriate network endpoints
-2. **Schema Design**: Define or select schemas that match your use case requirements
-3. **Authority Management**: Register and verify authority status before issuing attestations
-4. **Error Handling**: Implement robust error handling for network and validation failures
-5. **Testing**: Use testnet environments for development and testing workflows
-
-### Production Considerations
-- **Key Management**: Implement secure storage for authority private keys
-- **Rate Limiting**: Monitor API usage and implement appropriate rate limiting
-- **Monitoring**: Set up alerts for failed attestations and system health issues
-- **Backup Strategies**: Maintain redundant systems for critical attestation workflows
-
 AttestProtocol's architecture enables developers to integrate sophisticated trust verification into applications without deep blockchain expertise, while maintaining security, scalability, and cross-platform compatibility.

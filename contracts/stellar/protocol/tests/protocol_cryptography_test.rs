@@ -49,6 +49,7 @@ use protocol::{
 
 use soroban_sdk::{
     testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
+    xdr::ToXdr,
     Address, Bytes, BytesN, Env, IntoVal, String as SorobanString, TryIntoVal,
 };
 
@@ -649,18 +650,28 @@ fn test_end_to_end_bls_signature_verification() {
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
 
+        // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        message_payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 3: Nonce (big-endian)
         message_payload.extend_from_slice(&request.nonce.to_be_bytes());
 
-        // Field 3: Deadline (big-endian)
+        // Field 4: Deadline (big-endian)
         message_payload.extend_from_slice(&request.deadline.to_be_bytes());
-        // Field 4: Expiration Time (optional, big-endian)
+        // Field 5: Expiration Time (optional, big-endian)
         if let Some(exp_time) = request.expiration_time {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-        message_payload.extend_from_slice(&value_len_bytes);
+        // FIELD 6: Value Hash (32 bytes, SHA256 of value XDR)
+        let value_xdr = request.value.clone().to_xdr(&env);
+        let value_hash = env.crypto().sha256(&value_xdr);
+        message_payload.extend_from_slice(&value_hash.to_array());
 
         env.crypto().sha256(&message_payload).into()
     };
@@ -740,18 +751,28 @@ fn test_clean_room_attestation_message_hash() {
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
 
+        // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        message_payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 3: Nonce (big-endian)
         message_payload.extend_from_slice(&request.nonce.to_be_bytes());
 
-        // Field 3: Deadline (big-endian)
+        // Field 4: Deadline (big-endian)
         message_payload.extend_from_slice(&request.deadline.to_be_bytes());
-        // Field 4: Expiration Time (optional, big-endian)
+        // Field 5: Expiration Time (optional, big-endian)
         if let Some(exp_time) = request.expiration_time {
             message_payload.extend_from_slice(&exp_time.to_be_bytes());
         }
 
-        let value_len_bytes = (request.value.len() as u64).to_be_bytes();
-        message_payload.extend_from_slice(&value_len_bytes);
+        // FIELD 6: Value Hash (32 bytes, SHA256 of value XDR)
+        let value_xdr = request.value.clone().to_xdr(&env);
+        let value_hash = env.crypto().sha256(&value_xdr);
+        message_payload.extend_from_slice(&value_hash.to_array());
 
         env.crypto().sha256(&message_payload).into()
     };
@@ -789,16 +810,28 @@ fn test_clean_room_revocation_message_hash() {
 
     // 2. Simulate the OFF-CHAIN message construction.
     // This logic is a clean-room implementation that MUST perfectly mirror
-    // the production `create_attestation_message` function.
+    // the production `create_revocation_message` function.
     let off_chain_hash: [u8; 32] = {
         let mut payload = Bytes::new(&env);
 
         let revocation_domain_separator = instructions::delegation::get_revoke_dst();
         payload.extend_from_slice(revocation_domain_separator);
 
+        // Field 1: Schema UID
         payload.extend_from_slice(&request.schema_uid.to_array());
+
+        // Field 2: Attestation UID (binds signature to specific attestation)
+        payload.extend_from_slice(&request.attestation_uid.to_array());
+
+        // Field 3: Subject Hash (SHA256 of XDR-encoded subject address)
+        let subject_xdr = request.subject.clone().to_xdr(&env);
+        let subject_hash = env.crypto().sha256(&subject_xdr);
+        payload.extend_from_slice(&subject_hash.to_array());
+
+        // Field 4: Nonce
         payload.extend_from_slice(&request.nonce.to_be_bytes());
 
+        // Field 5: Deadline
         payload.extend_from_slice(&request.deadline.to_be_bytes());
 
         env.crypto().sha256(&payload).into()

@@ -14,263 +14,96 @@ description: 'Decentralized attestation infrastructure on Stellar. Build verifia
   alt="AttestProtocol Hero Dark"
 />
 
-## Decentralized Attestation Infrastructure on Stellar
+## Attestation Infrastructure on Stellar
 
-AttestProtocol is a modular, secure attestation infrastructure built on Stellar's Soroban smart contracts. It provides enterprise-grade capabilities for building verifiable credential systems through cryptographic delegation, payment-gated authority verification, and flexible resolver patterns.
+Modular attestation protocol on Stellar Soroban with BLS delegation and payment-gated verification.
 
-The platform separates core attestation logic from business rules through a resolver pattern, enabling flexible economic models while maintaining security and immutability.
-
-## Why Choose AttestProtocol?
+## Key Features
 
 <CardGroup cols={2}>
-  <Card
-    title="Modular Architecture"
-    icon="boxes-stacked"
-  >
-    Separation of core attestation logic from business rules through resolver pattern
+  <Card title="BLS Delegation" icon="key">
+    Off-chain signing with on-chain verification
   </Card>
-  <Card
-    title="Cryptographic Delegation"
-    icon="key"
-  >
-    BLS signatures enable secure off-chain signing with on-chain verification
+  <Card title="Economic Security" icon="shield-check">
+    100 XLM authority registration prevents Sybil attacks
   </Card>
-  <Card
-    title="Payment-Gated Authority"
-    icon="shield-check"
-  >
-    Economic barriers prevent Sybil attacks with 100 XLM verification fees
+  <Card title="Flexible Resolvers" icon="plug">
+    Custom validation without protocol changes
   </Card>
-  <Card
-    title="Comprehensive Indexing"
-    icon="database"
-  >
-    Horizon indexer provides complete contract interaction visibility beyond events
+  <Card title="Full Indexing" icon="database">
+    Track all contract interactions
   </Card>
 </CardGroup>
 
-### Key Architecture Principles
-
-<AccordionGroup>
-  <Accordion title="Security by Design">
-    Immutable core protocol logic with cryptographic validation at every step. BLS signature verification, nonce-based replay protection, and atomic operations ensure data integrity.
-  </Accordion>
-  <Accordion title="Resolver Pattern">
-    Separate business logic from core attestation infrastructure. Custom resolvers enable payment validation, token rewards, and complex access control without modifying protocol contracts.
-  </Accordion>
-  <Accordion title="Economic Security">
-    Payment requirements (100 XLM verification fee) create economic barriers to Sybil attacks while platform due diligence ensures legitimate organizations.
-  </Accordion>
-  <Accordion title="Complete Observability">
-    Horizon indexer tracks ALL contract interactions - not just events - providing comprehensive visibility for optimal user experience.
-  </Accordion>
-</AccordionGroup>
-
-## Quick Example
-
-Here's how to work with the Stellar SDK:
+## Quick Start
 
 <CodeGroup>
-```typescript Initialize Client
+```typescript Initialize
 import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
 
 const client = new StellarAttestationClient({
   rpcUrl: 'https://soroban-testnet.stellar.org',
   network: 'testnet',
-  publicKey: 'GBXXXXXXXXXXXXXXXXXXXX'
+  publicKey: 'GBXXXX...'
 });
 ```
 
-```typescript Create Attestation
-import { Keypair } from '@stellar/stellar-sdk';
-
-const signer = Keypair.fromSecret(process.env.STELLAR_SECRET);
-
+```typescript Attest
 await client.attest({
-  schemaUid: Buffer.from('abc123...', 'hex'),
-  value: JSON.stringify({ verified: true, level: 'enhanced' }),
-  subject: 'GSUBJECT123...',
+  schemaUid: Buffer.from('abc...', 'hex'),
+  value: JSON.stringify({ verified: true }),
+  subject: 'GSUBJECT...',
   options: { signer }
 });
 ```
-
-```typescript Delegated Attestation
-const { privateKey, publicKey } = client.generateBlsKeys();
-
-const request = await createDelegatedAttestationRequest({
-  schemaUid: Buffer.from('abc...', 'hex'),
-  subject: 'GSUBJECT...',
-  data: JSON.stringify({ verified: true })
-}, privateKey, client.getClientInstance());
-
-await client.attestByDelegation(request, { signer: myKeypair });
-```
 </CodeGroup>
 
-Cryptographic delegation enables secure off-chain signing with on-chain verification through BLS signatures.
-
-## Core Architecture Components
-
-AttestProtocol's Stellar implementation consists of interconnected smart contracts and infrastructure:
+## Architecture
 
 <CardGroup cols={2}>
-  <Card title="Protocol Contract" icon="cube" href="/chains/stellar/protocol-contract">
-    **Immutable Attestation Engine**
-
-    Core Soroban contract managing schema registration, attestation lifecycle, BLS signature verification, and nonce-based replay protection.
+  <Card title="Protocol Contract" icon="cube" href="/chains/stellar/overview">
+    Core attestation engine with BLS verification
   </Card>
-  <Card title="Authority Contract" icon="building" href="/chains/stellar/authority-contract">
-    **Payment-Gated Resolver**
-
-    Reference implementation demonstrating payment validation (100 XLM), authority registry, and resolver integration with the protocol.
+  <Card title="Authority Contract" icon="building" href="/chains/stellar/overview">
+    Payment-gated resolver (100 XLM registration)
   </Card>
-  <Card title="Resolver Pattern" icon="plug" href="/concepts/resolvers">
-    **Business Logic Abstraction**
-
-    Standardized interface for custom validation logic, side effects, and economic models without modifying core protocol contracts.
+  <Card title="Indexer (Horizon)" icon="server" href="/reference/overview">
+    Complete contract interaction tracking
   </Card>
-  <Card title="Horizon Indexer" icon="server" href="/architecture/horizon-indexer">
-    **Comprehensive Data Layer**
-
-    Express.js indexer tracking ALL contract interactions - events, operations, transactions, and account states for complete visibility.
+  <Card title="TypeScript SDK" icon="code" href="/sdks/typescript/installation">
+    Stellar-focused SDK with BLS support
   </Card>
 </CardGroup>
 
-### Data Flow Architecture
-
-The complete authority verification workflow demonstrates the system integration:
-
-1. **Payment Processing**: Organization pays 100 XLM verification fee to Authority contract
-2. **Due Diligence**: Platform performs off-chain KYB/enterprise verification
-3. **Delegated Signing**: Platform creates attestation request signed with BLS private key
-4. **Protocol Validation**: Protocol contract verifies BLS signature and calls resolver
-5. **Resolver Check**: Authority contract validates payment before approving attestation
-6. **Storage & Registry**: Attestation stored on-chain, authority registered in phone book
-
-This architecture separates economic models from core logic while maintaining cryptographic security.
-
-## Production Use Cases
-
-AttestProtocol's current implementation focuses on enterprise verification:
-
-<CardGroup cols={2}>
-  <Card title="Enterprise Authority Verification" icon="building-shield">
-    **Payment-Gated KYB**
-    - 100 XLM verification fee prevents spam
-    - Platform performs enterprise due diligence
-    - Cryptographic delegation for scalability
-    - Public phone book registry of authorities
-  </Card>
-  <Card title="Credential Issuance" icon="certificate">
-    **Schema-Based Attestations**
-    - Organizations issue verifiable credentials
-    - Immutable on-chain storage
-    - Optional expiration and revocation
-    - Reference linking for claim provenance
-  </Card>
-  <Card title="Custom Resolvers" icon="code-branch">
-    **Flexible Business Logic**
-    - Token reward distributions
-    - Fee collection mechanisms
-    - Access control policies
-    - Side effect processing
-  </Card>
-  <Card title="Comprehensive Indexing" icon="database">
-    **Full Contract Visibility**
-    - All operations tracked, not just events
-    - Failed transaction visibility
-    - Analytics and monitoring
-    - RESTful query APIs
-  </Card>
-</CardGroup>
-
-## Stellar Network Status
-
-AttestProtocol is currently deployed on Stellar with production contracts:
+## Deployment
 
 <CardGroup cols={2}>
   <Card title="Testnet" icon="flask">
-    **Protocol Contract**
-    `CDBWGWEZ3P4DZ3YUZSCEUKOVV2UGF2PYQEPW3E5OKNLYS5SNW4SQLDUA`
+    Protocol: `CDBWGWEZ3P4DZ3YUZSCEUKOVV2UGF2PYQEPW3E5OKNLYS5SNW4SQLDUA`
 
-    **Authority Contract**
-    `CDYP33SVMQ6HAE5FMTXURO65UKX6AVIWGQVNUB7K6PNVZPMVOTVZKA7M`
-
-    Deployed: October 26, 2025
+    Authority: `CDYP33SVMQ6HAE5FMTXURO65UKX6AVIWGQVNUB7K6PNVZPMVOTVZKA7M`
   </Card>
   <Card title="Mainnet" icon="rocket">
-    **Protocol Contract**
-    `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI`
+    Protocol: `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI`
 
-    **Authority Contract**
-    `CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG`
-
-    Deployed: November 5, 2025
+    Authority: `CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG`
   </Card>
 </CardGroup>
 
 
-### Developer Resources
+## Resources
 
 <CardGroup cols={2}>
-  <Card
-    title="Stellar SDK"
-    icon="code"
-    href="/sdks/stellar/installation"
-  >
-    TypeScript SDK with BLS signatures, delegation, and comprehensive contract interaction
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Build your first attestation
   </Card>
-  <Card
-    title="Contract Architecture"
-    icon="cube"
-    href="/architecture/overview"
-  >
-    Deep dive into Protocol and Authority contracts with security model
+  <Card title="API Reference" icon="server" href="/reference/overview">
+    Complete API documentation
   </Card>
-  <Card
-    title="Horizon Indexer"
-    icon="server"
-    href="/architecture/horizon-indexer"
-  >
-    RESTful API for contract operations, events, and comprehensive analytics
+  <Card title="GitHub" icon="github" href="https://github.com/daccred/attest.so">
+    Source code & contribute
   </Card>
-  <Card
-    title="Resolver Development"
-    icon="plug"
-    href="/guides/resolver-development"
-  >
-    Build custom business logic with the resolver pattern
+  <Card title="Discord" icon="discord" href="https://discord.com/invite/7kVur5ja5m">
+    Community & support
   </Card>
 </CardGroup>
-
-### Community & Support
-
-<CardGroup cols={3}>
-  <Card
-    title="Discord Community"
-    icon="discord"
-    href="https://discord.com/invite/7kVur5ja5m"
-  >
-    Get support and connect with other developers
-  </Card>
-  <Card
-    title="GitHub Repository"
-    icon="github"
-    href="https://github.com/daccred/attest.so"
-  >
-    Contribute to the protocol and explore the Soroban contracts
-  </Card>
-  <Card
-    title="Twitter Updates"
-    icon="twitter"
-    href="https://twitter.com/attestprotocol"
-  >
-    Follow protocol progress and deployment announcements
-  </Card>
-</CardGroup>
-
----
-
-<Info>
-**New to the architecture?** Check out the [System Architecture](/architecture/overview) to understand how Protocol contracts, Authority resolvers, and BLS delegation work together. For contract security analysis, see the [STRIDE Threat Model](/architecture/threat-analysis).
-</Info>
