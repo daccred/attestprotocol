@@ -1,6 +1,6 @@
 use crate::errors::Error;
 use crate::state::{Attestation, DataKey};
-use soroban_sdk::{Address, Bytes, BytesN, Env, String};
+use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env, String};
 
 use crate::events;
 use crate::interfaces::resolver::{ResolverAttestation, ResolverClient};
@@ -65,11 +65,14 @@ fn create_resolver_attestation(
     env: &Env,
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
-    _value: &String,
     revocable: bool,
 ) -> ResolverAttestation {
     // Generate a UID for this attestation (protocol doesn't store UIDs currently)
     let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.nonce);
+
+    // Convert attestation value (String) to Bytes for the resolver interface
+    // We use XDR serialization to ensure consistent encoding across platforms
+    let data = attestation.value.clone().to_xdr(env);
 
     ResolverAttestation {
         uid,
@@ -80,9 +83,9 @@ fn create_resolver_attestation(
         expiration_time: attestation.expiration_time.unwrap_or(0), // Flattened: 0 = not set
         revocation_time: attestation.revocation_time.unwrap_or(0), // Flattened: 0 = not set
         revocable,
-        ref_uid: Bytes::new(env),                     // Flattened: empty bytes = not set
-        data: Bytes::from_slice(env, b"placeholder"), // TODO: Convert string to bytes properly
-        value: 0, // Flattened: 0 = not set (protocol doesn't support value field yet)
+        ref_uid: Bytes::new(env), // Flattened: empty bytes = not set
+        data,                     // XDR-encoded attestation value
+        value: 0,                 // Flattened: 0 = not set (protocol doesn't support numeric value field yet)
     }
 }
 
@@ -152,7 +155,7 @@ pub fn attest(
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
         let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &schema_uid, &value, schema.revocable);
+            create_resolver_attestation(env, &attestation, &schema_uid, schema.revocable);
 
         // Call onattest hook - this is CRITICAL for access control
         let allowed = call_resolver_onattest(env, resolver_address, &resolver_attestation)?;
@@ -183,7 +186,7 @@ pub fn attest(
     if let Some(resolver_address) = &schema.resolver {
         // Create resolver attestation format
         let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &schema_uid, &value, schema.revocable);
+            create_resolver_attestation(env, &attestation, &schema_uid, schema.revocable);
 
         // Call onresolve hook for side effects (rewards, registration, etc.)
         // Note: Failures here don't revert the attestation
@@ -281,7 +284,6 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
             env,
             &attestation,
             &attestation.schema_uid,
-            &attestation.value,
             schema.revocable,
         );
 
@@ -315,7 +317,6 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
             env,
             &attestation,
             &attestation.schema_uid,
-            &attestation.value,
             schema.revocable,
         );
 
