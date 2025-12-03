@@ -15,18 +15,13 @@ crate-type = ["cdylib", "rlib"]
 doctest = false
 
 # Feature flags control which resolver contract is exported when building to Wasm.
-# By default (no features), no resolver contract exports are included in Wasm builds,
-# which avoids duplicate symbol errors when this crate is a dependency of other Wasm contracts.
+# By default (no features), no resolver contract exports are included in Wasm builds.
 [features]
 default = []
 export-default-resolver = []
-export-token-reward-resolver = []
-export-fee-collection-resolver = []
 
 [dependencies]
 soroban-sdk = { workspace = true }
-stellar-macros = "0.4.1"
-stellar-tokens = "0.4.1"
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

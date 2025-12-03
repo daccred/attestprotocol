@@ -1063,8 +1063,6 @@ name = "resolvers"
 version = "1.3.6"
 dependencies = [
  "soroban-sdk",
- "stellar-macros",
- "stellar-tokens",
 ]
 
 [[package]]
@@ -1470,17 +1468,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "stellar-macros"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64fca0c7dec6c2ff634d0bf078bd632fd1616e4ced6be4ab1487bae689c5ebf2"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.109",
-]
-
-[[package]]
 name = "stellar-strkey"
 version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1489,15 +1476,6 @@ dependencies = [
  "crate-git-revision",
  "data-encoding",
  "thiserror",
-]
-
-[[package]]
-name = "stellar-tokens"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68e41ef20c8d4f3c0b21b83a15c8e4c7e99462af020fc0f0dcd1d548a07812ea"
-dependencies = [
- "soroban-sdk",
 ]
 
 [[package]]
