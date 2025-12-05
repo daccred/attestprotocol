@@ -1,0 +1,447 @@
+---
+title: 'Identity'
+description: 'Verify identity claims and issue identity attestations'
+---
+
+## Overview
+
+Identity attestations link on-chain addresses to verified real-world or digital identities. This guide covers verifying identity claims and issuing attestations.
+
+## Schema
+
+```typescript
+const IDENTITY_SCHEMA = {
+  name: 'Identity',
+  fields: [
+    { name: 'type', type: 'string' },         // "twitter", "github", "email", "domain"
+    { name: 'identifier', type: 'string' },   // @handle, email, domain
+    { name: 'verifiedAt', type: 'u64' },
+    { name: 'proofUrl', type: 'string' }      // Link to verification proof
+  ]
+};
+```
+
+---
+
+## Verifier Workflow
+
+Verify that an address owns a specific identity (social account, email, domain).
+
+### 1. Verify Identity Claim
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const IDENTITY_SCHEMA = {
+  name: 'Identity',
+  fields: [
+    { name: 'type', type: 'string' },
+    { name: 'identifier', type: 'string' },
+    { name: 'verifiedAt', type: 'u64' },
+    { name: 'proofUrl', type: 'string' }
+  ]
+};
+
+async function verifyIdentity(attestationUid: string) {
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation) {
+    return { verified: false, reason: 'Identity attestation not found' };
+  }
+
+  if (attestation.revoked) {
+    return { verified: false, reason: 'Identity attestation revoked' };
+  }
+
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  return {
+    verified: true,
+    type: data.type,
+    identifier: data.identifier,
+    owner: attestation.subject,
+    verifiedAt: new Date(data.verifiedAt),
+    proofUrl: data.proofUrl,
+    issuer: attestation.attester
+  };
+}
+```
+
+### 2. Check Specific Identity Type
+
+```typescript
+type IdentityType = 'twitter' | 'github' | 'email' | 'domain' | 'discord';
+
+async function hasIdentity(
+  userAddress: string,
+  identitySchemaUid: string,
+  identityType: IdentityType
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: userAddress
+  });
+
+  const { attestations } = await client.fetchAttestationsByWallet({
+    walletAddress: userAddress,
+    limit: 100
+  });
+
+  const identityAttestations = attestations.filter(
+    a => a.schemaUid.toString('hex') === identitySchemaUid && !a.revoked
+  );
+
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+
+  for (const attestation of identityAttestations) {
+    const data = await encoder.decodeData(attestation.value);
+    if (data.type === identityType) {
+      return {
+        found: true,
+        identifier: data.identifier,
+        attestationUid: attestation.uid.toString('hex')
+      };
+    }
+  }
+
+  return { found: false };
+}
+```
+
+### 3. Get All Linked Identities
+
+```typescript
+async function getLinkedIdentities(
+  userAddress: string,
+  identitySchemaUid: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: userAddress
+  });
+
+  const { attestations } = await client.fetchAttestationsByWallet({
+    walletAddress: userAddress,
+    limit: 100
+  });
+
+  const identityAttestations = attestations.filter(
+    a => a.schemaUid.toString('hex') === identitySchemaUid && !a.revoked
+  );
+
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+  const identities = await Promise.all(
+    identityAttestations.map(async (a) => {
+      const data = await encoder.decodeData(a.value);
+      return {
+        uid: a.uid.toString('hex'),
+        type: data.type,
+        identifier: data.identifier,
+        verifiedAt: new Date(data.verifiedAt),
+        proofUrl: data.proofUrl
+      };
+    })
+  );
+
+  return identities;
+}
+```
+
+### 4. Verify Trusted Issuer
+
+```typescript
+const TRUSTED_IDENTITY_PROVIDERS: Record<string, string[]> = {
+  twitter: ['GTWITTER_VERIFIER...'],
+  github: ['GGITHUB_VERIFIER...'],
+  email: ['GEMAIL_VERIFIER1...', 'GEMAIL_VERIFIER2...'],
+  domain: ['GDOMAIN_VERIFIER...']
+};
+
+async function verifyTrustedIdentity(attestationUid: string) {
+  const result = await verifyIdentity(attestationUid);
+
+  if (!result.verified) {
+    return result;
+  }
+
+  const trustedIssuers = TRUSTED_IDENTITY_PROVIDERS[result.type];
+  if (!trustedIssuers?.includes(result.issuer)) {
+    return { verified: false, reason: 'Untrusted identity provider' };
+  }
+
+  return result;
+}
+```
+
+### 5. Reverse Lookup (Identity to Address)
+
+```typescript
+async function findAddressByIdentity(
+  identityType: string,
+  identifier: string,
+  schemaUid: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: 'GQUERY...' // Any valid address for querying
+  });
+
+  // Fetch recent attestations for this schema
+  const attestations = await client.fetchAttestations(100);
+
+  const matching = attestations.filter(
+    a => a.schemaUid.toString('hex') === schemaUid && !a.revoked
+  );
+
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+
+  for (const attestation of matching) {
+    const data = await encoder.decodeData(attestation.value);
+    if (data.type === identityType && data.identifier === identifier) {
+      return {
+        found: true,
+        address: attestation.subject,
+        attestationUid: attestation.uid.toString('hex')
+      };
+    }
+  }
+
+  return { found: false };
+}
+```
+
+### Complete Verifier Example
+
+```typescript
+import {
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const IDENTITY_SCHEMA = {
+  name: 'Identity',
+  fields: [
+    { name: 'type', type: 'string' },
+    { name: 'identifier', type: 'string' },
+    { name: 'verifiedAt', type: 'u64' },
+    { name: 'proofUrl', type: 'string' }
+  ]
+};
+
+const TRUSTED_PROVIDERS = ['GPROVIDER1...', 'GPROVIDER2...'];
+
+// Gate access to verified users only
+async function canAccessPremiumFeatures(attestationUid: string) {
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation || attestation.revoked) {
+    return { allowed: false, reason: 'No valid identity' };
+  }
+
+  if (!TRUSTED_PROVIDERS.includes(attestation.attester)) {
+    return { allowed: false, reason: 'Untrusted identity provider' };
+  }
+
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  // Require Twitter or GitHub verification
+  if (!['twitter', 'github'].includes(data.type)) {
+    return { allowed: false, reason: 'Twitter or GitHub identity required' };
+  }
+
+  return {
+    allowed: true,
+    identityType: data.type,
+    identifier: data.identifier
+  };
+}
+```
+
+---
+
+## Issuer Workflow
+
+Issue identity attestations after verification.
+
+### 1. Register Schema (One-time)
+
+```typescript
+async function registerIdentitySchema(client: StellarAttestationClient, signer: any) {
+  const result = await client.createSchema({
+    definition: 'struct Identity { string type; string identifier; u64 verifiedAt; string proofUrl; }',
+    revocable: true,
+    options: { signer }
+  });
+
+  return result.schemaUid.toString('hex');
+}
+```
+
+### 2. Issue Identity Attestation
+
+```typescript
+async function issueIdentity(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  userAddress: string,
+  identity: {
+    type: 'twitter' | 'github' | 'email' | 'domain' | 'discord';
+    identifier: string;
+    proofUrl: string;
+  },
+  signer: any
+) {
+  const encoder = new SorobanSchemaEncoder(IDENTITY_SCHEMA);
+
+  const payload = await encoder.encodeData({
+    type: identity.type,
+    identifier: identity.identifier,
+    verifiedAt: Date.now(),
+    proofUrl: identity.proofUrl
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(schemaUid, 'hex'),
+    subject: userAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  return {
+    identityUid: result.attestationUid?.toString('hex'),
+    txHash: result.hash
+  };
+}
+```
+
+### 3. Twitter Verification Flow
+
+```typescript
+// 1. User posts tweet with their Stellar address
+// 2. Your backend verifies the tweet exists and contains the address
+// 3. Issue attestation
+
+async function verifyTwitterAndAttest(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  userAddress: string,
+  twitterHandle: string,
+  tweetUrl: string,
+  signer: any
+) {
+  // Verify tweet exists and contains address (your backend logic)
+  const tweetValid = await verifyTweetContainsAddress(tweetUrl, userAddress);
+
+  if (!tweetValid) {
+    throw new Error('Tweet verification failed');
+  }
+
+  return issueIdentity(client, schemaUid, userAddress, {
+    type: 'twitter',
+    identifier: twitterHandle,
+    proofUrl: tweetUrl
+  }, signer);
+}
+```
+
+### 4. GitHub Verification Flow
+
+```typescript
+// 1. User creates a gist with their Stellar address
+// 2. Your backend verifies the gist exists
+// 3. Issue attestation
+
+async function verifyGitHubAndAttest(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  userAddress: string,
+  githubUsername: string,
+  gistUrl: string,
+  signer: any
+) {
+  // Verify gist exists and contains address (your backend logic)
+  const gistValid = await verifyGistContainsAddress(gistUrl, userAddress);
+
+  if (!gistValid) {
+    throw new Error('Gist verification failed');
+  }
+
+  return issueIdentity(client, schemaUid, userAddress, {
+    type: 'github',
+    identifier: githubUsername,
+    proofUrl: gistUrl
+  }, signer);
+}
+```
+
+### Complete Issuer Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder
+} from '@attestprotocol/stellar-sdk';
+
+const IDENTITY_SCHEMA_UID = 'jkl012...';
+
+async function onIdentityVerified(
+  userAddress: string,
+  identityType: 'twitter' | 'github' | 'email' | 'domain',
+  identifier: string,
+  proofUrl: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: 'GVERIFIER...'
+  });
+
+  const encoder = new SorobanSchemaEncoder({
+    name: 'Identity',
+    fields: [
+      { name: 'type', type: 'string' },
+      { name: 'identifier', type: 'string' },
+      { name: 'verifiedAt', type: 'u64' },
+      { name: 'proofUrl', type: 'string' }
+    ]
+  });
+
+  const payload = await encoder.encodeData({
+    type: identityType,
+    identifier,
+    verifiedAt: Date.now(),
+    proofUrl
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(IDENTITY_SCHEMA_UID, 'hex'),
+    subject: userAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  console.log('Identity attested:', result.attestationUid?.toString('hex'));
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="React Integration" icon="react" href="/examples/react-integration">
+    Build verification UI
+  </Card>
+  <Card title="Delegation" icon="key" href="/concepts/delegation">
+    Scale identity issuance
+  </Card>
+</CardGroup>
