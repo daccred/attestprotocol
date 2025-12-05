@@ -75,7 +75,6 @@
               "sdks/typescript/initialization",
               "sdks/typescript/methods",
               "sdks/typescript/examples",
-              "sdks/cli",
               "sdks/delegated-signatories"
             ]
           },
