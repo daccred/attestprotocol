@@ -1,0 +1,152 @@
+---
+title: 'Schemas'
+description: 'Define the structure and meaning of attestation data'
+---
+
+## What is a Schema?
+
+A schema is a template that defines what data an attestation contains. Every attestation references a schema, ensuring data consistency and enabling verification.
+
+```
+┌─────────────────────────────────────────┐
+│              Schema: KYC                │
+│  ┌─────────────────────────────────┐   │
+│  │ verified: bool                  │   │
+│  │ level: string                   │   │
+│  │ timestamp: u64                  │   │
+│  └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+          │
+          ▼ (references)
+┌─────────────────────────────────────────┐
+│         Attestation #1                  │
+│  verified: true                         │
+│  level: "premium"                       │
+│  timestamp: 1701234567                  │
+└─────────────────────────────────────────┘
+```
+
+## Why Schemas Matter
+
+### Data Consistency
+Schemas enforce structure. An attestation using a KYC schema will always have the same fields, making it predictable for verifiers.
+
+### Interoperability
+Different applications can issue attestations against the same schema. A "KYC verified" attestation from Provider A is structurally identical to one from Provider B.
+
+### Discoverability
+Schemas are registered on-chain with unique identifiers. Applications can query for all attestations of a specific type.
+
+## Schema Components
+
+| Component | Description |
+|-----------|-------------|
+| **Definition** | Field names and types |
+| **Authority** | Who created the schema |
+| **Resolver** | Optional contract for custom validation |
+| **Revocable** | Whether attestations can be revoked |
+| **UID** | Deterministic identifier |
+
+## Field Types
+
+Schemas support these primitive types:
+
+| Type | Size | Description |
+|------|------|-------------|
+| `bool` | 1 bit | True/false |
+| `string` | Variable | Text data |
+| `u32` | 32 bits | Unsigned integer |
+| `u64` | 64 bits | Unsigned integer (timestamps) |
+| `i32` | 32 bits | Signed integer |
+| `i64` | 64 bits | Signed integer |
+| `bytes` | Variable | Binary data |
+
+## Schema UID
+
+Every schema has a unique identifier derived from:
+
+```
+UID = hash(definition + authority + resolver)
+```
+
+This means:
+- Same definition by different authorities = different UIDs
+- Same authority, different definition = different UIDs
+- Identical inputs always produce the same UID
+
+## Resolvers
+
+A resolver is an optional smart contract that validates attestations before they're created. Use cases:
+
+- **Payment gates**: Require fee payment before attestation
+- **Eligibility checks**: Verify the subject meets criteria
+- **Rate limiting**: Prevent spam attestations
+- **Custom logic**: Any business rules
+
+## Common Schema Patterns
+
+### Identity Verification
+```
+verified: bool
+level: string        // "basic", "enhanced", "premium"
+provider: string     // "plaid", "jumio", etc.
+expiry: u64
+```
+
+### Credential
+```
+title: string        // "AWS Solutions Architect"
+issuer: string       // "Amazon Web Services"
+issuedAt: u64
+expiresAt: u64
+```
+
+### Membership
+```
+organization: string
+role: string
+joinedAt: u64
+active: bool
+```
+
+### Reputation
+```
+score: u32
+category: string     // "trustworthiness", "expertise"
+updatedAt: u64
+```
+
+## Schema Lifecycle
+
+1. **Create**: Authority registers schema on-chain
+2. **Discover**: Others find schema by UID or query
+3. **Use**: Attesters create attestations referencing schema
+4. **Verify**: Verifiers decode attestation data using schema definition
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep schemas minimal">
+    Only include fields you need. Smaller schemas = lower costs.
+  </Card>
+  <Card title="Use appropriate types">
+    `u64` for timestamps, `bool` for flags, `string` for text.
+  </Card>
+  <Card title="Plan for revocation">
+    Set `revocable: true` for credentials that may need invalidation.
+  </Card>
+  <Card title="Version your schemas">
+    Include version in name: `KYC_v2` for breaking changes.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create a Schema" icon="plus" href="/stellar/schemas">
+    Step-by-step guide for Stellar
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/stellar/reference">
+    Complete API documentation
+  </Card>
+</CardGroup>

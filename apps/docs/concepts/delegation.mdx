@@ -1,0 +1,190 @@
+---
+title: 'Delegation'
+description: 'Off-chain signing with BLS keys for scalable attestation issuance'
+---
+
+## What is Delegation?
+
+Delegation separates signing authority from transaction submission. An authority signs attestation data off-chain using BLS keys, while a delegate submits the transaction on-chain.
+
+```
+┌─────────────────────┐          ┌─────────────────────┐
+│      Authority      │          │      Delegate       │
+│  (BLS private key)  │          │  (Stellar wallet)   │
+└─────────────────────┘          └─────────────────────┘
+         │                                │
+         │ 1. Sign attestation            │
+         │    data off-chain              │
+         ▼                                │
+┌─────────────────────┐                   │
+│   BLS Signature     │───────────────────▶
+└─────────────────────┘  2. Submit with   │
+                            signature     │
+                                          ▼
+                              ┌─────────────────────┐
+                              │    Smart Contract   │
+                              │  Verifies signature │
+                              │  Creates attestation│
+                              └─────────────────────┘
+```
+
+## Why Use Delegation?
+
+### Scalability
+Issue thousands of attestations without the authority signing each transaction. The authority pre-signs batches; delegates handle submission.
+
+### Security
+Keep authority keys in cold storage or HSMs. Only BLS signatures leave the secure environment, never private keys.
+
+### Cost Efficiency
+Delegates pay transaction fees. Authorities don't need to hold tokens for gas.
+
+### Flexibility
+Multiple delegates can submit on behalf of one authority. Useful for geographic distribution or redundancy.
+
+## BLS Keys
+
+AttestProtocol uses BLS12-381 signatures for delegation. BLS offers:
+
+- **Aggregation**: Multiple signatures can be combined into one
+- **Deterministic**: Same message + key always produces same signature
+- **Compact**: 48-byte signatures (compressed)
+
+### Key Generation
+
+```typescript
+import { generateBlsKeys } from '@attestprotocol/stellar-sdk';
+
+const { publicKey, privateKey } = generateBlsKeys();
+// publicKey: 192 bytes (uncompressed)
+// privateKey: 32 bytes
+```
+
+### Key Registration
+
+Before using delegation, register your BLS public key on-chain:
+
+```typescript
+await client.registerBlsKey(publicKey, { signer });
+```
+
+This links your Stellar address to your BLS public key.
+
+## Delegated Attestation Flow
+
+### 1. Authority: Create and Sign Request
+
+```typescript
+import { createDelegatedAttestationRequest } from '@attestprotocol/stellar-sdk';
+
+// Authority signs off-chain
+const request = await createDelegatedAttestationRequest({
+  schemaUid: Buffer.from('abc123...', 'hex'),
+  subject: 'GSUBJECT...',
+  data: JSON.stringify({ verified: true }),
+  expirationTime: Math.floor(Date.now() / 1000) + 86400 // 24h
+}, blsPrivateKey, client.getClientInstance());
+```
+
+### 2. Delegate: Submit On-chain
+
+```typescript
+// Delegate submits the pre-signed request
+await client.attestByDelegation(request, { signer: delegateSigner });
+```
+
+The contract verifies the BLS signature matches the registered authority before creating the attestation.
+
+## Delegated Revocation
+
+Same pattern for revoking attestations:
+
+```typescript
+import { createDelegatedRevocationRequest } from '@attestprotocol/stellar-sdk';
+
+// Authority signs revocation
+const revokeRequest = await createDelegatedRevocationRequest({
+  attestationUid: Buffer.from('def456...', 'hex')
+}, blsPrivateKey, client.getClientInstance());
+
+// Delegate submits
+await client.revokeByDelegation(revokeRequest, { signer: delegateSigner });
+```
+
+## Security Considerations
+
+### Nonce Management
+Each delegation request includes a nonce to prevent replay attacks. The contract tracks used nonces per authority.
+
+### Deadline Enforcement
+Requests include a deadline timestamp. Submissions after the deadline are rejected.
+
+### Domain Separation
+Different operations (attest, revoke) use different domain separation tags (DST), preventing signature reuse across operations.
+
+## Architecture Patterns
+
+### Batch Issuance
+Authority pre-signs many attestations, sends signatures to a queue. Workers pull and submit.
+
+```
+Authority ─┬─ Sign 1000 attestations ─▶ Queue ─▶ Worker 1 ─▶ Submit
+           │                                   ─▶ Worker 2 ─▶ Submit
+           │                                   ─▶ Worker 3 ─▶ Submit
+```
+
+### Event-Driven
+Authority runs a signing service. When events occur (user completes KYC), sign and queue for submission.
+
+### Multi-Region
+Deploy delegates in multiple regions. Authority in one secure location, delegates distributed globally for lower latency.
+
+## Complete Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  generateBlsKeys,
+  createDelegatedAttestationRequest
+} from '@attestprotocol/stellar-sdk';
+
+// Setup
+const authority = new StellarAttestationClient({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  network: 'testnet',
+  publicKey: 'GAUTHORITY...'
+});
+
+// One-time: Generate and register BLS keys
+const { publicKey, privateKey } = generateBlsKeys();
+await authority.registerBlsKey(publicKey, { signer: authoritySigner });
+
+// Authority signs attestation request
+const request = await createDelegatedAttestationRequest({
+  schemaUid: Buffer.from('abc...', 'hex'),
+  subject: 'GSUBJECT...',
+  data: JSON.stringify({ verified: true, level: 'premium' })
+}, privateKey, authority.getClientInstance());
+
+// Delegate submits (can be different wallet)
+const delegate = new StellarAttestationClient({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  network: 'testnet',
+  publicKey: 'GDELEGATE...'
+});
+
+const result = await delegate.attestByDelegation(request, {
+  signer: delegateSigner
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Reference" icon="code" href="/stellar/reference#bls-delegation">
+    Complete delegation API
+  </Card>
+  <Card title="Code Patterns" icon="book" href="/examples/patterns">
+    Real-world examples
+  </Card>
+</CardGroup>
