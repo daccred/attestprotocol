@@ -1,0 +1,353 @@
+---
+title: 'KYC Verification'
+description: 'Verify KYC status and issue KYC attestations'
+---
+
+## Overview
+
+KYC (Know Your Customer) attestations prove a user has completed identity verification. This guide covers verifying existing KYC attestations and issuing new ones.
+
+## Schema
+
+```typescript
+const KYC_SCHEMA = {
+  name: 'KYC',
+  fields: [
+    { name: 'verified', type: 'bool' },
+    { name: 'level', type: 'string' },      // "basic", "enhanced", "premium"
+    { name: 'provider', type: 'string' },   // "plaid", "jumio", etc.
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+```
+
+---
+
+## Verifier Workflow
+
+Check if a user has valid KYC before granting access.
+
+### 1. Fetch Attestations by Subject
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder,
+  getSchemaByUid
+} from '@attestprotocol/stellar-sdk';
+
+async function getKYCStatus(subjectAddress: string, schemaUid: string) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: subjectAddress
+  });
+
+  // Fetch attestations for this subject
+  const { attestations } = await client.fetchAttestationsByWallet({
+    walletAddress: subjectAddress,
+    limit: 100
+  });
+
+  // Filter by KYC schema
+  const kycAttestations = attestations.filter(
+    a => a.schemaUid.toString('hex') === schemaUid
+  );
+
+  return kycAttestations;
+}
+```
+
+### 2. Validate Attestation
+
+```typescript
+async function validateKYC(attestation: any): Promise<{
+  isValid: boolean;
+  reason?: string;
+  data?: any;
+}> {
+  // Check revocation
+  if (attestation.revoked) {
+    return { isValid: false, reason: 'KYC has been revoked' };
+  }
+
+  // Check expiration
+  if (attestation.expirationTime) {
+    const expiry = new Date(attestation.expirationTime);
+    if (expiry < new Date()) {
+      return { isValid: false, reason: 'KYC has expired' };
+    }
+  }
+
+  // Decode and verify data
+  const encoder = new SorobanSchemaEncoder(KYC_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  if (!data.verified) {
+    return { isValid: false, reason: 'KYC verification failed' };
+  }
+
+  return { isValid: true, data };
+}
+```
+
+### 3. Check KYC Level
+
+```typescript
+type KYCLevel = 'basic' | 'enhanced' | 'premium';
+
+function meetsKYCRequirement(
+  data: { level: string },
+  requiredLevel: KYCLevel
+): boolean {
+  const levels: Record<KYCLevel, number> = {
+    basic: 1,
+    enhanced: 2,
+    premium: 3
+  };
+
+  return levels[data.level as KYCLevel] >= levels[requiredLevel];
+}
+
+// Usage
+const { data } = await validateKYC(attestation);
+if (meetsKYCRequirement(data, 'enhanced')) {
+  // Grant access to enhanced features
+}
+```
+
+### 4. Verify Attester Trust
+
+```typescript
+const TRUSTED_KYC_PROVIDERS = [
+  'GKYC_PROVIDER_1...',
+  'GKYC_PROVIDER_2...'
+];
+
+function isTrustedProvider(attesterAddress: string): boolean {
+  return TRUSTED_KYC_PROVIDERS.includes(attesterAddress);
+}
+
+// Full verification
+async function verifyKYC(subjectAddress: string, schemaUid: string) {
+  const attestations = await getKYCStatus(subjectAddress, schemaUid);
+
+  for (const attestation of attestations) {
+    // Check if from trusted provider
+    if (!isTrustedProvider(attestation.attester)) {
+      continue;
+    }
+
+    const result = await validateKYC(attestation);
+    if (result.isValid) {
+      return {
+        verified: true,
+        level: result.data.level,
+        provider: result.data.provider,
+        attestationUid: attestation.uid.toString('hex')
+      };
+    }
+  }
+
+  return { verified: false };
+}
+```
+
+### Complete Verifier Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const KYC_SCHEMA = {
+  name: 'KYC',
+  fields: [
+    { name: 'verified', type: 'bool' },
+    { name: 'level', type: 'string' },
+    { name: 'provider', type: 'string' },
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+
+const TRUSTED_PROVIDERS = ['GPROVIDER1...', 'GPROVIDER2...'];
+
+async function checkUserKYC(attestationUid: string) {
+  // 1. Fetch attestation
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation) {
+    return { allowed: false, reason: 'No KYC attestation found' };
+  }
+
+  // 2. Verify attester is trusted
+  if (!TRUSTED_PROVIDERS.includes(attestation.attester)) {
+    return { allowed: false, reason: 'Untrusted KYC provider' };
+  }
+
+  // 3. Check not revoked
+  if (attestation.revoked) {
+    return { allowed: false, reason: 'KYC revoked' };
+  }
+
+  // 4. Check not expired
+  if (attestation.expirationTime && attestation.expirationTime < Date.now()) {
+    return { allowed: false, reason: 'KYC expired' };
+  }
+
+  // 5. Decode and validate data
+  const encoder = new SorobanSchemaEncoder(KYC_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  if (!data.verified) {
+    return { allowed: false, reason: 'KYC not verified' };
+  }
+
+  return {
+    allowed: true,
+    level: data.level,
+    provider: data.provider,
+    subject: attestation.subject
+  };
+}
+```
+
+---
+
+## Issuer Workflow
+
+Issue KYC attestations after completing verification.
+
+### 1. Register Schema (One-time)
+
+```typescript
+async function registerKYCSchema(client: StellarAttestationClient, signer: any) {
+  const result = await client.createSchema({
+    definition: 'struct KYC { bool verified; string level; string provider; u64 timestamp; }',
+    revocable: true,
+    options: { signer }
+  });
+
+  return result.schemaUid.toString('hex');
+}
+```
+
+### 2. Issue KYC Attestation
+
+```typescript
+async function issueKYC(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  subject: string,
+  level: 'basic' | 'enhanced' | 'premium',
+  provider: string,
+  signer: any,
+  expiresInDays: number = 365
+) {
+  const encoder = new SorobanSchemaEncoder(KYC_SCHEMA);
+
+  const payload = await encoder.encodeData({
+    verified: true,
+    level,
+    provider,
+    timestamp: Date.now()
+  });
+
+  const expirationTime = Math.floor(Date.now() / 1000) + (expiresInDays * 86400);
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(schemaUid, 'hex'),
+    subject,
+    value: payload.encodedData,
+    expirationTime,
+    options: { signer }
+  });
+
+  return {
+    attestationUid: result.attestationUid?.toString('hex'),
+    txHash: result.hash
+  };
+}
+```
+
+### 3. Revoke KYC
+
+```typescript
+async function revokeKYC(
+  client: StellarAttestationClient,
+  attestationUid: string,
+  signer: any
+) {
+  const result = await client.revoke({
+    attestationUid: Buffer.from(attestationUid, 'hex'),
+    options: { signer }
+  });
+
+  return { txHash: result.hash };
+}
+```
+
+### Complete Issuer Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder
+} from '@attestprotocol/stellar-sdk';
+
+const KYC_SCHEMA_UID = 'abc123...'; // Your registered schema
+
+async function onKYCComplete(
+  userAddress: string,
+  verificationLevel: 'basic' | 'enhanced' | 'premium',
+  providerName: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: 'GISSUER...'
+  });
+
+  const encoder = new SorobanSchemaEncoder({
+    name: 'KYC',
+    fields: [
+      { name: 'verified', type: 'bool' },
+      { name: 'level', type: 'string' },
+      { name: 'provider', type: 'string' },
+      { name: 'timestamp', type: 'u64' }
+    ]
+  });
+
+  const payload = await encoder.encodeData({
+    verified: true,
+    level: verificationLevel,
+    provider: providerName,
+    timestamp: Date.now()
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(KYC_SCHEMA_UID, 'hex'),
+    subject: userAddress,
+    value: payload.encodedData,
+    expirationTime: Math.floor(Date.now() / 1000) + (365 * 86400), // 1 year
+    options: { signer }
+  });
+
+  console.log('KYC attestation issued:', result.attestationUid?.toString('hex'));
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Event Attendance" icon="calendar-check" href="/examples/event-attendance">
+    Attendance verification and badges
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/stellar/reference">
+    Complete API documentation
+  </Card>
+</CardGroup>

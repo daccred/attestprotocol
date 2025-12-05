@@ -1,925 +1,152 @@
 ---
 title: 'Schemas'
-description: 'Everything Schema on AttestProtocol - Structured templates that define attestation data formats and validation rules'
+description: 'Define the structure and meaning of attestation data'
 ---
 
-Schemas are the foundation of AttestProtocol's trust infrastructure. They define the structure, format, and validation rules for attestations, ensuring consistency across applications and enabling interoperability by standardizing how data is stored and verified.
+## What is a Schema?
 
-Understand how to work with schemas in AttestProtocol. Schemas define the structure of each attestation, allowing for reusable, interoperable templates that power trusted proofs across the ecosystem.
+A schema is a template that defines what data an attestation contains. Every attestation references a schema, ensuring data consistency and enabling verification.
 
----
-
-## Browse Schemas
-
-### Explore the Schema Registry
-
-AttestProtocol hosts a growing registry of ready-to-use schemas covering identity, credentials, ownership, governance, and more. Each schema includes:
-
-- Field definitions and data types
-- Usage stats and adoption metrics
-- Verified authorities that can issue under it
-- Compatibility with supported chains
-
-### Example Categories
-
-**Identity** — KYC, proof of humanity, age verification
-**Ownership** — wallet holdings, asset claims, NFT proofs
-**Credentials** — GitHub contributions, academic degrees, licenses
-**Actions** — event attendance, voting participation
-**Custom** — DAO-specific or protocol-specific templates
-
-[Explore the Schema Registry →](https://attestprotocol.org/schemas)
-
----
-
-## Using Schemas
-
-### Integrate an Existing Schema
-
-To use a schema in your app or workflow:
-
-**Select a schema ID from the Registry:**
-```typescript
-const schema = "kyc-basic";
+```
+┌─────────────────────────────────────────┐
+│              Schema: KYC                │
+│  ┌─────────────────────────────────┐   │
+│  │ verified: bool                  │   │
+│  │ level: string                   │   │
+│  │ timestamp: u64                  │   │
+│  └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+          │
+          ▼ (references)
+┌─────────────────────────────────────────┐
+│         Attestation #1                  │
+│  verified: true                         │
+│  level: "premium"                       │
+│  timestamp: 1701234567                  │
+└─────────────────────────────────────────┘
 ```
 
-**Format your attestation data to match the schema fields:**
-```typescript
-const data = {
-  verificationLevel: "basic",
-  jurisdiction: "KE",
-  verifiedAt: Date.now(),
-  expiresAt: Date.now() + 30 * 86400 * 1000
-};
-```
+## Why Schemas Matter
 
-**Use the SDK to issue an attestation:**
-```typescript
-await attest({ to: userAddress, schema, data });
-```
+### Data Consistency
+Schemas enforce structure. An attestation using a KYC schema will always have the same fields, making it predictable for verifiers.
 
-Attestations are signed, timestamped, and instantly verifiable.
+### Interoperability
+Different applications can issue attestations against the same schema. A "KYC verified" attestation from Provider A is structurally identical to one from Provider B.
 
----
-
-## Creating Schemas
-
-### Define a Custom Schema
-
-Need your own structure? Define a custom schema for your application, DAO, or protocol.
-
-```typescript
-const schemaDefinition = {
-  fields: [
-    { name: "score", type: "int8" },
-    { name: "validatedBy", type: "string" },
-    { name: "verifiedAt", type: "uint64" }
-  ]
-};
-
-const schemaId = await createSchema(schemaDefinition);
-```
-
-### Schema Builder (Coming Soon)
-
-A visual drag-and-drop tool for creating and testing schemas without writing code is in development.
-
----
-
-## Schema Standards
-
-### AttestProtocol Schema Specification (APSS)
-
-All schemas follow APSS, ensuring consistency and interoperability across the protocol.
-
-**Key Features:**
-- JSON-compatible structure
-- Deterministic field ordering
-- Type-safe validation
-- Chain-agnostic deployment
-- Composable with on-chain resolvers
-
-Schema specs are public and versioned to support open contribution and governance.
-
-[View Schema Spec](https://attestprotocol.org/docs/apss)
-
----
-
-## Versioning
-
-### Version Control for Schemas
-
-Schemas evolve over time. AttestProtocol supports:
-
-- Semantic versioning (e.g., v1.0.3)
-- Backward-compatible updates (optional fields)
-- Breaking changes require new schema IDs
-- Attestations always reference the exact schema version they were issued under
-
-### Migration Guides
-
-We provide tooling and best practices for upgrading to newer schema versions while preserving verification paths.
-
-[View Migration Docs](https://attestprotocol.org/docs/migration)
-
----
-
-## Best Practices
-
-### Designing Trustworthy Schemas
-
-A well-designed schema balances specificity, reuse, and security.
-
-**Do:**
-- Use clear field names and data types
-- Include timestamps and expiration where relevant
-- Document validation requirements
-- Test schema usage across sample data
-
-**Avoid:**
-- Overloading fields with multiple meanings
-- Using ambiguous data types (e.g., strings for booleans)
-- Omitting important metadata (e.g., issuer, jurisdiction)
-
-### Tools for Testing
-
-- Test suite for schema validation
-- SDK mocks for issuing sample attestations
-- Integration tests for attestation workflows
-
-### Community Contributions
-
-Have a reusable schema idea? Submit it to the public registry for community use and feedback.
-
-[Submit a Schema](https://attestprotocol.org/schemas/submit)
-
----
+### Discoverability
+Schemas are registered on-chain with unique identifiers. Applications can query for all attestations of a specific type.
 
 ## Schema Components
 
-### Core Properties
+| Component | Description |
+|-----------|-------------|
+| **Definition** | Field names and types |
+| **Authority** | Who created the schema |
+| **Resolver** | Optional contract for custom validation |
+| **Revocable** | Whether attestations can be revoked |
+| **UID** | Deterministic identifier |
 
-Every schema includes these fundamental properties:
+## Field Types
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | string | Unique identifier for the schema |
-| `version` | string | Schema version for evolution support |
-| `definition` | string | Field definitions and types |
-| `revocable` | boolean | Whether attestations can be revoked |
-| `description` | string | Human-readable schema purpose |
+Schemas support these primitive types:
 
-### Field Types
+| Type | Size | Description |
+|------|------|-------------|
+| `bool` | 1 bit | True/false |
+| `string` | Variable | Text data |
+| `u32` | 32 bits | Unsigned integer |
+| `u64` | 64 bits | Unsigned integer (timestamps) |
+| `i32` | 32 bits | Signed integer |
+| `i64` | 64 bits | Signed integer |
+| `bytes` | Variable | Binary data |
 
-Supported data types for schema fields:
+## Schema UID
 
-```typescript
-// Primitive types
-bool        // Boolean values (true/false)
-string      // Text data
-uint8       // Unsigned 8-bit integer (0-255)
-uint16      // Unsigned 16-bit integer (0-65535)
-uint32      // Unsigned 32-bit integer
-uint64      // Unsigned 64-bit integer
-int8        // Signed 8-bit integer (-128 to 127)
-int16       // Signed 16-bit integer
-int32       // Signed 32-bit integer
-int64       // Signed 64-bit integer
-address     // Blockchain address
-bytes       // Raw byte data
+Every schema has a unique identifier derived from:
+
+```
+UID = hash(definition + authority + resolver)
 ```
 
-### Field Definition Syntax
+This means:
+- Same definition by different authorities = different UIDs
+- Same authority, different definition = different UIDs
+- Identical inputs always produce the same UID
 
-Fields are defined using a simple comma-separated format:
+## Resolvers
 
-```typescript
-"fieldName:type,fieldName2:type2,fieldName3:type3"
+A resolver is an optional smart contract that validates attestations before they're created. Use cases:
 
-// Example
-"verified:bool,score:uint8,expiry:uint64,issuer:address"
+- **Payment gates**: Require fee payment before attestation
+- **Eligibility checks**: Verify the subject meets criteria
+- **Rate limiting**: Prevent spam attestations
+- **Custom logic**: Any business rules
+
+## Common Schema Patterns
+
+### Identity Verification
+```
+verified: bool
+level: string        // "basic", "enhanced", "premium"
+provider: string     // "plaid", "jumio", etc.
+expiry: u64
 ```
 
----
-
-## Creating Schemas
-
-Schemas are created by authorities and define the structure for their attestations:
-
-### Basic Identity Schema
-
-<CodeGroup>
-```typescript Stellar
-import { AttestSDK } from '@attestprotocol/sdk';
-
-const sdk = await AttestSDK.initializeStellar({
-  secretKeyOrCustomSigner: process.env.STELLAR_SECRET_KEY,
-  publicKey: process.env.STELLAR_PUBLIC_KEY,
-  url: 'https://soroban-testnet.stellar.org'
-});
-
-const schema = await sdk.createSchema({
-  schemaName: `basic-kyc-${Date.now()}`,
-  schemaContent: 'verified:bool,level:string,country:string,timestamp:uint64',
-  revocable: true
-});
-
-if (schema.error) {
-  console.error('Schema creation failed:', schema.error);
-} else {
-  console.log('Schema created:', schema.data.schemaUID);
-  console.log('Transaction hash:', schema.data.transactionHash);
-}
+### Credential
+```
+title: string        // "AWS Solutions Architect"
+issuer: string       // "Amazon Web Services"
+issuedAt: u64
+expiresAt: u64
 ```
 
-```typescript Solana
-import { AttestSDK } from '@attestprotocol/sdk';
-
-const sdk = await AttestSDK.initializeSolana({
-  walletOrSecretKey: JSON.parse(process.env.SOLANA_SECRET_KEY),
-  url: 'https://api.devnet.solana.com'
-});
-
-const schema = await sdk.createSchema({
-  schemaName: `basic-kyc-${Date.now()}`,
-  schemaContent: 'verified:bool,level:string,country:string,timestamp:u64',
-  revocable: true
-});
-
-if (schema.error) {
-  console.error('Schema creation failed:', schema.error);
-} else {
-  console.log('Schema PDA:', schema.data.toBase58());
-}
+### Membership
 ```
-</CodeGroup>
-
-### Professional Credential Schema
-
-```typescript
-// Complex schema for professional certifications
-const credentialSchema = await sdk.createSchema({
-  schemaName: `professional-credential-${Date.now()}`,
-  schemaContent: 'title:string,issuer:string,issuedAt:uint64,validUntil:uint64,credentialLevel:uint8,specializations:string',
-  revocable: true
-});
-
-if (credentialSchema.error) {
-  throw new Error(`Failed to create credential schema: ${credentialSchema.error}`);
-}
-
-// Store schema metadata for later reference
-const schemaMetadata = {
-  schemaUID: credentialSchema.data.schemaUID,
-  purpose: 'Professional certification tracking',
-  authority: sdk.getPublicKey(),
-  createdAt: Date.now(),
-  fields: {
-    title: { type: 'string', description: 'Certification title' },
-    issuer: { type: 'string', description: 'Issuing organization' },
-    issuedAt: { type: 'uint64', description: 'Unix timestamp of issuance' },
-    validUntil: { type: 'uint64', description: 'Unix timestamp of expiration' },
-    credentialLevel: { type: 'uint8', description: 'Certification level (1-5)' },
-    specializations: { type: 'string', description: 'Comma-separated specialization areas' }
-  }
-};
-
-// Store metadata in your application database
-await storeSchemaMetadata(schemaMetadata);
+organization: string
+role: string
+joinedAt: u64
+active: bool
 ```
 
-### Multi-Entity Governance Schema
-
-```typescript
-// Schema for DAO governance participation
-const governanceSchema = await sdk.createSchema({
-  schemaName: `dao-governance-${Date.now()}`,
-  schemaContent: 'daoAddress:address,memberRole:string,joinDate:uint64,votingPower:uint32,proposalsCreated:uint16,proposalsVoted:uint16,reputationScore:uint16,lastActive:uint64,delegatedVotes:uint32',
-  revocable: false // Governance records should be immutable
-});
-
-if (governanceSchema.error) {
-  throw new Error(`Governance schema creation failed: ${governanceSchema.error}`);
-}
-
-console.log('Governance schema created:', governanceSchema.data.schemaUID);
+### Reputation
+```
+score: u32
+category: string     // "trustworthiness", "expertise"
+updatedAt: u64
 ```
 
----
-
-## Schema Registry
-
-### Pre-Built Schemas
-
-AttestProtocol provides standard schemas for common use cases:
-
-**Identity & Compliance**
-- `kyc-basic-v1`: Basic KYC verification
-- `kyc-enhanced-v1`: Enhanced due diligence
-- `age-verification-v1`: Age threshold verification
-- `proof-of-humanity-v1`: Human verification
-
-**Credentials & Achievements**
-- `professional-cert-v1`: Professional certifications
-- `educational-degree-v1`: Academic credentials
-- `skill-verification-v1`: Technical skills
-- `work-experience-v1`: Employment history
-
-**Governance & Participation**
-- `dao-member-v1`: DAO membership status
-- `voting-eligibility-v1`: Governance participation
-- `contribution-score-v1`: Contribution tracking
-- `reputation-score-v1`: Overall reputation
-
-**Gaming & Events**
-- `event-attendance-v1`: Event participation
-- `gaming-achievement-v1`: Gaming accomplishments
-- `tournament-result-v1`: Competition outcomes
-- `nft-ownership-v1`: Asset ownership
-
-### Using Registry Schemas
-
-```typescript
-// Use pre-built schema with proper error handling
-const attestationResult = await sdk.attest({
-  schemaUID: 'kyc-basic-v1',
-  subject: userAddress,
-  value: 'verified:true,level:enhanced,country:US,timestamp:1704067200',
-  reference: 'kyc-session-001'
-});
-
-if (attestationResult.error) {
-  console.error('Attestation creation failed:', attestationResult.error);
-  throw new Error(`Failed to create KYC attestation: ${attestationResult.error}`);
-}
-
-console.log('KYC attestation created successfully:');
-console.log('Transaction Hash:', attestationResult.data);
-
-// Verify the attestation was created
-const verification = await sdk.fetchAttestation({
-  schemaUID: 'kyc-basic-v1',
-  subject: userAddress
-});
-
-if (verification.data && !verification.data.revoked) {
-  console.log('Attestation verified successfully');
-  console.log('Attester:', verification.data.attester);
-  console.log('Data:', verification.data.value);
-} else {
-  console.warn('Attestation verification failed');
-}
-```
-
----
-
-## Schema Design Best Practices
-
-### Keep It Simple
-
-Design schemas with minimal necessary fields:
-
-```typescript
-// Good: Focused and clear
-"verified:bool,level:string,timestamp:uint64"
-
-// Avoid: Overly complex
-"verified:bool,level:string,subLevel:string,score1:uint8,score2:uint8,score3:uint8,metadata1:string,metadata2:string"
-```
-
-### Use Standard Types
-
-Prefer standard data types for interoperability:
-
-```typescript
-// Good: Standard types
-"amount:uint64,recipient:address,timestamp:uint64"
-
-// Avoid: Custom encodings
-"data:string" // Where string contains JSON
-```
-
-### Plan for Evolution
-
-Include version information and extensibility:
-
-```typescript
-// Version 1
-const v1 = "verified:bool,score:uint8";
-
-// Version 2 - Backward compatible
-const v2 = "verified:bool,score:uint8,level:string,timestamp:uint64";
-```
-
-### Semantic Naming
-
-Use clear, descriptive field names:
-
-```typescript
-// Good: Self-documenting
-"isVerified:bool,verificationLevel:string,riskScore:uint8"
-
-// Avoid: Ambiguous
-"v:bool,l:string,s:uint8"
-```
-
----
-
-## Schema Validation
-
-### Field Requirements
-
-Schemas enforce data structure at creation time:
-
-```typescript
-// Schema definition
-"name:string,age:uint8,verified:bool"
-
-// Valid attestation data
-"name:John Doe,age:25,verified:true"
-
-// Invalid - missing field
-"name:John Doe,verified:true" // Error: missing age
-
-// Invalid - wrong type
-"name:John Doe,age:twenty-five,verified:true" // Error: age must be uint8
-```
-
-### Type Constraints
-
-Each type has specific constraints:
-
-| Type | Constraints | Example |
-|------|------------|---------|
-| `bool` | true or false only | `verified:true` |
-| `uint8` | 0 to 255 | `score:85` |
-| `string` | UTF-8 text, no commas | `name:John_Doe` |
-| `address` | Valid blockchain address | `issuer:0x123...abc` |
-| `uint64` | Unix timestamp common | `timestamp:1704067200` |
-
----
-
-## Schema Patterns
-
-### Hierarchical Schemas
-
-Build schemas that reference other schemas:
-
-```typescript
-// Base schema
-const basicKYC = "verified:bool,timestamp:uint64";
-
-// Extended schema
-const enhancedKYC = "basicVerified:bool,enhancedVerified:bool,riskScore:uint8,checkTypes:string";
-
-// Reference in attestation
-const attestation = await sdk.attest({
-  schemaUID: 'enhanced-kyc-v1',
-  subject: userAddress,
-  value: 'basicVerified:true,enhancedVerified:true,riskScore:15,checkTypes:aml_pep_sanctions',
-  reference: 'ref-basic-kyc-001' // Reference to basic KYC
-});
-```
-
-### Composite Schemas
-
-Combine multiple aspects in one schema:
-
-```typescript
-const daoParticipant = await sdk.createSchema({
-  schemaName: 'dao-participant-complete',
-  schemaContent: 'isMember:bool,contributionScore:uint16,votingPower:uint32,lastActive:uint64,role:string',
-  revocable: true
-});
-```
-
-### Time-Bound Schemas
-
-Include temporal elements:
-
-```typescript
-const timeBasedCredential = await sdk.createSchema({
-  schemaName: 'time-limited-access',
-  schemaContent: 'authorized:bool,validFrom:uint64,validUntil:uint64,accessLevel:string',
-  revocable: true
-});
-```
-
----
-
-## Schema Discovery
-
-### Fetching Schemas
-
-```typescript
-// Get specific schema with error handling
-const schemaResult = await sdk.fetchSchema('kyc-basic-v1');
-
-if (schemaResult.error) {
-  console.error('Failed to fetch schema:', schemaResult.error);
-  return null;
-}
-
-if (schemaResult.data) {
-  const schema = schemaResult.data;
-  console.log('Schema details:');
-  console.log('  Name:', schema.schemaName);
-  console.log('  Content:', schema.schemaContent);
-  console.log('  Revocable:', schema.revocable);
-  console.log('  Authority:', schema.authority);
-  console.log('  Created:', new Date(schema.timestamp * 1000).toLocaleString());
-  
-  return schema;
-} else {
-  console.log('Schema not found');
-  return null;
-}
-```
-
-### Schema Metadata
-
-Access schema information programmatically:
-
-```typescript
-function parseSchemaDefinition(schemaContent: string) {
-  const fields = schemaContent.split(',');
-  return fields.map(field => {
-    const [name, type] = field.split(':');
-    return { name, type };
-  });
-}
-
-// Usage
-const fields = parseSchemaDefinition('verified:bool,score:uint8');
-// Returns: [{ name: 'verified', type: 'bool' }, { name: 'score', type: 'uint8' }]
-```
-
----
-
-## Migration Strategies
-
-### Schema Versioning
-
-Handle schema evolution gracefully:
-
-```typescript
-// Check schema version
-const attestation = await sdk.fetchAttestation({
-  schemaUID: 'kyc-basic-v2',
-  subject: userAddress
-});
-
-// Handle different versions
-if (attestation.data) {
-  const version = attestation.data.schemaUID.split('-').pop();
-  
-  switch(version) {
-    case 'v1':
-      // Handle v1 format
-      break;
-    case 'v2':
-      // Handle v2 format with additional fields
-      break;
-  }
-}
-```
-
-### Backward Compatibility
-
-Design schemas to maintain compatibility:
-
-```typescript
-// Original schema
-const v1 = "verified:bool";
-
-// Extended schema - existing attestations still valid
-const v2 = "verified:bool,level:string,score:uint8";
-
-// Breaking change - requires new schema name
-const v3 = "status:string,score:uint8"; // Changed field type
-```
-
----
-
-## Enterprise Schema Examples
-
-### Identity & Compliance Schemas
-
-```typescript
-// Basic KYC Schema
-const basicKycSchema = 'verified:bool,level:string,country:string,timestamp:uint64';
-
-// Enhanced Due Diligence Schema
-const enhancedKycSchema = 'verified:bool,level:string,jurisdiction:string,riskScore:uint8,pepCheck:bool,sanctionsCheck:bool,sourceOfFunds:bool,checkDate:uint64,validUntil:uint64';
-
-// Age Verification Schema (Zero-Knowledge Friendly)
-const ageVerificationSchema = 'over18:bool,over21:bool,over65:bool,verifiedDate:uint64,method:string,jurisdiction:string';
-
-// Sanctions Screening Schema
-const sanctionsSchema = 'cleared:bool,checkDate:uint64,lists:string,riskLevel:uint8,nextCheck:uint64,provider:string';
-```
-
-### Professional Credential Schemas
-
-```typescript
-// Professional License Schema
-const professionalLicenseSchema = 'licenseType:string,licenseNumber:string,issuingAuthority:string,issuedDate:uint64,validUntil:uint64,status:string,restrictions:string';
-
-// Academic Degree Schema
-const academicDegreeSchema = 'degree:string,field:string,institution:string,graduationDate:uint64,honors:string,accreditation:string,gpa:uint8';
-
-// Technical Certification Schema
-const techCertificationSchema = 'certificationName:string,provider:string,issuedDate:uint64,validUntil:uint64,skillLevel:uint8,specializations:string,continuingEducation:bool';
-
-// Security Clearance Schema
-const securityClearanceSchema = 'clearanceLevel:string,issuingAgency:string,issuedDate:uint64,validUntil:uint64,investigationType:string,lastUpdate:uint64';
-```
-
-### Financial & DeFi Schemas
-
-```typescript
-// Credit Assessment Schema
-const creditSchema = 'score:uint16,rating:string,lastUpdated:uint64,paymentHistory:uint8,creditUtilization:uint8,accountAge:uint16,inquiries:uint8,provider:string';
-
-// Accredited Investor Schema
-const accreditedInvestorSchema = 'accredited:bool,type:string,netWorth:uint32,income:uint32,verifiedDate:uint64,expires:uint64,jurisdiction:string,advisor:string';
-
-// DeFi Protocol Interaction Schema
-const defiReputationSchema = 'protocolsUsed:uint8,totalVolume:uint64,liquidationEvents:uint8,defaultRate:uint8,riskScore:uint8,lastActivity:uint64,platforms:string';
-
-// Anti-Money Laundering Schema
-const amlSchema = 'cleared:bool,riskRating:uint8,checkDate:uint64,transactionMonitoring:bool,sourceOfFunds:bool,politicalExposure:bool,nextReview:uint64';
-```
-
-### Organizational & Governance Schemas
-
-```typescript
-// DAO Membership Schema
-const daoMembershipSchema = 'daoAddress:address,memberSince:uint64,role:string,votingPower:uint32,proposalsCreated:uint16,proposalsVoted:uint16,delegatedVotes:uint32,reputation:uint16,lastActive:uint64';
-
-// Employment Verification Schema
-const employmentSchema = 'employer:string,position:string,department:string,startDate:uint64,endDate:uint64,employmentType:string,verified:bool,salary:uint32,performance:uint8';
-
-// Board Membership Schema
-const boardMembershipSchema = 'organization:string,position:string,appointedDate:uint64,termEnd:uint64,committee:string,attendance:uint8,independent:bool,compensation:uint32';
-```
-
-### Advanced Use Case Schemas
-
-```typescript
-// Carbon Credit Schema
-const carbonCreditSchema = 'creditType:string,quantity:uint32,vintage:uint16,registry:string,project:string,methodology:string,verified:bool,retired:bool,serialNumber:string';
-
-// Supply Chain Provenance Schema
-const provenanceSchema = 'productId:string,origin:string,certifications:string,transportChain:string,carbonFootprint:uint32,qualityGrade:uint8,batchNumber:string,timestamp:uint64';
-
-// Insurance Claim Schema
-const insuranceClaimSchema = 'policyNumber:string,claimType:string,amount:uint32,approved:bool,processedDate:uint64,adjuster:string,fraudScore:uint8,settlementAmount:uint32';
-
-// Gaming Achievement Schema
-const gamingAchievementSchema = 'gameId:string,achievementId:string,playerLevel:uint16,rarity:uint8,unlockedAt:uint64,leaderboardRank:uint32,skillRating:uint16,verified:bool';
-```
-
----
-
-## Schema Governance and Management
-
-### Enterprise Schema Registry
-
-```typescript
-class EnterpriseSchemaRegistry {
-  private schemas = new Map<string, SchemaMetadata>();
-  private sdk: StellarAttestSDK | SolanaAttestSDK;
-  
-  constructor(sdk: StellarAttestSDK | SolanaAttestSDK) {
-    this.sdk = sdk;
-  }
-
-  async registerSchema(
-    schemaDefinition: string,
-    metadata: SchemaRegistryEntry
-  ): Promise<string> {
-    // Validate schema definition
-    this.validateSchemaDefinition(schemaDefinition);
-    
-    // Check for naming conflicts
-    await this.checkNamingConflicts(metadata.name);
-    
-    // Create schema on-chain
-    const result = await this.sdk.createSchema({
-      schemaName: metadata.name,
-      schemaContent: schemaDefinition,
-      revocable: metadata.revocable
-    });
-    
-    if (result.error) {
-      throw new Error(`Schema creation failed: ${result.error}`);
-    }
-    
-    // Store metadata
-    const schemaUID = result.data.schemaUID;
-    this.schemas.set(schemaUID, {
-      ...metadata,
-      schemaUID,
-      definition: schemaDefinition,
-      createdAt: Date.now(),
-      authority: this.sdk.getPublicKey()
-    });
-    
-    // Persist to database
-    await this.persistSchemaMetadata(schemaUID, metadata);
-    
-    return schemaUID;
-  }
-
-  async getSchemasByCategory(category: string): Promise<SchemaMetadata[]> {
-    return Array.from(this.schemas.values())
-      .filter(schema => schema.category === category);
-  }
-
-  async validateAttestationData(
-    schemaUID: string, 
-    data: string
-  ): Promise<ValidationResult> {
-    const schema = this.schemas.get(schemaUID);
-    if (!schema) {
-      return { valid: false, errors: ['Schema not found'] };
-    }
-
-    return this.validateDataAgainstSchema(data, schema.definition);
-  }
-
-  private validateSchemaDefinition(definition: string): void {
-    const fields = definition.split(',');
-    const fieldNames = new Set<string>();
-    
-    for (const field of fields) {
-      const [name, type] = field.split(':');
-      
-      if (!name || !type) {
-        throw new Error(`Invalid field definition: ${field}`);
-      }
-      
-      if (fieldNames.has(name)) {
-        throw new Error(`Duplicate field name: ${name}`);
-      }
-      
-      fieldNames.add(name);
-      
-      if (!this.isValidType(type)) {
-        throw new Error(`Invalid field type: ${type}`);
-      }
-    }
-  }
-
-  private isValidType(type: string): boolean {
-    const validTypes = [
-      'bool', 'string', 'uint8', 'uint16', 'uint32', 'uint64',
-      'int8', 'int16', 'int32', 'int64', 'address', 'bytes'
-    ];
-    return validTypes.includes(type);
-  }
-}
-
-interface SchemaRegistryEntry {
-  name: string;
-  category: string;
-  description: string;
-  revocable: boolean;
-  version: string;
-  documentation: string;
-  examples: string[];
-  tags: string[];
-}
-
-interface SchemaMetadata extends SchemaRegistryEntry {
-  schemaUID: string;
-  definition: string;
-  createdAt: number;
-  authority: string;
-}
-
-interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings?: string[];
-}
-```
-
-### Schema Versioning Strategy
-
-```typescript
-class SchemaVersionManager {
-  async createSchemaVersion(
-    baseSchemaUID: string,
-    newDefinition: string,
-    migrationStrategy: MigrationStrategy
-  ): Promise<string> {
-    const baseSchema = await this.getSchemaMetadata(baseSchemaUID);
-    
-    // Validate backward compatibility
-    const compatibility = this.checkBackwardCompatibility(
-      baseSchema.definition,
-      newDefinition
-    );
-    
-    if (!compatibility.compatible && migrationStrategy === 'strict') {
-      throw new Error('Breaking changes detected in strict migration mode');
-    }
-    
-    // Create new schema version
-    const newVersion = this.incrementVersion(baseSchema.version);
-    const newSchemaName = `${baseSchema.name.split('-v')[0]}-v${newVersion}`;
-    
-    const result = await this.sdk.createSchema({
-      schemaName: newSchemaName,
-      schemaContent: newDefinition,
-      revocable: baseSchema.revocable
-    });
-    
-    if (result.error) {
-      throw new Error(`Schema version creation failed: ${result.error}`);
-    }
-    
-    // Link to previous version
-    await this.linkSchemaVersions(baseSchemaUID, result.data.schemaUID);
-    
-    return result.data.schemaUID;
-  }
-
-  private checkBackwardCompatibility(
-    oldDefinition: string,
-    newDefinition: string
-  ): CompatibilityResult {
-    const oldFields = this.parseSchemaDefinition(oldDefinition);
-    const newFields = this.parseSchemaDefinition(newDefinition);
-    
-    const removedFields = oldFields.filter(
-      oldField => !newFields.find(newField => newField.name === oldField.name)
-    );
-    
-    const typeChanges = oldFields.filter(oldField => {
-      const newField = newFields.find(f => f.name === oldField.name);
-      return newField && newField.type !== oldField.type;
-    });
-    
-    return {
-      compatible: removedFields.length === 0 && typeChanges.length === 0,
-      removedFields,
-      typeChanges,
-      addedFields: newFields.filter(
-        newField => !oldFields.find(oldField => oldField.name === newField.name)
-      )
-    };
-  }
-}
-
-interface CompatibilityResult {
-  compatible: boolean;
-  removedFields: SchemaField[];
-  typeChanges: SchemaField[];
-  addedFields: SchemaField[];
-}
-
-interface SchemaField {
-  name: string;
-  type: string;
-}
-
-type MigrationStrategy = 'strict' | 'permissive' | 'forced';
-```
-
----
+## Schema Lifecycle
+
+1. **Create**: Authority registers schema on-chain
+2. **Discover**: Others find schema by UID or query
+3. **Use**: Attesters create attestations referencing schema
+4. **Verify**: Verifiers decode attestation data using schema definition
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep schemas minimal">
+    Only include fields you need. Smaller schemas = lower costs.
+  </Card>
+  <Card title="Use appropriate types">
+    `u64` for timestamps, `bool` for flags, `string` for text.
+  </Card>
+  <Card title="Plan for revocation">
+    Set `revocable: true` for credentials that may need invalidation.
+  </Card>
+  <Card title="Version your schemas">
+    Include version in name: `KYC_v2` for breaking changes.
+  </Card>
+</CardGroup>
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card
-    title="Attestations"
-    icon="certificate"
-    href="/concepts/attestations"
-  >
-    Learn how to create attestations using your schemas
+  <Card title="Create a Schema" icon="plus" href="/stellar/schemas">
+    Step-by-step guide for Stellar
   </Card>
-  <Card
-    title="Authorities"
-    icon="shield-check"
-    href="/concepts/authorities"
-  >
-    Understand authority management and permissions
-  </Card>
-  <Card
-    title="Custom Schema Design"
-    icon="pencil"
-    href="/guides/custom-schemas"
-  >
-    Best practices for enterprise schema design
-  </Card>
-  <Card
-    title="SDK Methods"
-    icon="code"
-    href="/sdks/typescript/methods"
-  >
-    Explore all schema-related SDK methods
+  <Card title="SDK Reference" icon="code" href="/stellar/reference">
+    Complete API documentation
   </Card>
 </CardGroup>

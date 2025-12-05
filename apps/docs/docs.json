@@ -14,6 +14,9 @@
     "light": "#ff8700",
     "dark": "#ff8700"
   },
+  "fonts": {
+    "family": "Mona Sans"
+  },
 
   "navigation": {
     "tabs": [
@@ -21,74 +24,45 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Introduction",
-            "pages": [
-              "overview",
-              "guides/what-is-attestprotocol",
-              "guides/why-attestations",
-              "guides/how-it-works",
-              "guides/use-cases"
-            ]
-          },
-          {
             "group": "Getting Started",
             "pages": [
-              "quickstart",
-              "getting-started/installation",
-              "getting-started/your-first-attestation"
+              "overview",
+              "quickstart"
             ]
           },
           {
-            "group": "Core Concepts",
+            "group": "Concepts",
             "pages": [
+              "concepts/how-it-works",
               "concepts/attestations",
               "concepts/schemas",
-              "concepts/authorities",
-              "concepts/verification",
-              "concepts/storage"
+              "concepts/delegation"
             ]
           },
           {
-            "group": "Supported Chains",
+            "group": "Stellar",
             "pages": [
-              "chains/stellar/overview",
-              "chains/solana/overview",
-              "chains/starknet/overview"
+              "stellar/getting-started",
+              "stellar/schemas",
+              "stellar/reference",
+              "chains/stellar/overview"
             ]
           },
           {
-            "group": "Guides",
+            "group": "Solana",
             "pages": [
-              "guides/kyc-integration",
-              "guides/custom-schemas",
-              "guides/asset-ownership",
-              "guides/dao-voting",
-              "guides/event-attendance",
-              "guides/github-credentials",
-              "guides/privacy-options"
+              "solana/getting-started",
+              "chains/solana/overview"
             ]
           },
           {
-            "group": "SDK Reference",
+            "group": "Examples",
             "pages": [
-              "sdks/typescript/installation",
-              "sdks/typescript/initialization",
-              "sdks/typescript/methods",
-              "sdks/typescript/examples",
-              "sdks/cli",
-              "sdks/delegated-signatories"
-            ]
-          },
-          {
-            "group": "API Reference",
-            "pages": [
-              "reference/overview",
-              "reference/attest",
-              "reference/schema",
-              "reference/authority",
-              "reference/administration",
-              "reference/webhooks",
-              "reference/errors"
+              "examples/react-integration",
+              "examples/kyc-verification",
+              "examples/event-attendance",
+              "examples/dao-membership",
+              "examples/identity"
             ]
           }
         ]
@@ -97,19 +71,24 @@
     "global": {
       "anchors": [
         {
+          "anchor": "Explorer",
+          "href": "https://stellar.attestprotocol.org",
+          "icon": "magnifying-glass"
+        },
+        {
+          "anchor": "Sandbox",
+          "href": "https://sandbox.attest.so",
+          "icon": "play"
+        },
+        {
           "anchor": "GitHub",
           "href": "https://github.com/daccred/attest.so",
           "icon": "github"
         },
         {
-          "anchor": "Community",
+          "anchor": "Discord",
           "href": "https://discord.com/invite/7kVur5ja5m",
           "icon": "discord"
-        },
-        {
-          "anchor": "Dashboard",
-          "href": "https://attestprotocol.org",
-          "icon": "desktop"
         }
       ]
     }
@@ -142,8 +121,12 @@
         "header": "Resources",
         "items": [
           {
-            "label": "Dashboard",
-            "href": "https://attestprotocol.org"
+            "label": "Explorer",
+            "href": "https://stellar.attestprotocol.org"
+          },
+          {
+            "label": "Testnet",
+            "href": "https://testnet.attestprotocol.org"
           },
           {
             "label": "Enterprise",

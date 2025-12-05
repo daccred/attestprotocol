@@ -1,0 +1,484 @@
+---
+title: 'Stellar SDK Reference'
+description: 'Complete API reference for @attestprotocol/stellar-sdk'
+---
+
+## Installation
+
+```bash
+npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
+```
+
+## Contract Addresses
+
+| Network | Contract ID |
+|---------|-------------|
+| Testnet | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
+| Mainnet | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+
+---
+
+## StellarAttestationClient
+
+Main client for interacting with AttestProtocol on Stellar.
+
+```typescript
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+
+const client = new StellarAttestationClient({
+  rpcUrl: string,           // Soroban RPC URL
+  network: 'testnet' | 'mainnet',
+  publicKey: string,        // Your Stellar public key
+  contractId?: string,      // Optional: custom contract ID
+  allowHttp?: boolean       // Allow HTTP (dev only)
+});
+```
+
+---
+
+## Core Methods
+
+### createSchema
+
+Register a new schema on-chain.
+
+```typescript
+await client.createSchema({
+  definition: string,      // Schema definition: "name:string,verified:bool"
+  revocable?: boolean,     // Default: true
+  resolver?: string,       // Optional resolver contract address
+  options?: { signer, simulate }
+})
+```
+
+**Returns:** Transaction result with schema UID
+
+### attest
+
+Create a new attestation.
+
+```typescript
+await client.attest({
+  schemaUid: Buffer,       // 32-byte schema identifier
+  value: string,           // JSON-encoded attestation data
+  subject?: string,        // Who the attestation is about (defaults to caller)
+  expirationTime?: number, // Unix timestamp when attestation expires
+  options?: { signer, simulate }
+})
+```
+
+**Returns:** Transaction result with attestation UID
+
+### revoke
+
+Revoke an existing attestation.
+
+```typescript
+await client.revoke({
+  attestationUid: Buffer,  // 32-byte attestation UID
+  options?: { signer, simulate }
+})
+```
+
+**Returns:** Transaction result
+
+### getSchema
+
+Retrieve a schema by UID from the blockchain.
+
+```typescript
+const schema = await client.getSchema(uid: Buffer)
+```
+
+**Returns:** Schema object or null
+
+### getAttestation
+
+Retrieve an attestation by UID from the blockchain.
+
+```typescript
+const attestation = await client.getAttestation(uid: Buffer)
+```
+
+**Returns:** Attestation object or null
+
+---
+
+## Query Methods
+
+### fetchSchemas
+
+Fetch latest schemas from the registry.
+
+```typescript
+const schemas = await client.fetchSchemas(limit?: number) // Max 100
+```
+
+### fetchAttestations
+
+Fetch latest attestations from the registry.
+
+```typescript
+const attestations = await client.fetchAttestations(limit?: number) // Max 100
+```
+
+### fetchSchemasByWallet
+
+Fetch schemas created by a specific wallet.
+
+```typescript
+const { schemas, total, hasMore } = await client.fetchSchemasByWallet({
+  walletAddress: string,
+  limit?: number
+})
+```
+
+### fetchAttestationsByWallet
+
+Fetch attestations created by a specific wallet.
+
+```typescript
+const { attestations, total, hasMore } = await client.fetchAttestationsByWallet({
+  walletAddress: string,
+  limit?: number
+})
+```
+
+### getSchemasByLedger
+
+Fetch schemas from a specific ledger number.
+
+```typescript
+const schemas = await client.getSchemasByLedger(ledger: number, limit?: number)
+```
+
+### getAttestationsByLedger
+
+Fetch attestations from a specific ledger number.
+
+```typescript
+const attestations = await client.getAttestationsByLedger(ledger: number, limit?: number)
+```
+
+---
+
+## Schema Encoding
+
+### SorobanSchemaEncoder
+
+Encode and decode attestation data matching a schema definition.
+
+```typescript
+import { SorobanSchemaEncoder } from '@attestprotocol/stellar-sdk';
+
+const encoder = new SorobanSchemaEncoder({
+  name: 'KYCVerification',
+  fields: [
+    { name: 'verified', type: 'bool' },
+    { name: 'level', type: 'string' },
+    { name: 'timestamp', type: 'u64' }
+  ]
+});
+
+// Encode data for attestation
+const payload = await encoder.encodeData({
+  verified: true,
+  level: 'premium',
+  timestamp: Date.now()
+});
+
+// Decode attestation value
+const decoded = await encoder.decodeData(attestation.value);
+```
+
+### encodeSchema
+
+Encode schema to XDR format for blockchain storage.
+
+```typescript
+const xdrString = client.encodeSchema({ name: 'TestSchema', fields: [...] })
+```
+
+### decodeSchema
+
+Decode XDR-encoded schema back to JavaScript object.
+
+```typescript
+const schema = client.decodeSchema('XDR:AAAAB...')
+```
+
+---
+
+## BLS Delegation
+
+Delegated attestations allow authorities to sign off-chain while delegates submit on-chain.
+
+### generateBlsKeys
+
+Generate a new BLS key pair.
+
+```typescript
+const { publicKey, privateKey } = client.generateBlsKeys()
+// publicKey: 192 bytes (uncompressed)
+// privateKey: 32 bytes
+```
+
+### registerBlsKey
+
+Register a BLS public key on-chain.
+
+```typescript
+await client.registerBlsKey(publicKey: Buffer, options?: { signer })
+```
+
+### getBlsKey
+
+Get the registered BLS key for an attester.
+
+```typescript
+const blsKey = await client.getBlsKey(attester?: string)
+```
+
+### attestByDelegation
+
+Create an attestation using a delegated BLS signature.
+
+```typescript
+await client.attestByDelegation({
+  attester: string,
+  schema_uid: Buffer,
+  subject: string,
+  value: string,
+  nonce: bigint,
+  deadline: bigint,
+  expiration_time: bigint | undefined,
+  signature: Buffer
+}, options?: { signer })
+```
+
+### revokeByDelegation
+
+Revoke an attestation using a delegated BLS signature.
+
+```typescript
+await client.revokeByDelegation({
+  attestation_uid: Buffer,
+  schema_uid: Buffer,
+  subject: string,
+  revoker: string,
+  nonce: bigint,
+  deadline: bigint,
+  signature: Buffer
+}, options?: { signer })
+```
+
+### Helper Functions
+
+```typescript
+import {
+  createDelegatedAttestationRequest,
+  createDelegatedRevocationRequest,
+  createAttestMessage,
+  createRevokeMessage,
+  signHashedMessage,
+  verifySignature
+} from '@attestprotocol/stellar-sdk';
+
+// Create complete delegated attestation request
+const request = await createDelegatedAttestationRequest({
+  schemaUid: Buffer.from('abc...', 'hex'),
+  subject: 'GSUBJECT...',
+  data: JSON.stringify({ verified: true })
+}, blsPrivateKey, client.getClientInstance());
+
+// Sign a message
+const dst = await client.getAttestDST();
+const messagePoint = createAttestMessage(request, dst);
+const signature = signHashedMessage(messagePoint, privateKey);
+
+// Verify signature
+const result = verifySignature({
+  signature: signatureBuffer,
+  expectedMessage: messagePoint,
+  publicKey: publicKeyBuffer
+});
+```
+
+---
+
+## UID Generation
+
+### generateSchemaUid
+
+Generate deterministic schema UID.
+
+```typescript
+const uid = client.generateSchemaUid({
+  definition: string,
+  authority: string,
+  resolver?: string
+})
+```
+
+### generateAttestationUid
+
+Generate deterministic attestation UID.
+
+```typescript
+const uid = client.generateAttestationUid({
+  schemaUid: Buffer,
+  subject: string,
+  nonce: bigint
+})
+```
+
+---
+
+## Indexer API
+
+Standalone functions for querying the registry API.
+
+```typescript
+import { getSchemaByUid, getAttestationByUid, fetchRegistryDump } from '@attestprotocol/stellar-sdk';
+
+// Fetch schema by UID
+const schema = await getSchemaByUid('abc123...', true, 'testnet');
+
+// Fetch attestation by UID
+const attestation = await getAttestationByUid('def456...', 'testnet');
+
+// Fetch complete registry dump
+const dump = await fetchRegistryDump('testnet');
+```
+
+---
+
+## Utility Methods
+
+### submitTransaction
+
+Submit a signed transaction to the network.
+
+```typescript
+const result = await client.submitTransaction(signedXdr: string, {
+  skipSimulation?: boolean
+})
+```
+
+### getClientInstance
+
+Get underlying protocol client for advanced usage.
+
+```typescript
+const protocolClient = client.getClientInstance()
+```
+
+### getServerInstance
+
+Get underlying RPC server instance.
+
+```typescript
+const server = client.getServerInstance()
+```
+
+---
+
+## Types
+
+### ClientOptions
+
+```typescript
+interface ClientOptions {
+  rpcUrl: string;
+  network: 'testnet' | 'mainnet';
+  publicKey: string;
+  contractId?: string;
+  networkPassphrase?: string;
+  allowHttp?: boolean;
+}
+```
+
+### TxOptions
+
+```typescript
+interface TxOptions {
+  signer?: TransactionSigner;
+  simulate?: boolean;
+  timeoutInSeconds?: number;
+}
+```
+
+### TransactionSigner
+
+```typescript
+interface TransactionSigner {
+  signTransaction(xdr: string): Promise<string>;
+}
+```
+
+### ContractSchema
+
+```typescript
+interface ContractSchema {
+  uid: Buffer;
+  definition: string;
+  authority: string;
+  resolver: string;
+  revocable: boolean;
+  timestamp: number;
+}
+```
+
+### ContractAttestation
+
+```typescript
+interface ContractAttestation {
+  uid: Buffer;
+  schemaUid: Buffer;
+  subject: string;
+  attester: string;
+  value: any;
+  timestamp: number;
+  expirationTime?: number;
+  revocationTime?: number;
+  revoked: boolean;
+}
+```
+
+### BlsKeyPair
+
+```typescript
+interface BlsKeyPair {
+  privateKey: Buffer;  // 32 bytes
+  publicKey: Buffer;   // 192 bytes uncompressed
+}
+```
+
+---
+
+## Exports
+
+```typescript
+// Main client
+export { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+
+// Service classes
+export { StellarSchemaRegistry, AttestProtocolAuthority };
+
+// Schema encoding
+export { SorobanSchemaEncoder, encodeSchema, decodeSchema, createSimpleSchema };
+
+// UID generation
+export { generateAttestationUid, generateSchemaUid };
+
+// BLS delegation
+export { generateBlsKeys, signHashedMessage, verifySignature };
+export { createDelegatedAttestationRequest, createDelegatedRevocationRequest };
+export { createAttestMessage, createRevokeMessage };
+
+// Indexer API
+export { getSchemaByUid, getAttestationByUid, fetchRegistryDump };
+
+// Error classes
+export { ContractError, NetworkError, ConfigurationError };
+```

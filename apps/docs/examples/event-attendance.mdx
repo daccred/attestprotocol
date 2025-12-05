@@ -1,0 +1,372 @@
+---
+title: 'Event Attendance'
+description: 'Verify attendance and issue event badges'
+---
+
+## Overview
+
+Event attendance attestations prove someone attended a specific event (conference, hackathon, workshop). This guide covers verifying attendance and issuing badges.
+
+## Schema
+
+```typescript
+const EVENT_SCHEMA = {
+  name: 'EventAttendance',
+  fields: [
+    { name: 'eventId', type: 'string' },
+    { name: 'eventName', type: 'string' },
+    { name: 'role', type: 'string' },       // "attendee", "speaker", "sponsor"
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+```
+
+---
+
+## Verifier Workflow
+
+Check if a user attended a specific event or has any attendance history.
+
+### 1. Verify Event Attendance
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const EVENT_SCHEMA = {
+  name: 'EventAttendance',
+  fields: [
+    { name: 'eventId', type: 'string' },
+    { name: 'eventName', type: 'string' },
+    { name: 'role', type: 'string' },
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+
+async function verifyAttendance(attestationUid: string, expectedEventId?: string) {
+  // Fetch attestation
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation) {
+    return { attended: false, reason: 'Attestation not found' };
+  }
+
+  if (attestation.revoked) {
+    return { attended: false, reason: 'Attendance revoked' };
+  }
+
+  // Decode data
+  const encoder = new SorobanSchemaEncoder(EVENT_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  // Optionally verify specific event
+  if (expectedEventId && data.eventId !== expectedEventId) {
+    return { attended: false, reason: 'Wrong event' };
+  }
+
+  return {
+    attended: true,
+    eventId: data.eventId,
+    eventName: data.eventName,
+    role: data.role,
+    attendee: attestation.subject,
+    issuer: attestation.attester
+  };
+}
+```
+
+### 2. Get Attendance History
+
+```typescript
+async function getAttendanceHistory(
+  userAddress: string,
+  eventSchemaUid: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: userAddress
+  });
+
+  const { attestations } = await client.fetchAttestationsByWallet({
+    walletAddress: userAddress,
+    limit: 100
+  });
+
+  // Filter by event schema
+  const eventAttestations = attestations.filter(
+    a => a.schemaUid.toString('hex') === eventSchemaUid && !a.revoked
+  );
+
+  // Decode each
+  const encoder = new SorobanSchemaEncoder(EVENT_SCHEMA);
+  const history = await Promise.all(
+    eventAttestations.map(async (a) => {
+      const data = await encoder.decodeData(a.value);
+      return {
+        uid: a.uid.toString('hex'),
+        ...data,
+        issuer: a.attester
+      };
+    })
+  );
+
+  return history;
+}
+```
+
+### 3. Verify by Event Organizer
+
+```typescript
+const TRUSTED_ORGANIZERS: Record<string, string[]> = {
+  'stellar-meridian-2024': ['GORGANIZER1...'],
+  'soroban-hackathon': ['GORGANIZER2...', 'GORGANIZER3...']
+};
+
+async function verifyOfficialAttendance(
+  attestationUid: string,
+  eventId: string
+) {
+  const result = await verifyAttendance(attestationUid, eventId);
+
+  if (!result.attended) {
+    return result;
+  }
+
+  const trustedIssuers = TRUSTED_ORGANIZERS[eventId];
+  if (!trustedIssuers?.includes(result.issuer)) {
+    return { attended: false, reason: 'Not issued by official organizer' };
+  }
+
+  return result;
+}
+```
+
+### 4. Check Speaker/VIP Status
+
+```typescript
+type EventRole = 'attendee' | 'speaker' | 'sponsor' | 'organizer';
+
+async function hasRole(
+  userAddress: string,
+  eventSchemaUid: string,
+  eventId: string,
+  requiredRole: EventRole
+): Promise<boolean> {
+  const history = await getAttendanceHistory(userAddress, eventSchemaUid);
+
+  return history.some(
+    event => event.eventId === eventId && event.role === requiredRole
+  );
+}
+
+// Usage: Check if user was a speaker
+const wasSpeaker = await hasRole(userAddress, schemaUid, 'meridian-2024', 'speaker');
+```
+
+### Complete Verifier Example
+
+```typescript
+import {
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const EVENT_SCHEMA = {
+  name: 'EventAttendance',
+  fields: [
+    { name: 'eventId', type: 'string' },
+    { name: 'eventName', type: 'string' },
+    { name: 'role', type: 'string' },
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+
+// Gate access based on event attendance
+async function canAccessAlumniChannel(attestationUid: string) {
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation || attestation.revoked) {
+    return { allowed: false, reason: 'Invalid attendance proof' };
+  }
+
+  const encoder = new SorobanSchemaEncoder(EVENT_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  // Only allow speakers and organizers
+  if (!['speaker', 'organizer'].includes(data.role)) {
+    return { allowed: false, reason: 'Speakers and organizers only' };
+  }
+
+  return {
+    allowed: true,
+    eventName: data.eventName,
+    role: data.role
+  };
+}
+```
+
+---
+
+## Issuer Workflow
+
+Issue attendance badges after event check-in.
+
+### 1. Register Schema (One-time)
+
+```typescript
+async function registerEventSchema(client: StellarAttestationClient, signer: any) {
+  const result = await client.createSchema({
+    definition: 'struct EventAttendance { string eventId; string eventName; string role; u64 timestamp; }',
+    revocable: true, // Allow revoking fraudulent claims
+    options: { signer }
+  });
+
+  return result.schemaUid.toString('hex');
+}
+```
+
+### 2. Issue Attendance Badge
+
+```typescript
+async function issueAttendanceBadge(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  attendeeAddress: string,
+  event: { id: string; name: string },
+  role: 'attendee' | 'speaker' | 'sponsor' | 'organizer',
+  signer: any
+) {
+  const encoder = new SorobanSchemaEncoder(EVENT_SCHEMA);
+
+  const payload = await encoder.encodeData({
+    eventId: event.id,
+    eventName: event.name,
+    role,
+    timestamp: Date.now()
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(schemaUid, 'hex'),
+    subject: attendeeAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  return {
+    badgeUid: result.attestationUid?.toString('hex'),
+    txHash: result.hash
+  };
+}
+```
+
+### 3. Batch Issue (Event Check-in)
+
+```typescript
+async function batchIssueAttendance(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  event: { id: string; name: string },
+  attendees: Array<{ address: string; role: string }>,
+  signer: any
+) {
+  const encoder = new SorobanSchemaEncoder(EVENT_SCHEMA);
+  const results = [];
+
+  for (const attendee of attendees) {
+    const payload = await encoder.encodeData({
+      eventId: event.id,
+      eventName: event.name,
+      role: attendee.role,
+      timestamp: Date.now()
+    });
+
+    try {
+      const result = await client.attest({
+        schemaUid: Buffer.from(schemaUid, 'hex'),
+        subject: attendee.address,
+        value: payload.encodedData,
+        options: { signer }
+      });
+
+      results.push({
+        address: attendee.address,
+        success: true,
+        badgeUid: result.attestationUid?.toString('hex')
+      });
+    } catch (error) {
+      results.push({
+        address: attendee.address,
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  return results;
+}
+```
+
+### Complete Issuer Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder
+} from '@attestprotocol/stellar-sdk';
+
+const EVENT_SCHEMA_UID = 'def456...'; // Your registered schema
+
+async function onCheckIn(
+  attendeeAddress: string,
+  role: 'attendee' | 'speaker' | 'sponsor' | 'organizer'
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: 'GORGANIZER...'
+  });
+
+  const encoder = new SorobanSchemaEncoder({
+    name: 'EventAttendance',
+    fields: [
+      { name: 'eventId', type: 'string' },
+      { name: 'eventName', type: 'string' },
+      { name: 'role', type: 'string' },
+      { name: 'timestamp', type: 'u64' }
+    ]
+  });
+
+  const payload = await encoder.encodeData({
+    eventId: 'meridian-2024',
+    eventName: 'Stellar Meridian 2024',
+    role,
+    timestamp: Date.now()
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(EVENT_SCHEMA_UID, 'hex'),
+    subject: attendeeAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  console.log('Badge issued:', result.attestationUid?.toString('hex'));
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="DAO Membership" icon="users" href="/examples/dao-membership">
+    Membership verification and roles
+  </Card>
+  <Card title="Identity" icon="fingerprint" href="/examples/identity">
+    Identity attestations
+  </Card>
+</CardGroup>

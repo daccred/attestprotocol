@@ -1,109 +1,66 @@
 ---
-title: 'Overview'
-description: 'Decentralized attestation infrastructure on Stellar. Build verifiable credential systems with cryptographic delegation and payment-gated resolvers.'
+title: 'AttestProtocol'
+description: 'Decentralized attestation infrastructure on Stellar and Solana'
 ---
 
-<img
-  className="block dark:hidden"
-  src="/images/logo-light.svg"
-  alt="AttestProtocol Hero Light"
-/>
-<img
-  className="hidden dark:block"
-  src="/images/logo-dark.svg"
-  alt="AttestProtocol Hero Dark"
-/>
+## What is AttestProtocol?
 
-## Attestation Infrastructure on Stellar
-
-Modular attestation protocol on Stellar Soroban with BLS delegation and payment-gated verification.
-
-## Key Features
+On-chain attestations with BLS delegation and payment-gated verification. Issue credentials in minutes.
 
 <CardGroup cols={2}>
   <Card title="BLS Delegation" icon="key">
-    Off-chain signing with on-chain verification
+    Off-chain signing, on-chain verification
   </Card>
   <Card title="Economic Security" icon="shield-check">
-    100 XLM authority registration prevents Sybil attacks
+    Sybil-resistant authority registration
   </Card>
-  <Card title="Flexible Resolvers" icon="plug">
-    Custom validation without protocol changes
+  <Card title="Flexible Schemas" icon="cube">
+    Define custom attestation structures
   </Card>
-  <Card title="Full Indexing" icon="database">
-    Track all contract interactions
+  <Card title="Multi-Chain" icon="link">
+    Stellar (production) + Solana (beta)
   </Card>
 </CardGroup>
 
-## Quick Start
+## Quick Example
 
-<CodeGroup>
-```typescript Initialize
+```typescript
 import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
 
 const client = new StellarAttestationClient({
   rpcUrl: 'https://soroban-testnet.stellar.org',
   network: 'testnet',
-  publicKey: 'GBXXXX...'
+  publicKey: 'GXXX...'
 });
-```
 
-```typescript Attest
+// Create attestation
 await client.attest({
-  schemaUid: Buffer.from('abc...', 'hex'),
-  value: JSON.stringify({ verified: true }),
-  subject: 'GSUBJECT...',
+  schemaUid: schemaUid,
+  value: JSON.stringify({ verified: true, level: 'basic' }),
   options: { signer }
 });
 ```
-</CodeGroup>
 
-## Architecture
+## Contract Addresses
 
-<CardGroup cols={2}>
-  <Card title="Protocol Contract" icon="cube" href="/chains/stellar/overview">
-    Core attestation engine with BLS verification
-  </Card>
-  <Card title="Authority Contract" icon="building" href="/chains/stellar/overview">
-    Payment-gated resolver (100 XLM registration)
-  </Card>
-  <Card title="Indexer (Horizon)" icon="server" href="/reference/overview">
-    Complete contract interaction tracking
-  </Card>
-  <Card title="TypeScript SDK" icon="code" href="/sdks/typescript/installation">
-    Stellar-focused SDK with BLS support
-  </Card>
-</CardGroup>
+| Network | Protocol Contract |
+|---------|-------------------|
+| **Testnet** | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
+| **Mainnet** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
 
-## Deployment
+## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Testnet" icon="flask">
-    Protocol: `CDBWGWEZ3P4DZ3YUZSCEUKOVV2UGF2PYQEPW3E5OKNLYS5SNW4SQLDUA`
-
-    Authority: `CDYP33SVMQ6HAE5FMTXURO65UKX6AVIWGQVNUB7K6PNVZPMVOTVZKA7M`
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Working code in 5 minutes
   </Card>
-  <Card title="Mainnet" icon="rocket">
-    Protocol: `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI`
-
-    Authority: `CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG`
-  </Card>
-</CardGroup>
-
-
-## Resources
-
-<CardGroup cols={2}>
-  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
-    Build your first attestation
-  </Card>
-  <Card title="API Reference" icon="server" href="/reference/overview">
-    Complete API documentation
+  <Card title="Stellar Guide" icon="star" href="/stellar/getting-started">
+    Complete Stellar walkthrough
   </Card>
   <Card title="GitHub" icon="github" href="https://github.com/daccred/attest.so">
-    Source code & contribute
+    Source code
   </Card>
   <Card title="Discord" icon="discord" href="https://discord.com/invite/7kVur5ja5m">
-    Community & support
+    Community
   </Card>
 </CardGroup>

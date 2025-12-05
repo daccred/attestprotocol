@@ -1,0 +1,315 @@
+---
+title: 'React Integration'
+description: 'Set up AttestProtocol SDK in your React application'
+---
+
+## Overview
+
+This guide shows how to integrate the Stellar SDK into a React application with wallet connection and attestation verification.
+
+## Installation
+
+```bash
+npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
+```
+
+## SDK Context
+
+Create a context to share the SDK client across your app.
+
+```typescript
+// contexts/AttestContext.tsx
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+
+interface AttestContextType {
+  client: StellarAttestationClient | null;
+  isReady: boolean;
+  error: string | null;
+}
+
+const AttestContext = createContext<AttestContextType | undefined>(undefined);
+
+interface Props {
+  children: ReactNode;
+  publicKey: string | null;
+  network?: 'testnet' | 'mainnet';
+}
+
+export function AttestProvider({ children, publicKey, network = 'testnet' }: Props) {
+  const [client, setClient] = useState<StellarAttestationClient | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setClient(null);
+      return;
+    }
+
+    try {
+      const rpcUrl = network === 'mainnet'
+        ? 'https://soroban.stellar.org'
+        : 'https://soroban-testnet.stellar.org';
+
+      const newClient = new StellarAttestationClient({
+        rpcUrl,
+        network,
+        publicKey,
+      });
+
+      setClient(newClient);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initialize SDK');
+      setClient(null);
+    }
+  }, [publicKey, network]);
+
+  return (
+    <AttestContext.Provider value={{ client, isReady: !!client, error }}>
+      {children}
+    </AttestContext.Provider>
+  );
+}
+
+export function useAttest() {
+  const context = useContext(AttestContext);
+  if (!context) {
+    throw new Error('useAttest must be used within AttestProvider');
+  }
+  return context;
+}
+```
+
+## App Setup
+
+Wrap your app with the provider.
+
+```tsx
+// App.tsx
+import { AttestProvider } from './contexts/AttestContext';
+import { useWallet } from './hooks/useWallet'; // Your wallet hook
+
+function App() {
+  const { publicKey } = useWallet();
+
+  return (
+    <AttestProvider publicKey={publicKey} network="testnet">
+      <YourApp />
+    </AttestProvider>
+  );
+}
+```
+
+## Verification Hook
+
+Create a hook for verifying attestations.
+
+```typescript
+// hooks/useVerifyAttestation.ts
+import { useState, useCallback } from 'react';
+import { useAttest } from '../contexts/AttestContext';
+import { getAttestationByUid, SorobanSchemaEncoder } from '@attestprotocol/stellar-sdk';
+
+interface VerificationResult {
+  isValid: boolean;
+  data: Record<string, any> | null;
+  error: string | null;
+  attestation: any | null;
+}
+
+export function useVerifyAttestation() {
+  const { client } = useAttest();
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<VerificationResult | null>(null);
+
+  const verify = useCallback(async (
+    attestationUid: string,
+    schemaDefinition: { name: string; fields: Array<{ name: string; type: string }> }
+  ) => {
+    if (!client) {
+      setResult({ isValid: false, data: null, error: 'SDK not initialized', attestation: null });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Fetch attestation
+      const attestation = await getAttestationByUid(attestationUid);
+
+      if (!attestation) {
+        setResult({ isValid: false, data: null, error: 'Attestation not found', attestation: null });
+        return;
+      }
+
+      // Check revocation
+      if (attestation.revoked) {
+        setResult({ isValid: false, data: null, error: 'Attestation revoked', attestation });
+        return;
+      }
+
+      // Check expiration
+      if (attestation.expirationTime && attestation.expirationTime < Date.now()) {
+        setResult({ isValid: false, data: null, error: 'Attestation expired', attestation });
+        return;
+      }
+
+      // Decode data
+      const encoder = new SorobanSchemaEncoder(schemaDefinition);
+      const decoded = await encoder.decodeData(attestation.value);
+
+      setResult({ isValid: true, data: decoded, error: null, attestation });
+    } catch (err) {
+      setResult({
+        isValid: false,
+        data: null,
+        error: err instanceof Error ? err.message : 'Verification failed',
+        attestation: null
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  return { verify, loading, result };
+}
+```
+
+## Verification Component
+
+```tsx
+// components/AttestationVerifier.tsx
+import { useState } from 'react';
+import { useVerifyAttestation } from '../hooks/useVerifyAttestation';
+
+const KYC_SCHEMA = {
+  name: 'KYC',
+  fields: [
+    { name: 'verified', type: 'bool' },
+    { name: 'level', type: 'string' },
+    { name: 'timestamp', type: 'u64' }
+  ]
+};
+
+export function AttestationVerifier() {
+  const [uid, setUid] = useState('');
+  const { verify, loading, result } = useVerifyAttestation();
+
+  const handleVerify = () => {
+    verify(uid, KYC_SCHEMA);
+  };
+
+  return (
+    <div>
+      <input
+        value={uid}
+        onChange={(e) => setUid(e.target.value)}
+        placeholder="Attestation UID"
+      />
+      <button onClick={handleVerify} disabled={loading}>
+        {loading ? 'Verifying...' : 'Verify'}
+      </button>
+
+      {result && (
+        <div>
+          {result.isValid ? (
+            <div>
+              <p>Valid attestation</p>
+              <pre>{JSON.stringify(result.data, null, 2)}</pre>
+            </div>
+          ) : (
+            <p>Invalid: {result.error}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Wallet Signer
+
+Create a signer from your wallet kit.
+
+```typescript
+// utils/createSigner.ts
+import { TransactionSigner } from '@attestprotocol/stellar-sdk';
+
+export function createSigner(walletKit: any): TransactionSigner {
+  return {
+    signTransaction: async (xdr: string) => {
+      const { signedTxXdr } = await walletKit.signTransaction(xdr);
+      return signedTxXdr;
+    }
+  };
+}
+```
+
+## Issuing Attestations
+
+Hook for creating attestations (issuer workflow).
+
+```typescript
+// hooks/useCreateAttestation.ts
+import { useState, useCallback } from 'react';
+import { useAttest } from '../contexts/AttestContext';
+import { SorobanSchemaEncoder, getSchemaByUid } from '@attestprotocol/stellar-sdk';
+import { createSigner } from '../utils/createSigner';
+
+export function useCreateAttestation() {
+  const { client } = useAttest();
+  const [loading, setLoading] = useState(false);
+
+  const create = useCallback(async (
+    schemaUid: string,
+    data: Record<string, any>,
+    subject: string,
+    walletKit: any
+  ) => {
+    if (!client) throw new Error('SDK not initialized');
+
+    setLoading(true);
+
+    try {
+      // Fetch schema
+      const schema = await getSchemaByUid(schemaUid);
+      if (!schema) throw new Error('Schema not found');
+
+      const definition = JSON.parse(schema.definition);
+
+      // Encode data
+      const encoder = new SorobanSchemaEncoder(definition);
+      const payload = await encoder.encodeData(data);
+
+      // Create attestation
+      const result = await client.attest({
+        schemaUid: Buffer.from(schemaUid, 'hex'),
+        value: payload.encodedData,
+        subject,
+        options: { signer: createSigner(walletKit) }
+      });
+
+      return {
+        txHash: result.hash,
+        attestationUid: result.attestationUid?.toString('hex')
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  return { create, loading };
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="KYC Verification" icon="id-card" href="/examples/kyc-verification">
+    Verify and issue KYC attestations
+  </Card>
+  <Card title="Event Attendance" icon="calendar-check" href="/examples/event-attendance">
+    Check and issue attendance badges
+  </Card>
+</CardGroup>

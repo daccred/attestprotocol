@@ -1,0 +1,412 @@
+---
+title: 'DAO Membership'
+description: 'Verify membership status and issue DAO credentials'
+---
+
+## Overview
+
+DAO membership attestations prove someone is a member of a decentralized organization with a specific role. This guide covers verifying membership and managing roles.
+
+## Schema
+
+```typescript
+const MEMBERSHIP_SCHEMA = {
+  name: 'DAOMembership',
+  fields: [
+    { name: 'daoId', type: 'string' },
+    { name: 'daoName', type: 'string' },
+    { name: 'role', type: 'string' },       // "member", "contributor", "core", "admin"
+    { name: 'joinedAt', type: 'u64' },
+    { name: 'active', type: 'bool' }
+  ]
+};
+```
+
+---
+
+## Verifier Workflow
+
+Check membership status before granting access to DAO resources.
+
+### 1. Verify Membership
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const MEMBERSHIP_SCHEMA = {
+  name: 'DAOMembership',
+  fields: [
+    { name: 'daoId', type: 'string' },
+    { name: 'daoName', type: 'string' },
+    { name: 'role', type: 'string' },
+    { name: 'joinedAt', type: 'u64' },
+    { name: 'active', type: 'bool' }
+  ]
+};
+
+async function verifyMembership(attestationUid: string, expectedDaoId?: string) {
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation) {
+    return { isMember: false, reason: 'Membership not found' };
+  }
+
+  if (attestation.revoked) {
+    return { isMember: false, reason: 'Membership revoked' };
+  }
+
+  const encoder = new SorobanSchemaEncoder(MEMBERSHIP_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  if (!data.active) {
+    return { isMember: false, reason: 'Membership inactive' };
+  }
+
+  if (expectedDaoId && data.daoId !== expectedDaoId) {
+    return { isMember: false, reason: 'Wrong DAO' };
+  }
+
+  return {
+    isMember: true,
+    daoId: data.daoId,
+    daoName: data.daoName,
+    role: data.role,
+    member: attestation.subject,
+    joinedAt: new Date(data.joinedAt)
+  };
+}
+```
+
+### 2. Check Role Permissions
+
+```typescript
+type DAORole = 'member' | 'contributor' | 'core' | 'admin';
+
+const ROLE_HIERARCHY: Record<DAORole, number> = {
+  member: 1,
+  contributor: 2,
+  core: 3,
+  admin: 4
+};
+
+function hasPermission(userRole: string, requiredRole: DAORole): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole as DAORole] || 0;
+  const requiredLevel = ROLE_HIERARCHY[requiredRole];
+  return userLevel >= requiredLevel;
+}
+
+async function canAccessResource(
+  attestationUid: string,
+  daoId: string,
+  requiredRole: DAORole
+) {
+  const result = await verifyMembership(attestationUid, daoId);
+
+  if (!result.isMember) {
+    return { allowed: false, reason: result.reason };
+  }
+
+  if (!hasPermission(result.role, requiredRole)) {
+    return { allowed: false, reason: `Requires ${requiredRole} role or higher` };
+  }
+
+  return { allowed: true, role: result.role };
+}
+```
+
+### 3. Get All Memberships
+
+```typescript
+async function getUserMemberships(
+  userAddress: string,
+  membershipSchemaUid: string
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: userAddress
+  });
+
+  const { attestations } = await client.fetchAttestationsByWallet({
+    walletAddress: userAddress,
+    limit: 100
+  });
+
+  const membershipAttestations = attestations.filter(
+    a => a.schemaUid.toString('hex') === membershipSchemaUid && !a.revoked
+  );
+
+  const encoder = new SorobanSchemaEncoder(MEMBERSHIP_SCHEMA);
+  const memberships = await Promise.all(
+    membershipAttestations.map(async (a) => {
+      const data = await encoder.decodeData(a.value);
+      return {
+        uid: a.uid.toString('hex'),
+        daoId: data.daoId,
+        daoName: data.daoName,
+        role: data.role,
+        active: data.active,
+        joinedAt: new Date(data.joinedAt)
+      };
+    })
+  );
+
+  // Filter to active memberships only
+  return memberships.filter(m => m.active);
+}
+```
+
+### 4. Verify DAO Admin Issued
+
+```typescript
+const DAO_ADMINS: Record<string, string[]> = {
+  'stellar-community': ['GADMIN1...', 'GADMIN2...'],
+  'soroban-builders': ['GADMIN3...']
+};
+
+async function verifyOfficialMembership(attestationUid: string, daoId: string) {
+  const result = await verifyMembership(attestationUid, daoId);
+
+  if (!result.isMember) {
+    return result;
+  }
+
+  const attestation = await getAttestationByUid(attestationUid);
+  const admins = DAO_ADMINS[daoId];
+
+  if (!admins?.includes(attestation.attester)) {
+    return { isMember: false, reason: 'Not issued by DAO admin' };
+  }
+
+  return result;
+}
+```
+
+### Complete Verifier Example
+
+```typescript
+import {
+  SorobanSchemaEncoder,
+  getAttestationByUid
+} from '@attestprotocol/stellar-sdk';
+
+const MEMBERSHIP_SCHEMA = {
+  name: 'DAOMembership',
+  fields: [
+    { name: 'daoId', type: 'string' },
+    { name: 'daoName', type: 'string' },
+    { name: 'role', type: 'string' },
+    { name: 'joinedAt', type: 'u64' },
+    { name: 'active', type: 'bool' }
+  ]
+};
+
+// Gate voting access
+async function canVote(attestationUid: string, daoId: string) {
+  const attestation = await getAttestationByUid(attestationUid);
+
+  if (!attestation || attestation.revoked) {
+    return { canVote: false, reason: 'Invalid membership' };
+  }
+
+  const encoder = new SorobanSchemaEncoder(MEMBERSHIP_SCHEMA);
+  const data = await encoder.decodeData(attestation.value);
+
+  if (data.daoId !== daoId) {
+    return { canVote: false, reason: 'Not a member of this DAO' };
+  }
+
+  if (!data.active) {
+    return { canVote: false, reason: 'Membership inactive' };
+  }
+
+  // Only contributors and above can vote
+  const votingRoles = ['contributor', 'core', 'admin'];
+  if (!votingRoles.includes(data.role)) {
+    return { canVote: false, reason: 'Members cannot vote, must be contributor+' };
+  }
+
+  return {
+    canVote: true,
+    role: data.role,
+    member: attestation.subject
+  };
+}
+```
+
+---
+
+## Issuer Workflow
+
+Issue and manage DAO memberships.
+
+### 1. Register Schema (One-time)
+
+```typescript
+async function registerMembershipSchema(client: StellarAttestationClient, signer: any) {
+  const result = await client.createSchema({
+    definition: 'struct DAOMembership { string daoId; string daoName; string role; u64 joinedAt; bool active; }',
+    revocable: true, // Critical for membership management
+    options: { signer }
+  });
+
+  return result.schemaUid.toString('hex');
+}
+```
+
+### 2. Issue Membership
+
+```typescript
+async function issueMembership(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  memberAddress: string,
+  dao: { id: string; name: string },
+  role: 'member' | 'contributor' | 'core' | 'admin',
+  signer: any
+) {
+  const encoder = new SorobanSchemaEncoder(MEMBERSHIP_SCHEMA);
+
+  const payload = await encoder.encodeData({
+    daoId: dao.id,
+    daoName: dao.name,
+    role,
+    joinedAt: Date.now(),
+    active: true
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(schemaUid, 'hex'),
+    subject: memberAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  return {
+    membershipUid: result.attestationUid?.toString('hex'),
+    txHash: result.hash
+  };
+}
+```
+
+### 3. Revoke Membership
+
+```typescript
+async function revokeMembership(
+  client: StellarAttestationClient,
+  membershipUid: string,
+  signer: any
+) {
+  const result = await client.revoke({
+    attestationUid: Buffer.from(membershipUid, 'hex'),
+    options: { signer }
+  });
+
+  return { txHash: result.hash };
+}
+```
+
+### 4. Upgrade Role
+
+Issue a new attestation with the upgraded role (old one remains but new takes precedence).
+
+```typescript
+async function upgradeRole(
+  client: StellarAttestationClient,
+  schemaUid: string,
+  memberAddress: string,
+  dao: { id: string; name: string },
+  newRole: 'contributor' | 'core' | 'admin',
+  originalJoinDate: number,
+  signer: any
+) {
+  const encoder = new SorobanSchemaEncoder(MEMBERSHIP_SCHEMA);
+
+  const payload = await encoder.encodeData({
+    daoId: dao.id,
+    daoName: dao.name,
+    role: newRole,
+    joinedAt: originalJoinDate, // Preserve original join date
+    active: true
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(schemaUid, 'hex'),
+    subject: memberAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  return {
+    newMembershipUid: result.attestationUid?.toString('hex'),
+    txHash: result.hash
+  };
+}
+```
+
+### Complete Issuer Example
+
+```typescript
+import {
+  StellarAttestationClient,
+  SorobanSchemaEncoder
+} from '@attestprotocol/stellar-sdk';
+
+const MEMBERSHIP_SCHEMA_UID = 'ghi789...';
+
+async function onMemberJoin(
+  memberAddress: string,
+  role: 'member' | 'contributor' | 'core' | 'admin' = 'member'
+) {
+  const client = new StellarAttestationClient({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    network: 'testnet',
+    publicKey: 'GDAO_ADMIN...'
+  });
+
+  const encoder = new SorobanSchemaEncoder({
+    name: 'DAOMembership',
+    fields: [
+      { name: 'daoId', type: 'string' },
+      { name: 'daoName', type: 'string' },
+      { name: 'role', type: 'string' },
+      { name: 'joinedAt', type: 'u64' },
+      { name: 'active', type: 'bool' }
+    ]
+  });
+
+  const payload = await encoder.encodeData({
+    daoId: 'stellar-community',
+    daoName: 'Stellar Community DAO',
+    role,
+    joinedAt: Date.now(),
+    active: true
+  });
+
+  const result = await client.attest({
+    schemaUid: Buffer.from(MEMBERSHIP_SCHEMA_UID, 'hex'),
+    subject: memberAddress,
+    value: payload.encodedData,
+    options: { signer }
+  });
+
+  console.log('Membership issued:', result.attestationUid?.toString('hex'));
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Identity" icon="fingerprint" href="/examples/identity">
+    Identity attestations
+  </Card>
+  <Card title="Delegation" icon="key" href="/concepts/delegation">
+    Scale issuance with BLS delegation
+  </Card>
+</CardGroup>
