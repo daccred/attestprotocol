@@ -21,65 +21,16 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Introduction",
+            "group": "Overview",
             "pages": [
               "overview"
             ]
           },
           {
-            "group": "Getting Started",
-            "pages": [
-              "quickstart",
-              "getting-started/installation",
-              "getting-started/your-first-attestation"
-            ]
-          },
-          {
-            "group": "Core Concepts",
-            "pages": [
-              "concepts/attestations",
-              "concepts/schemas",
-              "concepts/authorities",
-              "concepts/verification",
-              "concepts/storage"
-            ]
-          },
-          {
-            "group": "Supported Chains",
+            "group": "Chains",
             "pages": [
               "chains/stellar/overview",
               "chains/solana/overview"
-            ]
-          },
-          {
-            "group": "Guides",
-            "pages": [
-              "guides/kyc-integration",
-              "guides/custom-schemas",
-              "guides/asset-ownership",
-              "guides/dao-voting",
-              "guides/event-attendance",
-              "guides/github-credentials"
-            ]
-          },
-          {
-            "group": "SDK Reference",
-            "pages": [
-              "sdks/typescript/initialization",
-              "sdks/typescript/methods",
-              "sdks/typescript/examples",
-              "sdks/delegated-signatories"
-            ]
-          },
-          {
-            "group": "API Reference",
-            "pages": [
-              "reference/overview",
-              "reference/attest",
-              "reference/schema",
-              "reference/authority",
-              "reference/webhooks",
-              "reference/errors"
             ]
           }
         ]
