@@ -23,11 +23,7 @@
           {
             "group": "Introduction",
             "pages": [
-              "overview",
-              "guides/what-is-attestprotocol",
-              "guides/why-attestations",
-              "guides/how-it-works",
-              "guides/use-cases"
+              "overview"
             ]
           },
           {
@@ -52,8 +48,7 @@
             "group": "Supported Chains",
             "pages": [
               "chains/stellar/overview",
-              "chains/solana/overview",
-              "chains/starknet/overview"
+              "chains/solana/overview"
             ]
           },
           {
@@ -64,14 +59,12 @@
               "guides/asset-ownership",
               "guides/dao-voting",
               "guides/event-attendance",
-              "guides/github-credentials",
-              "guides/privacy-options"
+              "guides/github-credentials"
             ]
           },
           {
             "group": "SDK Reference",
             "pages": [
-              "sdks/typescript/installation",
               "sdks/typescript/initialization",
               "sdks/typescript/methods",
               "sdks/typescript/examples",
@@ -85,7 +78,6 @@
               "reference/attest",
               "reference/schema",
               "reference/authority",
-              "reference/administration",
               "reference/webhooks",
               "reference/errors"
             ]
