@@ -14,6 +14,9 @@
     "light": "#ff8700",
     "dark": "#ff8700"
   },
+  "fonts": {
+    "family": "Mona Sans"
+  },
 
   "navigation": {
     "tabs": [
@@ -31,7 +34,9 @@
             "group": "Concepts",
             "pages": [
               "concepts/how-it-works",
-              "concepts/attestations"
+              "concepts/attestations",
+              "concepts/schemas",
+              "concepts/delegation"
             ]
           },
           {
@@ -49,6 +54,16 @@
               "solana/getting-started",
               "chains/solana/overview"
             ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/react-integration",
+              "examples/kyc-verification",
+              "examples/event-attendance",
+              "examples/dao-membership",
+              "examples/identity"
+            ]
           }
         ]
       }
@@ -56,19 +71,24 @@
     "global": {
       "anchors": [
         {
+          "anchor": "Explorer",
+          "href": "https://stellar.attestprotocol.org",
+          "icon": "magnifying-glass"
+        },
+        {
+          "anchor": "Sandbox",
+          "href": "https://sandbox.attest.so",
+          "icon": "play"
+        },
+        {
           "anchor": "GitHub",
           "href": "https://github.com/daccred/attest.so",
           "icon": "github"
         },
         {
-          "anchor": "Community",
+          "anchor": "Discord",
           "href": "https://discord.com/invite/7kVur5ja5m",
           "icon": "discord"
-        },
-        {
-          "anchor": "Dashboard",
-          "href": "https://attestprotocol.org",
-          "icon": "desktop"
         }
       ]
     }
@@ -101,8 +121,12 @@
         "header": "Resources",
         "items": [
           {
-            "label": "Dashboard",
-            "href": "https://attestprotocol.org"
+            "label": "Explorer",
+            "href": "https://stellar.attestprotocol.org"
+          },
+          {
+            "label": "Testnet",
+            "href": "https://testnet.attestprotocol.org"
           },
           {
             "label": "Enterprise",
