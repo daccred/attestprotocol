@@ -1,0 +1,89 @@
+---
+title: 'Schema Design'
+description: 'Creating and using schemas on Stellar'
+---
+
+## What is a Schema?
+
+A schema defines the structure of attestation data. All attestations reference a schema.
+
+## Creating a Schema
+
+```typescript
+await client.createSchema({
+  definition: 'struct KYC { bool verified; string level; u64 timestamp; }',
+  revocable: true,
+  resolver: undefined, // Optional: validation contract
+  options: { signer }
+});
+```
+
+## Schema Syntax
+
+```
+struct Name { type field; type field; ... }
+```
+
+### Supported Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `bool` | Boolean | `true`, `false` |
+| `string` | Text | `"hello"` |
+| `u32` | Unsigned 32-bit | `42` |
+| `u64` | Unsigned 64-bit | `1234567890` |
+| `i32` | Signed 32-bit | `-42` |
+| `i64` | Signed 64-bit | `-1234567890` |
+| `bytes` | Binary data | `0x1234...` |
+
+## Example Schemas
+
+### KYC Verification
+```
+struct KYC { bool verified; string level; string provider; u64 expiry; }
+```
+
+### Professional Credential
+```
+struct Credential { string title; string issuer; u64 issuedAt; u64 expiresAt; }
+```
+
+### Reputation Score
+```
+struct Reputation { u32 score; string category; u64 updatedAt; }
+```
+
+## Generating Schema UID
+
+Schema UIDs are deterministic based on definition + authority:
+
+```typescript
+const schemaUid = client.generateSchemaUid({
+  definition: 'struct KYC { bool verified; string level; }',
+  authority: keypair.publicKey(),
+  resolver: undefined
+});
+```
+
+## Querying Schemas
+
+```typescript
+// By UID
+const schema = await client.getSchema(schemaUid);
+
+// By wallet (schemas you created)
+const { schemas } = await client.fetchSchemasByWallet({
+  walletAddress: keypair.publicKey(),
+  limit: 50
+});
+
+// Latest schemas
+const latest = await client.fetchSchemas(100);
+```
+
+## Best Practices
+
+1. **Keep it simple** - Only include necessary fields
+2. **Use appropriate types** - `u64` for timestamps, `bool` for flags
+3. **Consider revocability** - Set `revocable: true` for credentials that may need invalidation
+4. **Version schemas** - Include version in name: `struct KYC_v2 { ... }`

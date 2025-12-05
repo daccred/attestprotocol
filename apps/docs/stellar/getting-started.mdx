@@ -1,0 +1,163 @@
+---
+title: 'Getting Started with Stellar'
+description: 'Complete guide to using AttestProtocol on Stellar'
+---
+
+## Prerequisites
+
+- Node.js 18+
+- Stellar testnet account with XLM ([Friendbot](https://friendbot.stellar.org))
+- Basic TypeScript knowledge
+
+## Installation
+
+```bash
+npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
+```
+
+## Client Setup
+
+```typescript
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+import { Keypair, Networks, Transaction } from '@stellar/stellar-sdk';
+
+const keypair = Keypair.fromSecret(process.env.STELLAR_SECRET_KEY!);
+
+const signer = {
+  signTransaction: async (xdr: string) => {
+    const tx = new Transaction(xdr, Networks.TESTNET);
+    tx.sign(keypair);
+    return tx.toXDR();
+  }
+};
+
+const client = new StellarAttestationClient({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  network: 'testnet',
+  publicKey: keypair.publicKey()
+});
+```
+
+## 1. Create a Schema
+
+Schemas define the structure of your attestations.
+
+```typescript
+const result = await client.createSchema({
+  definition: 'struct Identity { string name; u32 age; bool verified; }',
+  revocable: true,
+  options: { signer }
+});
+
+// Get schema UID for later use
+const schemaUid = client.generateSchemaUid({
+  definition: 'struct Identity { string name; u32 age; bool verified; }',
+  authority: keypair.publicKey()
+});
+```
+
+**Schema Definition Syntax:**
+- `string` - Text values
+- `bool` - True/false
+- `u32`, `u64`, `i32`, `i64` - Integers
+- `bytes` - Binary data
+
+## 2. Create an Attestation
+
+```typescript
+await client.attest({
+  schemaUid,
+  value: JSON.stringify({
+    name: 'Alice',
+    age: 30,
+    verified: true
+  }),
+  expirationTime: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
+  options: { signer }
+});
+```
+
+## 3. Query Attestations
+
+```typescript
+// By UID
+const attestation = await client.getAttestation(attestationUid);
+
+// By wallet
+const { attestations } = await client.fetchAttestationsByWallet({
+  walletAddress: 'GXXX...',
+  limit: 50
+});
+
+// Latest attestations
+const latest = await client.fetchAttestations(100);
+```
+
+## 4. Revoke an Attestation
+
+Only works if schema has `revocable: true`.
+
+```typescript
+await client.revoke({
+  attestationUid,
+  options: { signer }
+});
+```
+
+## BLS Delegation (Gas-less)
+
+Allow third parties to submit attestations on your behalf.
+
+```typescript
+// Generate BLS keys
+const blsKeys = client.generateBlsKeys();
+
+// Register public key on-chain
+await client.registerBlsKey(Buffer.from(blsKeys.publicKey), { signer });
+
+// Create delegated attestation (submitter pays gas)
+await client.attestByDelegation({
+  attester: keypair.publicKey(),
+  schema_uid: schemaUid,
+  subject: 'GSUBJECT...',
+  value: JSON.stringify({ verified: true }),
+  nonce: BigInt(1),
+  deadline: BigInt(Date.now() + 3600000),
+  expiration_time: undefined,
+  signature: signatureBuffer
+}, { signer: submitterSigner });
+```
+
+## Error Handling
+
+```typescript
+import { ContractError, NetworkError } from '@attestprotocol/stellar-sdk';
+
+try {
+  await client.attest({ ... });
+} catch (error) {
+  if (error instanceof ContractError) {
+    console.log('Contract error:', error.message);
+  } else if (error instanceof NetworkError) {
+    console.log('Network error:', error.message);
+  }
+}
+```
+
+## Contract Addresses
+
+| Network | Protocol Contract |
+|---------|-------------------|
+| Testnet | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
+| Mainnet | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Schema Design" icon="cube" href="/stellar/schemas">
+    Best practices for schema design
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/stellar/reference">
+    Complete method reference
+  </Card>
+</CardGroup>

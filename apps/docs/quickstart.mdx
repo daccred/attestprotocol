@@ -1,0 +1,81 @@
+---
+title: 'Quickstart'
+description: 'Create your first attestation in 5 minutes'
+---
+
+## Install
+
+```bash
+npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
+```
+
+## Initialize Client
+
+```typescript
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+import { Keypair, Networks, Transaction } from '@stellar/stellar-sdk';
+
+// Your Stellar keypair
+const keypair = Keypair.fromSecret('SXXXX...');
+
+// Create signer
+const signer = {
+  signTransaction: async (xdr: string) => {
+    const tx = new Transaction(xdr, Networks.TESTNET);
+    tx.sign(keypair);
+    return tx.toXDR();
+  }
+};
+
+// Initialize client
+const client = new StellarAttestationClient({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  network: 'testnet',
+  publicKey: keypair.publicKey()
+});
+```
+
+## Create Schema
+
+```typescript
+const schemaResult = await client.createSchema({
+  definition: 'struct KYC { bool verified; string level; }',
+  revocable: true,
+  options: { signer }
+});
+```
+
+## Create Attestation
+
+```typescript
+// Generate schema UID
+const schemaUid = client.generateSchemaUid({
+  definition: 'struct KYC { bool verified; string level; }',
+  authority: keypair.publicKey()
+});
+
+// Attest
+await client.attest({
+  schemaUid,
+  value: JSON.stringify({ verified: true, level: 'basic' }),
+  options: { signer }
+});
+```
+
+## Verify Attestation
+
+```typescript
+const attestation = await client.getAttestation(attestationUid);
+console.log(attestation.result);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Stellar Guide" icon="star" href="/stellar/getting-started">
+    Complete walkthrough with all features
+  </Card>
+  <Card title="Schemas" icon="cube" href="/stellar/schemas">
+    Learn schema design patterns
+  </Card>
+</CardGroup>

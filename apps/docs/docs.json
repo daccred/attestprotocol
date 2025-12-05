@@ -21,15 +21,32 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Getting Started",
             "pages": [
-              "overview"
+              "overview",
+              "quickstart"
             ]
           },
           {
-            "group": "Chains",
+            "group": "Concepts",
             "pages": [
-              "chains/stellar/overview",
+              "concepts/how-it-works",
+              "concepts/attestations"
+            ]
+          },
+          {
+            "group": "Stellar",
+            "pages": [
+              "stellar/getting-started",
+              "stellar/schemas",
+              "stellar/reference",
+              "chains/stellar/overview"
+            ]
+          },
+          {
+            "group": "Solana",
+            "pages": [
+              "solana/getting-started",
               "chains/solana/overview"
             ]
           }

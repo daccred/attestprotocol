@@ -1,0 +1,228 @@
+---
+title: 'Stellar SDK Reference'
+description: 'Complete method reference for @attestprotocol/stellar-sdk'
+---
+
+## Installation
+
+```bash
+npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
+```
+
+## Client Initialization
+
+```typescript
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
+
+const client = new StellarAttestationClient({
+  rpcUrl: string,           // Soroban RPC URL
+  network: 'testnet' | 'mainnet',
+  publicKey: string,        // Your Stellar public key
+  contractId?: string,      // Optional: custom contract ID
+  allowHttp?: boolean       // Allow HTTP (dev only)
+});
+```
+
+## Core Methods
+
+### createSchema
+
+```typescript
+await client.createSchema({
+  definition: string,    // Schema structure
+  revocable?: boolean,   // Default: true
+  resolver?: string,     // Optional resolver contract
+  options?: { signer, simulate }
+})
+```
+
+### attest
+
+```typescript
+await client.attest({
+  schemaUid: Buffer,
+  value: string,           // JSON-encoded data
+  subject?: string,        // Defaults to attester
+  expirationTime?: number,
+  options?: { signer, simulate }
+})
+```
+
+### revoke
+
+```typescript
+await client.revoke({
+  attestationUid: Buffer,
+  options?: { signer, simulate }
+})
+```
+
+### getSchema
+
+```typescript
+const result = await client.getSchema(uid: Buffer)
+```
+
+### getAttestation
+
+```typescript
+const result = await client.getAttestation(uid: Buffer)
+```
+
+## Query Methods
+
+### fetchSchemas
+
+```typescript
+const schemas = await client.fetchSchemas(limit?: number)
+```
+
+### fetchAttestations
+
+```typescript
+const attestations = await client.fetchAttestations(limit?: number)
+```
+
+### fetchSchemasByWallet
+
+```typescript
+const { schemas, total, hasMore } = await client.fetchSchemasByWallet({
+  walletAddress: string,
+  limit?: number
+})
+```
+
+### fetchAttestationsByWallet
+
+```typescript
+const { attestations, total, hasMore } = await client.fetchAttestationsByWallet({
+  walletAddress: string,
+  limit?: number
+})
+```
+
+## BLS Delegation
+
+### generateBlsKeys
+
+```typescript
+const { publicKey, privateKey } = client.generateBlsKeys()
+```
+
+### registerBlsKey
+
+```typescript
+await client.registerBlsKey(publicKey: Buffer, options?: { signer })
+```
+
+### getBlsKey
+
+```typescript
+const blsKey = await client.getBlsKey(attester?: string)
+```
+
+### attestByDelegation
+
+```typescript
+await client.attestByDelegation({
+  attester: string,
+  schema_uid: Buffer,
+  subject: string,
+  value: string,
+  nonce: bigint,
+  deadline: bigint,
+  expiration_time: bigint | undefined,
+  signature: Buffer
+}, options?: { signer })
+```
+
+### revokeByDelegation
+
+```typescript
+await client.revokeByDelegation({
+  attestation_uid: Buffer,
+  schema_uid: Buffer,
+  subject: string,
+  revoker: string,
+  nonce: bigint,
+  deadline: bigint,
+  signature: Buffer
+}, options?: { signer })
+```
+
+## Utility Methods
+
+### generateSchemaUid
+
+```typescript
+const uid = client.generateSchemaUid({
+  definition: string,
+  authority: string,
+  resolver?: string
+})
+```
+
+### generateAttestationUid
+
+```typescript
+const uid = client.generateAttestationUid({
+  schemaUid: Buffer,
+  subject: string,
+  nonce: bigint
+})
+```
+
+### submitTransaction
+
+```typescript
+const result = await client.submitTransaction(signedXdr: string, {
+  skipSimulation?: boolean
+})
+```
+
+## Types
+
+### TransactionSigner
+
+```typescript
+interface TransactionSigner {
+  signTransaction(xdr: string): Promise<string>
+}
+```
+
+### TxOptions
+
+```typescript
+interface TxOptions {
+  signer?: TransactionSigner
+  simulate?: boolean
+  timeoutInSeconds?: number
+}
+```
+
+## Contract Addresses
+
+| Network | Protocol Contract |
+|---------|-------------------|
+| Testnet | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
+| Mainnet | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+
+## Exports
+
+```typescript
+// Main client
+export { StellarAttestationClient } from '@attestprotocol/stellar-sdk'
+
+// Service classes
+export { StellarSchemaRegistry, AttestProtocolAuthority }
+
+// Utilities
+export {
+  generateBlsKeys, encodeSchema, decodeSchema,
+  generateAttestationUid, generateSchemaUid,
+  createSimpleSchema
+}
+
+// Error classes
+export { ContractError, NetworkError, ConfigurationError }
+```
