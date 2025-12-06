@@ -1,0 +1,81 @@
+---
+title: 'Introduction'
+description: 'Decentralized attestation infrastructure on Stellar and Solana'
+---
+
+## What is AttestProtocol?
+
+A shared, on-chain attestation registry for issuing and verifying credentials. Create verifiable claims about users, assets, or events that any application can read and trust.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="KYC Verification" icon="id-card">
+    Issue "user is verified" attestations that any dApp can check
+  </Card>
+  <Card title="Event Attendance" icon="calendar-check">
+    Prove someone attended a conference, hackathon, or workshop
+  </Card>
+  <Card title="DAO Membership" icon="users">
+    Verify membership status and roles across applications
+  </Card>
+  <Card title="Professional Credentials" icon="certificate">
+    Issue certifications that users can share and verifiers can trust
+  </Card>
+</CardGroup>
+
+## Who is this for?
+
+### Attestation Issuers
+
+KYC providers, event organizers, DAOs, and certification bodies who want to:
+- Issue verifiable credentials on-chain
+- Enable other apps to verify your attestations
+- Build reputation without siloed databases
+
+### Verifiers
+
+Applications that need to:
+- Check if a user has valid KYC from any trusted provider
+- Gate access based on credentials without vendor lock-in
+- Query attestations from multiple issuers in one place
+
+### Developers
+
+Teams building:
+- Reputation systems using aggregated attestation data
+- Credential verification into existing dApps
+- Multi-source identity checks
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **BLS Delegation** | Sign attestations off-chain, submit on-chain. Submitter pays gas. |
+| **Flexible Schemas** | Define custom attestation structures for any use case |
+| **Multi-Chain** | Stellar (production) + Solana (beta) |
+| **Revocable** | Invalidate attestations when credentials expire or are revoked |
+
+## Contract Addresses
+
+| Network | Protocol Contract |
+|---------|-------------------|
+| **Testnet** | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
+| **Mainnet** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Create your first attestation in 5 minutes
+  </Card>
+  <Card title="How It Works" icon="lightbulb" href="/concepts/how-it-works">
+    Understand the architecture
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/react-integration">
+    Real-world integration patterns
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/daccred/attest.so">
+    Source code
+  </Card>
+</CardGroup>
