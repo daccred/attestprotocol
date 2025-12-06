@@ -1,6 +1,6 @@
 ---
-title: 'Introduction'
-description: 'Decentralized attestation infrastructure on Stellar and Solana'
+title: "Introduction"
+description: "Decentralized attestation infrastructure for onchain reputation"
 ---
 
 ## What is AttestProtocol?
@@ -29,6 +29,7 @@ A shared, on-chain attestation registry for issuing and verifying credentials. C
 ### Attestation Issuers
 
 KYC providers, event organizers, DAOs, and certification bodies who want to:
+
 - Issue verifiable credentials on-chain
 - Enable other apps to verify your attestations
 - Build reputation without siloed databases
@@ -36,6 +37,7 @@ KYC providers, event organizers, DAOs, and certification bodies who want to:
 ### Verifiers
 
 Applications that need to:
+
 - Check if a user has valid KYC from any trusted provider
 - Gate access based on credentials without vendor lock-in
 - Query attestations from multiple issuers in one place
@@ -43,23 +45,24 @@ Applications that need to:
 ### Developers
 
 Teams building:
+
 - Reputation systems using aggregated attestation data
 - Credential verification into existing dApps
 - Multi-source identity checks
 
 ## Key Features
 
-| Feature | Description |
-|---------|-------------|
-| **BLS Delegation** | Sign attestations off-chain, submit on-chain. Submitter pays gas. |
-| **Flexible Schemas** | Define custom attestation structures for any use case |
-| **Multi-Chain** | Stellar (production) + Solana (beta) |
-| **Revocable** | Invalidate attestations when credentials expire or are revoked |
+| Feature              | Description                                                       |
+| -------------------- | ----------------------------------------------------------------- |
+| **BLS Delegation**   | Sign attestations off-chain, submit on-chain. Submitter pays gas. |
+| **Flexible Schemas** | Define custom attestation structures for any use case             |
+| **Multi-Chain**      | Stellar (production) + Solana (beta)                              |
+| **Revocable**        | Invalidate attestations when credentials expire or are revoked    |
 
 ## Contract Addresses
 
-| Network | Protocol Contract |
-|---------|-------------------|
+| Network     | Protocol Contract                                          |
+| ----------- | ---------------------------------------------------------- |
 | **Testnet** | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
 | **Mainnet** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
 
