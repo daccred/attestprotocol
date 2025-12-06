@@ -7,7 +7,7 @@
     "light": "/images/logo-light.svg",
     "dark": "/images/logo-dark.svg"
   },
-  "favicon": "/images/favicon.svg",
+  "favicon": "/images/favicon.ico",
   "colors": {
     "primary": "#ff8700",
     "light": "#ff8700",
@@ -156,7 +156,8 @@
   "seo": {
     "metatags": {
       "og:title": "AttestProtocol Documentation",
-      "og:description": "The trust layer for Web3. Build verifiable reputation systems with one line of code."
+      "og:description": "The trust layer for Web3. Build verifiable reputation systems with one line of code.",
+      "og:image": "/images/og.png"
     }
   }
 }
