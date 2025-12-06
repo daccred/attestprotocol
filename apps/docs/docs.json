@@ -5,8 +5,7 @@
   "theme": "aspen",
   "logo": {
     "light": "/images/logo-light.svg",
-    "dark": "/images/logo-dark.svg",
-    "href": "/"
+    "dark": "/images/logo-dark.svg"
   },
   "favicon": "/images/favicon.svg",
   "colors": {
@@ -127,14 +126,6 @@
           {
             "label": "Testnet",
             "href": "https://testnet.attestprotocol.org"
-          },
-          {
-            "label": "Enterprise",
-            "href": "#"
-          },
-          {
-            "label": "Status",
-            "href": "#"
           }
         ]
       },
@@ -144,10 +135,6 @@
           {
             "label": "About",
             "href": "https://attestprotocol.org/about"
-          },
-          {
-            "label": "Blog",
-            "href": "#"
           },
           {
             "label": "Privacy Policy",
