@@ -1,11 +1,25 @@
 ---
 title: "Introduction"
-description: "Decentralized attestation infrastructure for onchain reputation"
+description: "Add proof to anything, on-chain without writing a line of code"
 ---
 
-## What is AttestProtocol?
+## Whenever you need to prove something onchain — *identity, action, ownership, or permission* — you don't need to write a new smart contract or spin up a ZK system.
 
-A shared, on-chain attestation registry for issuing and verifying credentials. Create verifiable claims about users, assets, or events that any application can read and trust.
+Attest provides a proof infrastructure to build anything from **network states, DAOs, DePIN, and RWA**. With our **Unified Trust Framework,** developers on Stellar can integrate reputation and trust mechanisms in their dApps.
+
+## Add proof to anything, on-chain without writing a line of code.
+
+AttestProtocol is a Soroban-based framework that lets you attach attestations to any wallet, asset, or event. Whether that's *proof of identity, contribution, credential, or ownership.* No contracts, no infrastructure, no ZK black magic required.
+
+<Tip>
+Think of it like SSL for blockchains — a lightweight trust signal you can apply anywhere.
+</Tip>
+
+## An Open Standard for Trust
+
+Using our **Attestation Service** you get an open standard for verifying *statements, transactions, and authorities* — identity proofs **on the blockchain**.
+
+Our **Soroban framework** enhances the reliability of digital interactions on the Stellar Network with a composable blockchain-based **Attestation Service.**
 
 ## Use Cases
 
@@ -54,6 +68,8 @@ Teams building:
 
 | Feature              | Description                                                       |
 | -------------------- | ----------------------------------------------------------------- |
+| **Authorities**      | Register as a trusted issuer and create custom attestation schemas |
+| **Custom Resolvers** | Define rules about who can attest — fees, permissions, rewards    |
 | **BLS Delegation**   | Sign attestations off-chain, submit on-chain. Submitter pays gas. |
 | **Flexible Schemas** | Define custom attestation structures for any use case             |
 | **Multi-Chain**      | Stellar (production) + Solana (beta)                              |
@@ -72,13 +88,13 @@ Teams building:
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Create your first attestation in 5 minutes
   </Card>
+  <Card title="Authorities" icon="shield" href="/concepts/authorities">
+    Register as a trusted attestation issuer
+  </Card>
+  <Card title="Custom Resolvers" icon="code" href="/concepts/resolvers">
+    Define custom validation rules for attestations
+  </Card>
   <Card title="How It Works" icon="lightbulb" href="/concepts/how-it-works">
     Understand the architecture
-  </Card>
-  <Card title="Examples" icon="code" href="/examples/react-integration">
-    Real-world integration patterns
-  </Card>
-  <Card title="GitHub" icon="github" href="https://github.com/daccred/attest.so">
-    Source code
   </Card>
 </CardGroup>
