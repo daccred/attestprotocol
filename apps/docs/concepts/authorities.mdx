@@ -1,50 +1,58 @@
 ---
 title: "Authorities"
-description: "The trust layer that governs schema ownership and verification"
+description: "Schema ownership and verified issuer status"
 ---
 
 ## What is an Authority?
 
-Every wallet address that deploys a schema automatically becomes the **authority** of that schema. This means you control who can issue attestations, set the resolver rules, and manage revocations for your schema.
+In AttestProtocol, an **authority** is simply the wallet address that created a schema. When you deploy a schema, you become its authority — the permanent owner of that schema definition.
 
 <Note>
-You don't need to register as an authority to create schemas. Any wallet can deploy a schema and become its authority automatically.
+Schemas and attestations are **permissionless by default**. Anyone can create schemas, and anyone can issue attestations to any schema — unless a resolver restricts access.
 </Note>
 
-## Schema Authority vs Verified Authority
+## The Permissionless Model
 
-There are two levels of authority in AttestProtocol:
+AttestProtocol is designed to be open:
 
-| Type | Description | Requirements |
-|------|-------------|--------------|
-| **Schema Authority** | Automatic ownership when you deploy a schema | Just deploy a schema |
-| **Verified Authority** | Platform verification with badge and trust signals | Register + verify credentials |
+| Action | Default Behavior | With Resolver |
+|--------|------------------|---------------|
+| **Create Schema** | Anyone can create | Anyone can create |
+| **Issue Attestation** | Anyone can attest to any schema | Resolver controls access |
+| **Revoke Attestation** | Original attester can revoke | Resolver controls access |
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AUTHORITY MODEL                        │
+│                   PERMISSIONLESS BY DEFAULT                 │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│   Any Wallet                                                │
-│   └── Deploys Schema ──► Becomes Schema Authority           │
-│       ├── Controls schema resolver                          │
-│       ├── Issues attestations                               │
-│       └── Manages revocations                               │
+│   Schema Creation                                           │
+│   └── Any wallet can deploy a schema                        │
+│       └── Creator becomes the "authority" (owner)           │
 │                                                             │
-│   ─────────────────────────────────────────────────────     │
+│   Attestation Issuance                                      │
+│   └── Any wallet can attest to any schema                   │
+│       └── Unless a resolver restricts access                │
 │                                                             │
-│   Verified Authority (Optional)                             │
-│   └── Registers + Verifies ──► Gets Platform Badge          │
-│       ├── stellar.toml verification                         │
-│       ├── DID/Verifiable Credentials                        │
-│       └── External credential verification                  │
+│   Access Control (Optional)                                 │
+│   └── Attach a resolver to control who can attest           │
+│       ├── Fee requirements                                  │
+│       ├── Allowlists                                        │
+│       └── Custom validation logic                           │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Schema Authority (Automatic)
+## Schema Authority
 
-When you deploy a schema, your wallet address is recorded as its authority. This gives you permanent control over that schema.
+When you deploy a schema, your wallet address is recorded as its **authority**. This gives you:
+
+- **Ownership record** — Your address is permanently linked to the schema
+- **Schema definition control** — You defined the structure and resolver at creation
+
+<Warning>
+Being a schema authority does **not** mean only you can attest. By default, anyone can issue attestations to your schema. Use a [resolver](/concepts/resolvers) if you need access control.
+</Warning>
 
 ### Creating a Schema
 
@@ -56,42 +64,42 @@ const attest = new StellarAttest({
   contractId: 'CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP'
 });
 
-// Deploy a schema - you automatically become its authority
+// Deploy a schema - you become its authority
 const schemaUid = await attest.schema.register({
   schema: 'string name, bool verified, uint64 timestamp',
-  resolver: resolverAddress, // Optional custom resolver
+  resolver: null,  // No resolver = permissionless attestations
   revocable: true
 });
 
-// Your wallet is now the authority of this schema
+// Anyone can now attest to this schema
 ```
 
-### Authority Permissions
+### Restricting Access with Resolvers
 
-As a schema authority, you can:
+If you want to control who can attest to your schema, attach a resolver:
 
-| Permission | Description |
-|------------|-------------|
-| **Issue Attestations** | Create verifiable claims following your schema |
-| **Revoke Attestations** | Invalidate previously issued attestations (if schema allows) |
-| **Set Resolver** | Define custom validation rules at schema creation |
-| **Delegate Signing** | Allow delegates to sign on your behalf (via BLS delegation) |
+```typescript
+// Deploy a schema with access control
+const schemaUid = await attest.schema.register({
+  schema: 'string credential, uint64 issuedAt',
+  resolver: 'CRESOLVER...', // Resolver controls who can attest
+  revocable: true
+});
 
-<Info>
-Schema ownership is permanent. Once you deploy a schema, the authority field cannot be changed.
-</Info>
+// Now only addresses approved by the resolver can attest
+```
+
+See [Custom Resolvers](/concepts/resolvers) for details on implementing access control.
 
 ## Verified Authority (Optional)
 
-Becoming a **Verified Authority** is optional but provides trust signals on the AttestProtocol platform:
+Separately from schema authority, you can register as a **Verified Authority** on the AttestProtocol platform. This is completely optional and provides:
 
 - **Platform badge** — Visual indicator that you're a verified issuer
 - **Trust signals** — Users can see your verification status
 - **Discovery** — Easier for verifiers to find trusted attestation sources
 
 ### Verification Methods
-
-You can verify your authority through multiple methods:
 
 <CardGroup cols={2}>
   <Card title="stellar.toml" icon="star">
@@ -105,9 +113,9 @@ You can verify your authority through multiple methods:
 ### Registering as a Verified Authority
 
 ```typescript
-// Register for verified authority status
+// Register for verified authority status (optional)
 const result = await attest.authority.registerAuthority(
-  'GAUTHORITY...', // Your authority address
+  'GAUTHORITY...', // Your address
   JSON.stringify({
     name: 'Acme Verification Inc.',
     website: 'https://acme.com',
@@ -140,16 +148,6 @@ When registering as a verified authority, include relevant information:
 
 ## Checking Authority Status
 
-### Check Schema Authority
-
-Every attestation includes the attester address, letting verifiers know who issued it:
-
-```typescript
-// Get attestation details
-const attestation = await attest.getAttestation(attestationUid);
-console.log('Issued by:', attestation.data.attester);
-```
-
 ### Check Verified Authority Status
 
 ```typescript
@@ -161,56 +159,66 @@ const authority = await attest.authority.fetchAuthority('GADDRESS...');
 console.log('Authority:', authority.data);
 ```
 
+### Check Attestation Issuer
+
+Every attestation includes the attester address:
+
+```typescript
+// Get attestation details
+const attestation = await attest.getAttestation(attestationUid);
+console.log('Issued by:', attestation.data.attester);
+```
+
 ## Delegation
 
 Authorities can delegate attestation signing to other addresses using BLS delegation. This enables:
 
 - **Gasless attestations** — Users sign off-chain, a relayer submits on-chain
 - **Batch operations** — Issue many attestations in one transaction
-- **Separation of concerns** — Keep hot wallets separate from authority keys
+- **Separation of concerns** — Keep hot wallets separate from main keys
 
 See [Delegation](/concepts/delegation) for detailed documentation.
 
 ## Authority vs Resolver
 
-While authorities control **who owns schemas**, resolvers control **the rules** for attestation creation:
+| Concept | Purpose | Controls |
+|---------|---------|----------|
+| **Authority** | Schema ownership record | Who created the schema |
+| **Resolver** | Access control & validation | Who can attest, fees, rules |
 
-| Aspect | Authority | Resolver |
-|--------|-----------|----------|
-| **Purpose** | Schema ownership | Enforces business rules |
-| **Assignment** | Automatic on schema creation | Optional, attached to schemas |
-| **Control** | Creates schemas, issues attestations | Validates attestation operations |
-| **Examples** | KYC provider, DAO, certification body | Payment validation, access control |
+- **Authority** = "Who owns this schema definition"
+- **Resolver** = "What rules apply when attesting"
 
-See [Custom Resolvers](/concepts/resolvers) for more on implementing validation logic.
+Without a resolver, attestations are permissionless. With a resolver, you can enforce any access control logic you need.
+
+See [Custom Resolvers](/concepts/resolvers) for implementation details.
 
 ## Security Considerations
 
 <Warning>
-Your authority address controls all schemas you create. Keep your private keys secure.
+Keep your private keys secure. While attestations are permissionless, your verified authority status and any resolver admin rights are tied to your address.
 </Warning>
 
 ### Best Practices
 
-1. **Use a dedicated address** — Don't reuse addresses across protocols
+1. **Use resolvers for access control** — Don't assume only you will attest to your schema
 2. **Secure your keys** — Use hardware wallets or multi-sig for production
 3. **Verify your domain** — Set up stellar.toml for additional trust
-4. **Monitor attestations** — Track what's being issued under your authority
-5. **Plan revocation** — Have a process for revoking compromised attestations
+4. **Monitor attestations** — Track what's being issued to your schemas
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Create Your First Schema" icon="square-plus" href="/stellar/schemas">
-    Define attestation structures for your use case
-  </Card>
   <Card title="Custom Resolvers" icon="code" href="/concepts/resolvers">
-    Add validation rules to your attestations
+    Add access control to your schemas
+  </Card>
+  <Card title="Create a Schema" icon="square-plus" href="/stellar/schemas">
+    Define attestation structures
   </Card>
   <Card title="Delegation" icon="signature" href="/concepts/delegation">
     Enable off-chain signing with BLS delegation
   </Card>
   <Card title="Examples" icon="book-open" href="/examples/kyc-verification">
-    See real-world authority implementations
+    See real-world implementations
   </Card>
 </CardGroup>

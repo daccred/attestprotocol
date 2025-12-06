@@ -8,12 +8,14 @@ description: "Define rules about who can attest to a schema"
 Resolvers are smart contracts that define **custom validation rules** for attestations. When you attach a resolver to a schema, every attestation must pass through the resolver's validation logic before being created.
 
 <Note>
-Think of resolvers as gatekeepers — they control the conditions under which attestations can be created or revoked.
+Schemas and attestations are **permissionless by default**. Resolvers are how you add access control, fees, or custom rules when you need them.
 </Note>
 
 ## Why Use Resolvers?
 
-Without resolvers, any authority can issue attestations on any schema. Resolvers let you:
+By default, **anyone can attest to any schema**. This permissionless model is intentional — it enables open, composable attestations. But sometimes you need control:
+
+Resolvers let you:
 
 - **Control access** — Only allow specific addresses to attest
 - **Collect fees** — Require payment before attestation creation
@@ -22,7 +24,15 @@ Without resolvers, any authority can issue attestations on any schema. Resolvers
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                    ATTESTATION FLOW                            │
+│              WITHOUT RESOLVER (Permissionless)                 │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│   Anyone ──► Attest to Any Schema ──► ✅ Attestation Created   │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│               WITH RESOLVER (Access Control)                   │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │   1. Attestation Request                                       │
@@ -295,10 +305,10 @@ const schemaWithResolver = await attest.schema.register({
   revocable: true
 });
 
-// Schema without a resolver (no validation)
+// Schema without a resolver (permissionless - anyone can attest)
 const schemaWithoutResolver = await attest.schema.register({
   schema: 'string note',
-  resolver: null, // No resolver
+  resolver: null, // No resolver = anyone can attest
   revocable: false
 });
 ```
