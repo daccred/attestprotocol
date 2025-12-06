@@ -1,0 +1,219 @@
+---
+title: "Authorities"
+description: "The trust layer that governs who can issue attestations"
+---
+
+## What is an Authority?
+
+An Authority is a registered entity that has the right to create schemas and issue attestations. Think of authorities as **trusted issuers** — they're the organizations, protocols, or individuals that vouch for the claims being made on-chain.
+
+<Note>
+Authorities are the foundation of trust in the attestation ecosystem. Without a registered authority, you cannot create schemas or issue attestations.
+</Note>
+
+## The Authority Model
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      AUTHORITY LAYER                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Authority                                                 │
+│   ├── Registers with Protocol (pays fee)                   │
+│   ├── Creates Schema(s)                                    │
+│   │   ├── Defines attestation structure                    │
+│   │   ├── Sets resolver (optional)                         │
+│   │   └── Configures revocability                          │
+│   │                                                         │
+│   └── Issues Attestation(s)                                │
+│       ├── Signs claims about subjects                      │
+│       ├── Follows schema structure                         │
+│       └── Can revoke (if schema allows)                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Authority Registration
+
+Before issuing attestations, an authority must register with the protocol. This creates an on-chain record that establishes trust.
+
+### Registration Requirements
+
+| Requirement | Description |
+|-------------|-------------|
+| **Stellar Address** | A valid Stellar account to serve as the authority |
+| **Registration Fee** | 100 XLM fee to prevent spam registrations |
+| **Metadata** | JSON-formatted information about the authority |
+
+### Using the SDK
+
+```typescript
+import { StellarAttest } from '@attestprotocol/stellar-sdk';
+
+const attest = new StellarAttest({
+  network: 'testnet',
+  contractId: 'CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP'
+});
+
+// Register as an authority
+const result = await attest.authority.registerAuthority(
+  'GAUTHORITY...', // Authority address
+  JSON.stringify({
+    name: 'Acme Verification Inc.',
+    website: 'https://acme.com',
+    description: 'KYC and identity verification provider'
+  })
+);
+```
+
+### Using the CLI
+
+```bash
+# Register the current wallet as an authority
+pnpm cli authority --chain stellar --action register --key-file ./keypair.json
+```
+
+## Authority Properties
+
+Each registered authority has the following on-chain properties:
+
+```typescript
+interface Authority {
+  address: string;      // Stellar address of the authority
+  metadata: string;     // JSON metadata (name, website, etc.)
+  isVerified: boolean;  // Verification status
+}
+```
+
+### Metadata Best Practices
+
+Include relevant information in your authority metadata:
+
+```json
+{
+  "name": "Your Organization Name",
+  "website": "https://your-domain.com",
+  "description": "Brief description of what you attest to",
+  "logo": "https://your-domain.com/logo.png",
+  "contact": "attestations@your-domain.com",
+  "categories": ["identity", "kyc", "credentials"]
+}
+```
+
+## Authority Verification
+
+Authorities can be verified by protocol administrators. Verification provides an additional layer of trust for consumers of attestations.
+
+```typescript
+// Check if an authority is verified
+const isVerified = await attest.authority.isAuthority('GAUTHORITY...');
+
+// Fetch full authority details
+const authority = await attest.authority.fetchAuthority('GAUTHORITY...');
+console.log(authority.data);
+```
+
+## Authority Permissions
+
+Once registered, an authority can:
+
+| Permission | Description |
+|------------|-------------|
+| **Create Schemas** | Define new attestation types with custom fields |
+| **Issue Attestations** | Create verifiable claims following their schemas |
+| **Revoke Attestations** | Invalidate previously issued attestations (if schema allows) |
+| **Collect Fees** | Optionally charge for attestation services via resolvers |
+| **Delegate Signing** | Allow delegates to sign on their behalf (via BLS delegation) |
+
+## Schema Ownership
+
+When an authority creates a schema, they become the permanent owner:
+
+```typescript
+// Authority creates a schema
+const schemaUid = await attest.schema.register({
+  schema: 'string name, bool verified, uint64 timestamp',
+  resolver: resolverAddress, // Optional custom resolver
+  revocable: true
+});
+
+// The authority field is automatically set to the caller
+```
+
+The authority field in a schema cannot be changed after creation. This ensures that schema ownership is permanent and verifiable.
+
+## Delegation
+
+Authorities can delegate attestation signing to other addresses using BLS delegation. This enables:
+
+- **Gasless attestations** — Users sign off-chain, a relayer submits on-chain
+- **Batch operations** — Issue many attestations in one transaction
+- **Separation of concerns** — Keep hot wallets separate from authority keys
+
+See [Delegation](/concepts/delegation) for detailed documentation.
+
+## Security Considerations
+
+<Warning>
+Your authority address controls all schemas and attestations you create. Keep your private keys secure and consider using multi-signature setups for high-value authorities.
+</Warning>
+
+### Best Practices
+
+1. **Use a dedicated address** — Don't reuse addresses across protocols
+2. **Secure your keys** — Use hardware wallets or multi-sig for production
+3. **Verify metadata** — Ensure your `stellar.toml` matches your registration
+4. **Monitor attestations** — Track what's being issued under your authority
+5. **Plan revocation** — Have a process for revoking compromised attestations
+
+## Authority vs Resolver
+
+While authorities control **who can issue** attestations, resolvers control **the rules** for attestation creation:
+
+| Aspect | Authority | Resolver |
+|--------|-----------|----------|
+| **Purpose** | Establishes trust/identity | Enforces business rules |
+| **Registration** | One-time with fee | Attached to schemas |
+| **Control** | Creates schemas, issues attestations | Validates attestation operations |
+| **Examples** | KYC provider, DAO, certification body | Payment validation, access control |
+
+See [Custom Resolvers](/concepts/resolvers) for more on implementing validation logic.
+
+## Querying Authorities
+
+### Check Authority Status
+
+```typescript
+// Verify if an address is a registered authority
+const isAuthority = await attest.authority.isAuthority('GADDRESS...');
+
+if (isAuthority.data) {
+  console.log('This address is a registered authority');
+}
+```
+
+### Fetch Authority Details
+
+```typescript
+// Get full authority information
+const authority = await attest.authority.fetchAuthority('GADDRESS...');
+
+console.log('Authority:', authority.data.metadata);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Your First Schema" icon="square-plus" href="/stellar/schemas">
+    Define attestation structures for your use case
+  </Card>
+  <Card title="Custom Resolvers" icon="code" href="/concepts/resolvers">
+    Add validation rules to your attestations
+  </Card>
+  <Card title="Delegation" icon="signature" href="/concepts/delegation">
+    Enable off-chain signing with BLS delegation
+  </Card>
+  <Card title="Examples" icon="book-open" href="/examples/kyc-verification">
+    See real-world authority implementations
+  </Card>
+</CardGroup>
