@@ -26,18 +26,18 @@
             "group": "Getting Started",
             "pages": [
               "introduction",
+              "concepts/how-it-works",
               "quickstart"
             ]
           },
           {
             "group": "Concepts",
             "pages": [
-              "concepts/how-it-works",
-              "concepts/authorities",
-              "concepts/resolvers",
-              "concepts/attestations",
               "concepts/schemas",
-              "concepts/delegation"
+              "concepts/attestations",
+              "concepts/resolvers",
+              "concepts/authorities",
+              "concepts/delegates"
             ]
           },
           {
