@@ -1,5 +1,5 @@
 ---
-title: "Custom Resolvers"
+title: "Resolvers"
 description: "Define rules about who can attest to a schema"
 ---
 
@@ -282,8 +282,8 @@ stellar contract deploy \
 ### Step 4: Attach to a Schema
 
 ```typescript
-const schemaUid = await attest.schema.register({
-  schema: 'string credential, uint64 issuedAt',
+const schemaUid = await client.createSchema({
+  definition: 'string credential, uint64 issuedAt',
   resolver: 'CRESOLVER...', // Your deployed resolver address
   revocable: true
 });
@@ -294,20 +294,20 @@ const schemaUid = await attest.schema.register({
 When you create a schema, you can optionally attach a resolver:
 
 ```typescript
-import { StellarAttest } from '@attestprotocol/stellar-sdk';
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
 
-const attest = new StellarAttest({ network: 'testnet' });
+const client = new StellarAttestationClient({ network: 'testnet' });
 
 // Schema with a resolver
-const schemaWithResolver = await attest.schema.register({
-  schema: 'string credential, bool verified',
+const schemaWithResolver = await client.createSchema({
+  definition: 'string credential, bool verified',
   resolver: 'CRESOLVER...', // Resolver contract address
   revocable: true
 });
 
 // Schema without a resolver (permissionless - anyone can attest)
-const schemaWithoutResolver = await attest.schema.register({
-  schema: 'string note',
+const schemaWithoutResolver = await client.createSchema({
+  definition: 'string note',
   resolver: null, // No resolver = anyone can attest
   revocable: false
 });

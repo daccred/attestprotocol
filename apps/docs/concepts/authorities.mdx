@@ -57,16 +57,16 @@ Being a schema authority does **not** mean only you can attest. By default, anyo
 ### Creating a Schema
 
 ```typescript
-import { StellarAttest } from '@attestprotocol/stellar-sdk';
+import { StellarAttestationClient } from '@attestprotocol/stellar-sdk';
 
-const attest = new StellarAttest({
+const client = new StellarAttestationClient({
   network: 'testnet',
   contractId: 'CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP'
 });
 
 // Deploy a schema - you become its authority
-const schemaUid = await attest.schema.register({
-  schema: 'string name, bool verified, uint64 timestamp',
+const schemaUid = await client.createSchema({
+  definition: 'string name, bool verified, uint64 timestamp',
   resolver: null,  // No resolver = permissionless attestations
   revocable: true
 });
@@ -80,8 +80,8 @@ If you want to control who can attest to your schema, attach a resolver:
 
 ```typescript
 // Deploy a schema with access control
-const schemaUid = await attest.schema.register({
-  schema: 'string credential, uint64 issuedAt',
+const schemaUid = await client.createSchema({
+  definition: 'string credential, uint64 issuedAt',
   resolver: 'CRESOLVER...', // Resolver controls who can attest
   revocable: true
 });
@@ -89,7 +89,7 @@ const schemaUid = await attest.schema.register({
 // Now only addresses approved by the resolver can attest
 ```
 
-See [Custom Resolvers](/concepts/resolvers) for details on implementing access control.
+See [Resolvers](/concepts/resolvers) for details on implementing access control.
 
 ## Verified Authority (Optional)
 
@@ -113,8 +113,13 @@ Separately from schema authority, you can register as a **Verified Authority** o
 ### Registering as a Verified Authority
 
 ```typescript
+import { AttestProtocolAuthority } from '@attestprotocol/stellar-sdk';
+
+// Initialize authority client
+const authority = new AttestProtocolAuthority(config, authorityClient);
+
 // Register for verified authority status (optional)
-const result = await attest.authority.registerAuthority(
+const result = await authority.registerAuthority(
   'GAUTHORITY...', // Your address
   JSON.stringify({
     name: 'Acme Verification Inc.',
@@ -152,11 +157,11 @@ When registering as a verified authority, include relevant information:
 
 ```typescript
 // Check if an address is a verified authority
-const isVerified = await attest.authority.isAuthority('GADDRESS...');
+const isVerified = await authority.isAuthority('GADDRESS...');
 
 // Fetch full authority details
-const authority = await attest.authority.fetchAuthority('GADDRESS...');
-console.log('Authority:', authority.data);
+const authorityData = await authority.fetchAuthority('GADDRESS...');
+console.log('Authority:', authorityData.data);
 ```
 
 ### Check Attestation Issuer
@@ -165,11 +170,11 @@ Every attestation includes the attester address:
 
 ```typescript
 // Get attestation details
-const attestation = await attest.getAttestation(attestationUid);
+const attestation = await client.getAttestation(attestationUid);
 console.log('Issued by:', attestation.data.attester);
 ```
 
-## Delegation
+## Delegates
 
 Authorities can delegate attestation signing to other addresses using BLS delegation. This enables:
 
@@ -177,7 +182,7 @@ Authorities can delegate attestation signing to other addresses using BLS delega
 - **Batch operations** — Issue many attestations in one transaction
 - **Separation of concerns** — Keep hot wallets separate from main keys
 
-See [Delegation](/concepts/delegation) for detailed documentation.
+See [Delegates](/concepts/delegates) for detailed documentation.
 
 ## Authority vs Resolver
 
@@ -191,7 +196,7 @@ See [Delegation](/concepts/delegation) for detailed documentation.
 
 Without a resolver, attestations are permissionless. With a resolver, you can enforce any access control logic you need.
 
-See [Custom Resolvers](/concepts/resolvers) for implementation details.
+See [Resolvers](/concepts/resolvers) for implementation details.
 
 ## Security Considerations
 
@@ -209,13 +214,13 @@ Keep your private keys secure. While attestations are permissionless, your verif
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Custom Resolvers" icon="code" href="/concepts/resolvers">
+  <Card title="Resolvers" icon="code" href="/concepts/resolvers">
     Add access control to your schemas
   </Card>
-  <Card title="Create a Schema" icon="square-plus" href="/stellar/schemas">
+  <Card title="Schemas" icon="cube" href="/concepts/schemas">
     Define attestation structures
   </Card>
-  <Card title="Delegation" icon="signature" href="/concepts/delegation">
+  <Card title="Delegates" icon="signature" href="/concepts/delegates">
     Enable off-chain signing with BLS delegation
   </Card>
   <Card title="Examples" icon="book-open" href="/examples/kyc-verification">
