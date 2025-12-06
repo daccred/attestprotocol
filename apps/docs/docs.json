@@ -5,10 +5,9 @@
   "theme": "aspen",
   "logo": {
     "light": "/images/logo-light.svg",
-    "dark": "/images/logo-dark.svg",
-    "href": "https://attestprotocol.org"
+    "dark": "/images/logo-dark.svg"
   },
-  "favicon": "/images/favicon.svg",
+  "favicon": "/images/favicon.ico",
   "colors": {
     "primary": "#ff8700",
     "light": "#ff8700",
@@ -26,17 +25,19 @@
           {
             "group": "Getting Started",
             "pages": [
-              "overview",
+              "introduction",
+              "concepts/how-it-works",
               "quickstart"
             ]
           },
           {
             "group": "Concepts",
             "pages": [
-              "concepts/how-it-works",
-              "concepts/attestations",
               "concepts/schemas",
-              "concepts/delegation"
+              "concepts/attestations",
+              "concepts/resolvers",
+              "concepts/authorities",
+              "concepts/delegates"
             ]
           },
           {
@@ -98,10 +99,6 @@
       {
         "label": "GitHub",
         "href": "https://github.com/daccred/attest.so"
-      },
-      {
-        "label": "Community",
-        "href": "https://discord.com/invite/7kVur5ja5m"
       }
     ],
     "primary": {
@@ -121,20 +118,16 @@
         "header": "Resources",
         "items": [
           {
+            "label": "Website",
+            "href": "https://attestprotocol.org"
+          },
+          {
             "label": "Explorer",
             "href": "https://stellar.attestprotocol.org"
           },
           {
             "label": "Testnet",
             "href": "https://testnet.attestprotocol.org"
-          },
-          {
-            "label": "Enterprise",
-            "href": "https://attestprotocol.org/enterprise"
-          },
-          {
-            "label": "Status",
-            "href": "https://status.attestprotocol.org"
           }
         ]
       },
@@ -144,10 +137,6 @@
           {
             "label": "About",
             "href": "https://attestprotocol.org/about"
-          },
-          {
-            "label": "Blog",
-            "href": "https://attestprotocol.org/blog"
           },
           {
             "label": "Privacy Policy",
@@ -170,7 +159,7 @@
     "metatags": {
       "og:title": "AttestProtocol Documentation",
       "og:description": "The trust layer for Web3. Build verifiable reputation systems with one line of code.",
-      "og:image": "/images/og-image.png"
+      "og:image": "/images/og.png"
     }
   }
 }

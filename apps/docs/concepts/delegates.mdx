@@ -1,11 +1,11 @@
 ---
-title: 'Delegation'
+title: 'Delegates'
 description: 'Off-chain signing with BLS keys for scalable attestation issuance'
 ---
 
-## What is Delegation?
+## What are Delegates?
 
-Delegation separates signing authority from transaction submission. An authority signs attestation data off-chain using BLS keys, while a delegate submits the transaction on-chain.
+Delegates are addresses authorized to submit attestations on behalf of an authority. The authority signs attestation data off-chain using BLS keys, and the delegate submits the transaction on-chain.
 
 ```
 ┌─────────────────────┐          ┌─────────────────────┐
@@ -28,7 +28,37 @@ Delegation separates signing authority from transaction submission. An authority
                               └─────────────────────┘
 ```
 
-## Why Use Delegation?
+<Note>
+The authority can also act as their own delegate. This is useful when you want to use BLS signing for your own submissions, bear gas fees directly, or keep the workflow simple without involving third parties.
+</Note>
+
+## Attester vs Subject
+
+When an attestation is created through delegation, two key fields are set:
+
+| Field | Description |
+|-------|-------------|
+| **attester** | The delegate or authority who submits the transaction on-chain |
+| **subject** | The recipient of the attestation — the individual or entity being attested about |
+
+```typescript
+// Example: Authority signs, delegate submits
+const request = await createDelegatedAttestationRequest({
+  schemaUid: Buffer.from('abc123...', 'hex'),
+  subject: 'GUSER123...',  // The person receiving the attestation
+  data: JSON.stringify({ verified: true })
+}, blsPrivateKey, client.getClientInstance());
+
+// When submitted by delegate:
+// attestation.attester = 'GDELEGATE...' (who submitted)
+// attestation.subject = 'GUSER123...' (who the attestation is about)
+```
+
+<Info>
+The **subject** always remains the individual or entity the attestation describes, regardless of who submits the transaction.
+</Info>
+
+## Why Use Delegates?
 
 ### Scalability
 Issue thousands of attestations without the authority signing each transaction. The authority pre-signs batches; delegates handle submission.
@@ -41,6 +71,37 @@ Delegates pay transaction fees. Authorities don't need to hold tokens for gas.
 
 ### Flexibility
 Multiple delegates can submit on behalf of one authority. Useful for geographic distribution or redundancy.
+
+## Self-Delegation
+
+An authority can submit their own delegated attestations. This pattern is useful for:
+
+- **Gas management** — Authority pays fees directly from their wallet
+- **Simplicity** — No need to coordinate with separate delegate infrastructure
+- **Testing** — Validate the delegation flow before involving third parties
+
+```typescript
+// Authority acts as their own delegate
+const authority = new StellarAttestationClient({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  network: 'testnet',
+  publicKey: 'GAUTHORITY...'
+});
+
+// Sign the request
+const request = await createDelegatedAttestationRequest({
+  schemaUid: Buffer.from('abc...', 'hex'),
+  subject: 'GSUBJECT...',
+  data: JSON.stringify({ verified: true })
+}, blsPrivateKey, authority.getClientInstance());
+
+// Submit as self (authority is the delegate)
+const result = await authority.attestByDelegation(request, {
+  signer: authoritySigner
+});
+
+// Result: attester = authority, subject = GSUBJECT
+```
 
 ## BLS Keys
 
@@ -166,7 +227,7 @@ const request = await createDelegatedAttestationRequest({
   data: JSON.stringify({ verified: true, level: 'premium' })
 }, privateKey, authority.getClientInstance());
 
-// Delegate submits (can be different wallet)
+// Delegate submits (can be different wallet or same as authority)
 const delegate = new StellarAttestationClient({
   rpcUrl: 'https://soroban-testnet.stellar.org',
   network: 'testnet',
@@ -181,10 +242,10 @@ const result = await delegate.attestByDelegation(request, {
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="SDK Reference" icon="code" href="/stellar/reference#bls-delegation">
-    Complete delegation API
+  <Card title="Authorities" icon="shield" href="/concepts/authorities">
+    Schema ownership and trust management
   </Card>
-  <Card title="Code Patterns" icon="book" href="/examples/patterns">
-    Real-world examples
+  <Card title="Examples" icon="book" href="/examples/react-integration">
+    Real-world integration examples
   </Card>
 </CardGroup>

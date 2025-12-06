@@ -3,6 +3,7 @@
  *
  * Stellar implementation of the Attest Protocol SDK
  */
+import './common/buffer'
 
 export { getAttesterNonce } from './delegation'
 
