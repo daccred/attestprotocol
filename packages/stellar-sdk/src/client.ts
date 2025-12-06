@@ -6,6 +6,7 @@
  */
 
 import { Networks, rpc, xdr, Transaction } from '@stellar/stellar-sdk'
+import { isBuffer } from './common/buffer'
 
 import {
   type Client as ClientType,
@@ -833,7 +834,7 @@ export class StellarAttestationClient {
     paramsOrUid: RevokeParams | Buffer,
     legacyOptions?: TxOptions
   ): { attestationUid: Buffer; options?: TxOptions } {
-    if (Buffer.isBuffer(paramsOrUid)) {
+    if (isBuffer(paramsOrUid)) {
       return {
         attestationUid: paramsOrUid,
         options: legacyOptions,
@@ -850,7 +851,7 @@ export class StellarAttestationClient {
     legacySubject?: string,
     legacyNonce?: bigint
   ): { schemaUid: Buffer; subject: string; nonce: bigint } {
-    if (Buffer.isBuffer(paramsOrSchemaUid)) {
+    if (isBuffer(paramsOrSchemaUid)) {
       return {
         schemaUid: paramsOrSchemaUid,
         subject: legacySubject || '',
@@ -931,4 +932,3 @@ export class StellarAttestationClient {
     }
   }
 }
-
