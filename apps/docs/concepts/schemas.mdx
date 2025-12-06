@@ -59,7 +59,112 @@ Schemas support these primitive types:
 | `u64` | 64 bits | Unsigned integer (timestamps) |
 | `i32` | 32 bits | Signed integer |
 | `i64` | 64 bits | Signed integer |
+| `i128` | 128 bits | Large signed integer |
 | `bytes` | Variable | Binary data |
+| `address` | 56 chars | Stellar wallet address |
+| `symbol` | Variable | Soroban symbol type |
+| `timestamp` | 64 bits | Unix timestamp |
+| `amount` | Variable | Token amounts |
+
+## Encoding Formats
+
+The SDK's `SorobanSchemaEncoder` supports multiple encoding formats. Your choice of format affects how data is stored and indexed.
+
+<Note>
+These encoding formats determine how your schema and attestation data are stored on-chain and indexed by our explorer. Choose the format that best fits your use case.
+</Note>
+
+### Typed Schema (Default)
+
+Native typed schema with validation rules. Best for most use cases.
+
+```typescript
+import { SorobanSchemaEncoder, StellarDataType } from '@attestprotocol/stellar-sdk';
+
+const encoder = new SorobanSchemaEncoder({
+  name: 'KYC',
+  description: 'Know Your Customer verification',
+  fields: [
+    { name: 'verified', type: StellarDataType.BOOL },
+    { name: 'level', type: StellarDataType.STRING, validation: { enum: ['basic', 'enhanced', 'premium'] } },
+    { name: 'verifiedAt', type: StellarDataType.TIMESTAMP },
+    { name: 'subject', type: StellarDataType.ADDRESS }
+  ]
+});
+
+// Encode attestation data with validation
+const encoded = await encoder.encodeData({
+  verified: true,
+  level: 'premium',
+  verifiedAt: Date.now(),
+  subject: 'GUSER...'
+});
+```
+
+**Features:**
+- Type validation at encode time
+- Optional field validation (min, max, pattern, enum)
+- Auto-conversion for timestamps and addresses
+
+### JSON Schema
+
+Standard JSON Schema format for interoperability with external tools.
+
+```typescript
+// Convert typed schema to JSON Schema
+const jsonSchema = encoder.toJSONSchema();
+
+// Create encoder from existing JSON Schema
+const fromJson = SorobanSchemaEncoder.fromJSONSchema({
+  title: 'EventAttendance',
+  type: 'object',
+  properties: {
+    eventId: { type: 'string' },
+    attended: { type: 'boolean' },
+    timestamp: { type: 'number' }
+  },
+  required: ['eventId', 'attended']
+});
+```
+
+**Use cases:**
+- Integration with JSON Schema validators
+- Generating forms from schemas
+- API documentation and OpenAPI specs
+
+### XDR Format
+
+Stellar's native binary format for efficient storage and **selective disclosure**.
+
+```typescript
+// Encode schema to XDR
+const xdrString = encoder.toXDR();
+// Returns: "XDR:AAAA..." (base64-encoded binary)
+
+// Decode XDR back to schema
+const decoded = SorobanSchemaEncoder.fromXDR(xdrString);
+```
+
+**Benefits:**
+- **Compact storage** — Binary format reduces on-chain storage costs
+- **Selective disclosure** — Reveal only specific fields without exposing entire attestation
+- **Native Soroban compatibility** — Direct integration with contract data structures
+
+<Info>
+XDR provides selective disclosure, not encryption. Data is structured so you can reveal individual fields while keeping others private. For true privacy, combine with off-chain encrypted storage.
+</Info>
+
+### Format Comparison
+
+| Format | Storage Size | Indexer Support | Use Case |
+|--------|--------------|-----------------|----------|
+| **Typed** | Medium | Full | General purpose, validation needed |
+| **JSON** | Larger | Full | Interoperability, external tools |
+| **XDR** | Smallest | Full | Compact storage, selective disclosure |
+
+<Warning>
+All three formats are fully supported by the AttestProtocol indexer and explorer. Your attestation data will be queryable regardless of encoding choice.
+</Warning>
 
 ## Schema UID
 
