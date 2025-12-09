@@ -218,24 +218,22 @@ The repository follows a monorepo structure using pnpm workspaces:
 ```
 attest.so/
 ├── apps/
-│   ├── docs/
-│   └── explorer/
+│   ├── docs/          # Documentation site (Mintlify)
+│   └── horizon/       # Stellar blockchain indexer (Express.js + MongoDB)
 ├── contracts/
-│   ├── stellar/
-│   ├── solana/
-│   ├── starknet/
-│   ├── sui/
-│   └── aptos/
+│   ├── stellar/       # Soroban contracts (authority, protocol, resolvers)
+│   ├── solana/        # Anchor-based Solana contracts
+│   ├── starknet/      # Cairo contracts
+│   ├── sui/           # Move contracts
+│   └── aptos/         # Move contracts
 ├── packages/
-│   ├── sdk/
-│   ├── stellar-sdk/
-│   ├── solana-sdk/
-│   ├── starknet-sdk/
-│   ├── cli/
-│   └── core/
+│   ├── sdk/           # Unified TypeScript SDK
+│   ├── stellar-sdk/   # Stellar-specific SDK implementation
+│   ├── solana-sdk/    # Solana-specific SDK implementation
+│   ├── starknet-sdk/  # Starknet-specific SDK implementation
+│   ├── cli/           # CLI for all chains
+│   └── core/          # Core SDK abstractions
 └── examples/
-    ├── identity-verification/
-    └── reputation-system/
 ```
 
 See [NAMING.md](./NAMING.md) for detailed information about naming conventions and directory structure standards.

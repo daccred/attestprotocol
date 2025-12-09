@@ -6,18 +6,33 @@ This document outlines the standardized naming conventions for structuring a mul
 
 The root directory structure of the monorepo organizes the different components of the project into logical sections. This includes the `apps/`, `contracts/`, `packages/`, and `examples/` directories.
 
-- **`apps/`**: Contains front-end or application-level projects for interacting with the blockchain protocols.
+- **`apps/`**: Contains application-level projects including documentation and blockchain indexers.
 - **`contracts/`**: Contains the smart contract implementations, divided by blockchain platforms.
-- **`packages/`**: Contains reusable libraries, utilities, and shared logic across platforms.
+- **`packages/`**: Contains reusable libraries, SDKs, CLI tools, and shared logic across platforms.
 - **`examples/`**: Contains example applications, integrations, and testing scenarios.
 
 ```bash
 ROOT/
-├── apps/
-├── contracts/
-├── examples/
-├── packages/
+├── apps/                 # Application-level projects
+│   ├── docs/            # Documentation site (Mintlify)
+│   └── horizon/         # Stellar blockchain indexer
+├── contracts/            # Smart contract implementations
+│   ├── stellar/         # Soroban contracts
+│   ├── solana/          # Anchor contracts
+│   ├── starknet/        # Cairo contracts
+│   ├── sui/             # Move contracts (Sui)
+│   └── aptos/           # Move contracts (Aptos)
+├── packages/             # Reusable libraries and SDKs
+│   ├── sdk/             # Unified SDK
+│   ├── stellar-sdk/     # Stellar SDK
+│   ├── solana-sdk/      # Solana SDK
+│   ├── starknet-sdk/    # Starknet SDK
+│   ├── cli/             # CLI tool
+│   └── core/            # Core abstractions
+├── examples/             # Example implementations
 ├── README.md
+├── NAMING.md
+├── CLAUDE.md
 ├── pnpm-workspace.yaml
 ├── package.json
 └── LICENSE
@@ -90,16 +105,21 @@ The `packages/` directory is used for shared logic, SDKs, and reusable modules.
 
 - **`sdk/`**: A multi-chain TypeScript SDK providing a unified interface for interacting with the attestation protocol on any supported blockchain.
 - **`stellar-sdk/`**: A specialized package containing utilities, types, and helpers specifically for interacting with the Stellar/Soroban implementation. This allows for more granular control and access to Stellar-specific features.
-- **`common/`**: Shared utilities and types used across the monorepo.
+- **`solana-sdk/`**: Solana-specific SDK implementation for interacting with Anchor-based contracts.
+- **`starknet-sdk/`**: Starknet-specific SDK implementation for interacting with Cairo contracts.
+- **`cli/`**: A unified command-line interface for all supported chains.
+- **`core/`**: Core SDK abstractions shared across all chain-specific implementations.
 
 #### Packages Structure Example:
 
 ```bash
 packages/
-|-- sdk/
-|-- stellar-sdk/
-|-- cli/
-|-- common/
+|-- sdk/           # Unified multi-chain SDK
+|-- stellar-sdk/   # Stellar-specific SDK
+|-- solana-sdk/    # Solana-specific SDK
+|-- starknet-sdk/  # Starknet-specific SDK
+|-- cli/           # Command-line interface
+|-- core/          # Core abstractions
 ```
 
 ### 5. **Redundant Naming: Pitfall & Solution**
