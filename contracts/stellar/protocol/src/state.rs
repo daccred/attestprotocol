@@ -29,6 +29,44 @@ pub enum DataKey {
     ///
     /// One-to-one mapping: wallet address -> BLS public key
     AttesterPublicKey(Address),
+    /// Key for storing the number of schemas registered by an address
+    ///
+    /// Used to enforce per-address schema registration limits
+    SchemaCount(Address),
+    /// Key for storing schema registration configuration
+    ///
+    /// Contains limits for schema registration to prevent DoS attacks
+    SchemaConfig,
+}
+
+/// ╔══════════════════════════════════════════════════════════════════════════╗
+/// ║                         SchemaRegistrationConfig                          ║
+/// ╚══════════════════════════════════════════════════════════════════════════╝
+///
+/// Configuration for schema registration limits to prevent DoS attacks.
+///
+/// These limits help protect instance storage from being exhausted by
+/// malicious actors registering many schemas.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct SchemaRegistrationConfig {
+    /// Maximum number of schemas a single address can register
+    ///
+    /// Default: 10 schemas per address
+    pub max_schemas_per_address: u32,
+    /// Maximum size of a schema definition in bytes
+    ///
+    /// Default: 4096 bytes (4KB)
+    pub max_definition_size: u32,
+}
+
+impl Default for SchemaRegistrationConfig {
+    fn default() -> Self {
+        Self {
+            max_schemas_per_address: 10,
+            max_definition_size: 4096,
+        }
+    }
 }
 
 /// ╔══════════════════════════════════════════════════════════════════════════╗

@@ -10,5 +10,7 @@ pub use self::delegation::{
     attest_by_delegation, create_attestation_message, create_revocation_message, get_attest_dst, get_revoke_dst,
     revoke_by_delegation,
 };
-pub use self::schema::register_schema;
-pub use self::schema::get_schema_or_fail;
+pub use self::schema::{
+    get_address_schema_count, get_schema_or_fail, get_schema_registration_config, register_schema,
+    set_schema_registration_config,
+};

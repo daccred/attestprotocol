@@ -174,3 +174,143 @@ fn test_same_definition_different_authority_succeeds() {
     // UIDs should be different since authority is part of the hash input
     assert_ne!(uid1, uid2);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ► Schema Registration DoS Protection Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Test that schema registration is limited per address to prevent DoS attacks.
+/// Each address can only register up to max_schemas_per_address schemas.
+#[test]
+fn test_schema_quota_exceeded() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let authority = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Set a low quota for testing (3 schemas per address)
+    client.set_schema_config(&admin, &3, &4096);
+
+    // Register 3 schemas (should succeed)
+    for i in 0..3 {
+        let schema_def = SorobanString::from_str(&env, &format!(r#"{{"name":"Schema{}","version":"1.0"}}"#, i));
+        let _uid = client.register(&authority, &schema_def, &None, &true);
+    }
+
+    // Verify schema count
+    let count = client.get_schema_count(&authority);
+    assert_eq!(count, 3);
+
+    // 4th schema should fail with SchemaQuotaExceeded
+    let schema_def = SorobanString::from_str(&env, r#"{"name":"Schema4","version":"1.0"}"#);
+    let result = client.try_register(&authority, &schema_def, &None, &true);
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap(), Ok(Error::SchemaQuotaExceeded));
+}
+
+/// Test that schema definitions exceeding the size limit are rejected.
+#[test]
+fn test_schema_definition_too_large() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let authority = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Set a small definition size limit for testing (100 bytes)
+    client.set_schema_config(&admin, &10, &100);
+
+    // Try to register a schema with definition larger than limit
+    let large_definition = "x".repeat(150); // 150 bytes, exceeds 100 byte limit
+    let schema_def = SorobanString::from_str(&env, &large_definition);
+    let result = client.try_register(&authority, &schema_def, &None, &true);
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap(), Ok(Error::SchemaDefinitionTooLarge));
+}
+
+/// Test that admin can configure schema registration limits.
+#[test]
+fn test_admin_can_set_schema_config() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Get default config
+    let config = client.get_schema_config();
+    assert_eq!(config.max_schemas_per_address, 10);
+    assert_eq!(config.max_definition_size, 4096);
+
+    // Admin sets new config
+    client.set_schema_config(&admin, &5, &2048);
+
+    // Verify config was updated
+    let config = client.get_schema_config();
+    assert_eq!(config.max_schemas_per_address, 5);
+    assert_eq!(config.max_definition_size, 2048);
+}
+
+/// Test that non-admin cannot set schema config.
+#[test]
+fn test_non_admin_cannot_set_schema_config() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Non-admin tries to set config
+    let result = client.try_set_schema_config(&non_admin, &5, &2048);
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap(), Ok(Error::NotAuthorized));
+}
+
+/// Test that different addresses have independent schema quotas.
+#[test]
+fn test_independent_address_quotas() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let authority1 = Address::generate(&env);
+    let authority2 = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Set quota to 2 schemas per address
+    client.set_schema_config(&admin, &2, &4096);
+
+    // Authority1 registers 2 schemas
+    for i in 0..2 {
+        let schema_def = SorobanString::from_str(&env, &format!(r#"{{"name":"Auth1Schema{}"}}"#, i));
+        let _uid = client.register(&authority1, &schema_def, &None, &true);
+    }
+
+    // Authority1 is at quota
+    assert_eq!(client.get_schema_count(&authority1), 2);
+
+    // Authority2 should still be able to register (independent quota)
+    let schema_def = SorobanString::from_str(&env, r#"{"name":"Auth2Schema1"}"#);
+    let result = client.try_register(&authority2, &schema_def, &None, &true);
+    assert!(result.is_ok());
+    assert_eq!(client.get_schema_count(&authority2), 1);
+}

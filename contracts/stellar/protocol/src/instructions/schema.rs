@@ -1,8 +1,32 @@
 use crate::errors::Error;
 use crate::events;
-use crate::state::{DataKey, Schema};
+use crate::state::{DataKey, Schema, SchemaRegistrationConfig};
 use crate::utils;
 use soroban_sdk::{Address, BytesN, Env, String};
+
+/// Gets the schema registration configuration, returning defaults if not set.
+fn get_schema_config(env: &Env) -> SchemaRegistrationConfig {
+    env.storage()
+        .instance()
+        .get::<DataKey, SchemaRegistrationConfig>(&DataKey::SchemaConfig)
+        .unwrap_or_default()
+}
+
+/// Gets the current schema count for an address.
+fn get_schema_count(env: &Env, address: &Address) -> u32 {
+    env.storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::SchemaCount(address.clone()))
+        .unwrap_or(0)
+}
+
+/// Increments the schema count for an address.
+fn increment_schema_count(env: &Env, address: &Address) {
+    let current = get_schema_count(env, address);
+    env.storage()
+        .instance()
+        .set(&DataKey::SchemaCount(address.clone()), &(current + 1));
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 /// Retrieves a schema record by its unique identifier (UID).
@@ -83,6 +107,21 @@ pub fn register_schema(
     // Require authorization from the caller
     caller.require_auth();
 
+    // Get schema registration configuration (limits)
+    let config = get_schema_config(env);
+
+    // Check schema definition size limit to prevent storage exhaustion
+    let definition_size = schema_definition.len() as u32;
+    if definition_size > config.max_definition_size {
+        return Err(Error::SchemaDefinitionTooLarge);
+    }
+
+    // Check per-address schema quota to prevent DoS attacks
+    let current_count = get_schema_count(env, &caller);
+    if current_count >= config.max_schemas_per_address {
+        return Err(Error::SchemaQuotaExceeded);
+    }
+
     // Generate schema UID
     let schema_uid = utils::generate_schema_uid(env, &schema_definition, &caller, &resolver);
 
@@ -103,8 +142,87 @@ pub fn register_schema(
     };
     env.storage().instance().set(&schema_key, &schema);
 
+    // Increment the schema count for this address
+    increment_schema_count(env, &caller);
+
     // Publish schema registration event
     events::schema_registered(env, &schema_uid, &schema, &caller);
 
     Ok(schema_uid)
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+/// Sets the schema registration configuration (admin only).
+////////////////////////////////////////////////////////////////////////////////////
+///
+/// This function allows the contract admin to configure limits for schema registration
+/// to prevent DoS attacks and storage exhaustion.
+///
+/// # Authorization
+/// Requires authorization from the contract admin.
+///
+/// # Arguments
+/// * `env` - The Soroban environment.
+/// * `admin` - The admin address (must match the stored admin).
+/// * `max_schemas_per_address` - Maximum schemas a single address can register.
+/// * `max_definition_size` - Maximum size of schema definitions in bytes.
+///
+/// # Returns
+/// * `Result<(), Error>` - Ok on success, or an error if not authorized.
+pub fn set_schema_registration_config(
+    env: &Env,
+    admin: Address,
+    max_schemas_per_address: u32,
+    max_definition_size: u32,
+) -> Result<(), Error> {
+    // Verify admin authorization
+    let stored_admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .ok_or(Error::NotInitialized)?;
+
+    if admin != stored_admin {
+        return Err(Error::NotAuthorized);
+    }
+    admin.require_auth();
+
+    // Store the new configuration
+    let config = SchemaRegistrationConfig {
+        max_schemas_per_address,
+        max_definition_size,
+    };
+    env.storage().instance().set(&DataKey::SchemaConfig, &config);
+
+    Ok(())
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+/// Gets the current schema registration configuration.
+////////////////////////////////////////////////////////////////////////////////////
+///
+/// Returns the current limits for schema registration. If no configuration has been
+/// set, returns the default values.
+///
+/// # Arguments
+/// * `env` - The Soroban environment.
+///
+/// # Returns
+/// * `SchemaRegistrationConfig` - The current configuration with limits.
+pub fn get_schema_registration_config(env: &Env) -> SchemaRegistrationConfig {
+    get_schema_config(env)
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+/// Gets the number of schemas registered by an address.
+////////////////////////////////////////////////////////////////////////////////////
+///
+/// # Arguments
+/// * `env` - The Soroban environment.
+/// * `address` - The address to check.
+///
+/// # Returns
+/// * `u32` - The number of schemas registered by the address.
+pub fn get_address_schema_count(env: &Env, address: &Address) -> u32 {
+    get_schema_count(env, address)
 }

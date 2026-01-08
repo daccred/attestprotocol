@@ -9,11 +9,13 @@ pub mod interfaces;
 pub mod state;
 pub mod utils;
 
-use state::{Attestation, BlsPublicKey, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest, Schema};
+use state::{Attestation, BlsPublicKey, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest, Schema, SchemaRegistrationConfig};
 
 use instructions::{
-    attest, attest_by_delegation, get_attest_dst, get_attestation_record, get_bls_public_key, get_revoke_dst,
-    register_bls_public_key, register_schema, revoke_attestation, revoke_by_delegation, get_schema_or_fail,
+    attest, attest_by_delegation, get_address_schema_count, get_attest_dst, get_attestation_record,
+    get_bls_public_key, get_revoke_dst, get_schema_or_fail, get_schema_registration_config,
+    register_bls_public_key, register_schema, revoke_attestation, revoke_by_delegation,
+    set_schema_registration_config,
 };
 
 #[contract]
@@ -89,6 +91,70 @@ impl AttestationContract {
     pub fn get_schema(env: Env, schema_uid: BytesN<32>) -> Result<Schema, errors::Error> {
         get_schema_or_fail(&env, &schema_uid)
     }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ► Schema Registration Configuration (DoS Protection)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    /// Sets the schema registration configuration (admin only).
+    ///
+    /// This function allows the contract admin to configure limits for schema registration
+    /// to prevent DoS attacks through storage exhaustion. The limits include:
+    /// - Maximum schemas per address: Prevents a single address from registering too many schemas
+    /// - Maximum definition size: Prevents excessively large schema definitions
+    ///
+    /// # Arguments
+    ///
+    /// * `admin` - The admin address (must match the stored admin and sign the transaction).
+    /// * `max_schemas_per_address` - Maximum number of schemas a single address can register.
+    /// * `max_definition_size` - Maximum size of schema definitions in bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(errors::Error::NotInitialized)` if contract is not initialized.
+    /// Returns `Err(errors::Error::NotAuthorized)` if caller is not the admin.
+    pub fn set_schema_config(
+        env: Env,
+        admin: Address,
+        max_schemas_per_address: u32,
+        max_definition_size: u32,
+    ) -> Result<(), errors::Error> {
+        set_schema_registration_config(&env, admin, max_schemas_per_address, max_definition_size)
+    }
+
+    /// Gets the current schema registration configuration.
+    ///
+    /// Returns the current limits for schema registration. If no configuration has been
+    /// explicitly set by the admin, returns the default values:
+    /// - max_schemas_per_address: 10
+    /// - max_definition_size: 4096 bytes
+    ///
+    /// # Returns
+    ///
+    /// Returns the `SchemaRegistrationConfig` containing the current limits.
+    pub fn get_schema_config(env: Env) -> SchemaRegistrationConfig {
+        get_schema_registration_config(&env)
+    }
+
+    /// Gets the number of schemas registered by an address.
+    ///
+    /// This can be used to check how many schemas an address has registered
+    /// and how many more they can register before hitting the quota limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address to check.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of schemas registered by the address.
+    pub fn get_schema_count(env: Env, address: Address) -> u32 {
+        get_address_schema_count(&env, &address)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ► Attestation Functions
+    // ══════════════════════════════════════════════════════════════════════════════
 
     /// Creates an attestation where the attester is also the subject.
     ///

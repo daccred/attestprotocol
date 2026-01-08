@@ -34,4 +34,10 @@ pub enum Error {
     /// A schema with the same definition, authority, and resolver already exists.
     /// This indicates an attempt to register a duplicate schema.
     SchemaAlreadyExists = 28,
+    /// The caller has exceeded their schema registration quota.
+    /// Each address is limited to a maximum number of schemas to prevent DoS attacks.
+    SchemaQuotaExceeded = 29,
+    /// The schema definition exceeds the maximum allowed size.
+    /// Limits are enforced to prevent storage exhaustion attacks.
+    SchemaDefinitionTooLarge = 30,
 }
