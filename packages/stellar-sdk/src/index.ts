@@ -12,7 +12,6 @@ export { StellarAttestationClient } from './client'
 
 // Export service classes for direct use
 export { StellarSchemaRegistry } from './schema'
-export { AttestProtocolAuthority } from './authority'
 
 // Export standardized schema encoder
 export {
@@ -89,13 +88,6 @@ export {
   type Authority as ProtocolAuthority,
   type Attestation as ProtocolAttestationRecord,
 } from '@attestprotocol/stellar-contracts/protocol'
-
-export {
-  Client as AuthorityClient,
-  networks as AuthorityNetworks,
-  type Attestation as AuthorityAttestationRecord,
-  type RegisteredAuthorityData,
-} from '@attestprotocol/stellar-contracts/authority'
 
 // Internal utilities (for advanced usage and testing)
 export * as common from './common'
