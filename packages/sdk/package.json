@@ -43,7 +43,6 @@
     "build": "tsup",
     "clean": "rm -rf dist",
     "format": "prettier --write \"src/**/*.ts\"",
-    "postinstall": "pnpm run build",
     "test": "vitest",
     "test:coverage": "vitest --coverage"
   },
