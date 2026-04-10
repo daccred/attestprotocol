@@ -3,13 +3,13 @@
   "version": "2.0.0-0",
   "author": "Andrew Miracle <andrew@daccred.co>",
   "devDependencies": {
-    "@changesets/cli": "^2.29.4",
+    "@changesets/cli": "^2.30.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^11.0.1",
-    "@stellar/stellar-sdk": ">=14.3.0",
+    "@semantic-release/github": "^11.0.6",
+    "@stellar/stellar-sdk": "^15.0.1",
     "conventional-changelog-conventionalcommits": "^8.0.0",
-    "semantic-release": "^24.2.3"
+    "semantic-release": "^24.2.9"
   },
   "keywords": [
     "attest",
@@ -45,25 +45,21 @@
   ],
   "pnpm": {
     "overrides": {
-      "@eslint/plugin-kit@<0.3.4": ">=0.3.4",
-      "axios@<1.12.0": ">=1.12.0",
-      "brace-expansion@>=1.0.0 <=1.1.11": ">=1.1.12",
-      "brace-expansion@>=2.0.0 <=2.0.1": ">=2.0.2",
-      "diff@<4.0.4": ">=4.0.4",
+      "axios@<1.15.0": ">=1.15.0",
+      "body-parser@<1.20.3": ">=1.20.3",
+      "cookie@<0.7.0": ">=0.7.0",
       "diff@>=6.0.0 <8.0.3": ">=8.0.3",
-      "glob@>=10.2.0 <10.5.0": ">=10.5.0",
-      "glob@>=11.0.0 <11.1.0": ">=11.1.0",
-      "js-yaml@<3.14.2": ">=3.14.2",
+      "express@<4.21.2": ">=4.21.2",
       "js-yaml@>=4.0.0 <4.1.1": ">=4.1.1",
-      "lodash@>=4.0.0 <=4.17.22": ">=4.17.23",
-      "lodash-es@>=4.0.0 <=4.17.22": ">=4.17.23",
-      "mdast-util-to-hast@>=13.0.0 <13.2.1": ">=13.2.1",
-      "nanoid@<3.3.8": ">=3.3.8",
-      "qs@<6.14.1": ">=6.14.1",
-      "serialize-javascript@>=6.0.0 <6.0.2": ">=6.0.2",
-      "tar@<=7.5.3": ">=7.5.4",
-      "tmp@<=0.2.3": ">=0.2.4",
-      "vite@>=6.0.0 <=6.3.5": ">=6.3.6"
+      "lodash@<=4.17.23": ">=4.18.0",
+      "lodash-es@<=4.17.23": ">=4.18.0",
+      "minimatch@<3.1.4": ">=3.1.4",
+      "path-to-regexp@<0.1.13": ">=0.1.13",
+      "send@<0.19.0": ">=0.19.0",
+      "serialize-javascript@<7.0.5": ">=7.0.5",
+      "serve-static@<1.16.0": ">=1.16.0",
+      "tar@<=7.5.10": ">=7.5.11",
+      "zod@<=3.22.2": ">=3.22.3"
     }
   }
 }
