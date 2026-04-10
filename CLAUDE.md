@@ -4,9 +4,9 @@ Guide for working with this repository.
 
 ## Project
 
-Blockchain-based attestation infrastructure enabling verifiable claims across multiple chains.
+Blockchain-based attestation infrastructure enabling verifiable claims on Stellar.
 
-**Supported Chains:** Stellar (active), Solana (dev), Starknet (planned), Aptos/Sui (research)
+**Supported Chain:** Stellar
 
 ## Structure
 ```
@@ -14,18 +14,15 @@ apps/
   horizon/         # Stellar blockchain indexer (Express.js + MongoDB)
   docs/            # Documentation site (Mintlify)
 contracts/
-  solana/         # Anchor-based Solana contracts
-  stellar/        # Soroban contracts (authority & protocol)
-  starknet/       # Cairo contracts
-  aptos/          # Move contracts
-  sui/            # Move contracts
+  stellar/        # Soroban contracts (protocol & resolvers)
+  solana/         # Anchor-based Solana contracts (dev)
+  starknet/       # Cairo contracts (dev)
+  sui/            # Move contracts (dev)
 packages/
-  sdk/            # TypeScript SDK for all chains
-  cli/            # Unified CLI for all chains
+  sdk/            # TypeScript SDK (re-exports stellar-sdk + core)
+  cli/            # CLI for Stellar
   core/           # Core SDK abstractions
   stellar-sdk/    # Stellar-specific SDK implementation
-  solana-sdk/     # Solana-specific SDK implementation  
-  starknet-sdk/   # Starknet-specific SDK implementation
 examples/         # Example implementations
 ```
 
@@ -45,8 +42,6 @@ pnpm run dev:docs  # Docs on :3001
 **Contracts:**
 ```bash
 # Stellar: cd contracts/stellar/protocol && make all
-# Solana: cd contracts/solana && anchor build
-# Starknet: cd contracts/starknet && scarb build
 ```
 
 **Release:**
@@ -58,11 +53,11 @@ pnpm release                    # Full release
 
 ## Conventions
 
-- No redundant prefixes: `contracts/solana/service/` not `contracts/solana/solana-service/`
+- No redundant prefixes: `contracts/stellar/protocol/` not `contracts/stellar/stellar-protocol/`
 - TypeScript strict mode, ESLint + Prettier
 - Conventional commits (commitlint enforced)
-- Tests: Vitest (TS/JS), cargo test (Rust), scarb test (Cairo)
+- Tests: Vitest (TS/JS), cargo test (Rust)
 
 ## Requirements
 
-Node.js + pnpm, Rust + Cargo, Scarb (Cairo), Anchor CLI (Solana)
+Node.js + pnpm, Rust + Cargo

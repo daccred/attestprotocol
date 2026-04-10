@@ -16,7 +16,6 @@
     "attestation-service",
     "monorepo",
     "pnpm",
-    "solana",
     "soroban",
     "stellar"
   ],

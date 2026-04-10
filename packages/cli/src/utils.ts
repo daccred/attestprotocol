@@ -56,8 +56,8 @@ export const handleKeyFile = async (filePath: string): Promise<string> => {
   }
 }
 
-export type SupportedChain = 'stellar' | 'solana' | 'starknet'
+export type SupportedChain = 'stellar'
 
 export const validateChain = (chain: string): chain is SupportedChain => {
-  return ['stellar', 'solana', 'starknet'].includes(chain)
+  return chain === 'stellar'
 }

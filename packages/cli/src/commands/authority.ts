@@ -20,7 +20,7 @@ export function builder(yargs: Argv<AuthorityArgv>): Argv {
     .option('chain', {
       type: 'string',
       describe: 'Blockchain to use',
-      choices: ['stellar', 'solana', 'starknet'],
+      choices: ['stellar'],
       demandOption: true,
     })
     .option('action', {
@@ -47,7 +47,7 @@ export function builder(yargs: Argv<AuthorityArgv>): Argv {
     })
     .check((argv) => {
       if (!validateChain(argv.chain)) {
-        throw new Error(`Unsupported chain: ${argv.chain}. Supported chains: stellar, solana, starknet`)
+        throw new Error(`Unsupported chain: ${argv.chain}. Supported chains: stellar`)
       }
       if (argv.action === 'fetch' && !argv.uid) {
         throw new Error('UID is required for fetch action')

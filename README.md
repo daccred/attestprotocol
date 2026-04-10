@@ -7,7 +7,6 @@
 **A Unified Trust Framework for Blockchain-Based Attestation Infrastructure**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Solana Radar Award](https://img.shields.io/badge/Solana%20Radar-Public%20Goods%20Award-yellow)](https://x.com/solana/status/1856362113561964676)
 [![GitHub Issues](https://img.shields.io/github/issues/daccred/attest.so)](https://github.com/daccred/attest.so/issues)
 
 ---
@@ -16,47 +15,24 @@
 <tr>
 <td width="50%" valign="top">
 
-### 🌐 Website & Docs
-- **[🏠 Website](https://attestprotocol.org)**
+### Website & Docs
+- **[Website](https://attestprotocol.org)**
   Official attestprotocol.org home
-- **[📚 Developer Docs](https://docs.attestprotocol.org)**
+- **[Developer Docs](https://docs.attestprotocol.org)**
   Complete integration guides & API reference
 
-### 🛠️ Live Environments
+### Live Environments
 
-<table>
-<thead>
-<tr>
-<th>Network</th>
-<th>Stellar</th>
-<th>Solana</th>
-<th>Starknet</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><b>Sandbox</b></td>
-<td colspan="3" align="center"><a href="https://sandbox.attest.so">🧪 Try it now</a></td>
-</tr>
-<tr>
-<td><b>Testnet</b></td>
-<td align="center"><a href="https://testnet.attestprotocol.org">🔗 Launch</a></td>
-<td align="center">🚧 Soon</td>
-<td align="center">🚧 Soon</td>
-</tr>
-<tr>
-<td><b>Mainnet</b></td>
-<td align="center"><a href="https://stellar.attestprotocol.org">🚀 Launch</a></td>
-<td align="center">🚧 Soon</td>
-<td align="center">🚧 Soon</td>
-</tr>
-</tbody>
-</table>
+| Network | Stellar |
+|---------|---------|
+| **Sandbox** | [Try it now](https://sandbox.attest.so) |
+| **Testnet** | [Launch](https://testnet.attestprotocol.org) |
+| **Mainnet** | [Launch](https://stellar.attestprotocol.org) |
 
 </td>
 <td width="50%" valign="top">
 
-### 📜 Smart Contracts
+### Smart Contracts
 
 **Stellar (Mainnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/public)
 - [Protocol Contract](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
@@ -66,19 +42,15 @@
 - [Protocol Contract](https://stellar.expert/explorer/testnet/contract/CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP) · `CBFE5...`
 - [Authority Contract](https://stellar.expert/explorer/testnet/contract/CCMJGCRSQRZ56BDSLCAYV4BNS3SLIDPIP4CQYNT5X2VOPZIQ2ZM7GBVV) · `CCMJG...`
 
-### 📦 NPM Packages
+### NPM Packages
 
 ```bash
 npm install @attestprotocol/stellar-sdk
-npm install @attestprotocol/solana-sdk
-npm install @attestprotocol/starknet-sdk
 npm install @attestprotocol/cli
 ```
 
 **Browse on npm:**
 [stellar-sdk](https://www.npmjs.com/package/@attestprotocol/stellar-sdk) ·
-[solana-sdk](https://www.npmjs.com/package/@attestprotocol/solana-sdk) ·
-[starknet-sdk](https://www.npmjs.com/package/@attestprotocol/starknet-sdk) ·
 [cli](https://www.npmjs.com/package/@attestprotocol/cli)
 
 </td>
@@ -89,18 +61,18 @@ npm install @attestprotocol/cli
 
 </div>
 
-## 🌐 Overview
+## Overview
 
-**attest.so** provides enterprise-grade infrastructure for builders to create "Reputation Authorities" on-chain with verifiable and comprehensive identity proofs. The project supports multiple blockchain platforms, enabling a unified approach to attestations and identity verification.
+**attest.so** provides enterprise-grade infrastructure for builders to create "Reputation Authorities" on-chain with verifiable and comprehensive identity proofs on Stellar.
 
 Our framework addresses critical challenges in Web3:
 
 - **Identity Verification**: Robust mechanisms for verifying identities across blockchain ecosystems
-- **Interoperable Trust**: Consistent attestation standards across multiple blockchains
+- **Interoperable Trust**: Consistent attestation standards on Stellar
 - **Reputation Management**: Infrastructure for building and maintaining on-chain reputation
 - **Scalable Solutions**: Enterprise-ready attestation infrastructure for builders
 
-## 🏗️ Architecture
+## Architecture
 
 ### Core Concepts
 
@@ -110,31 +82,14 @@ Our framework addresses critical challenges in Web3:
 - **Subjects**: The entities (e.g., users, smart contracts, organizations) about which attestations are made.
 - **Resolvers**: On-chain programs responsible for interpreting and verifying attestations. They provide a standardized interface to locate, decode, and validate attestation data, and can be designed to handle complex logic such as dynamic schema resolution, revocation checks, and integration with off-chain data sources.
 
-### Multi-Chain Support
-
-attest.so is designed with cross-chain compatibility as a primary goal:
-
-| Blockchain | Contract Language | Status      | Key Features                                            |
-| ---------- | ----------------- | ----------- | ------------------------------------------------------- |
-| Stellar    | Soroban (Rust)    | Active      | Fee management, levy collection, verifiable authorities |
-| Solana     | Anchor (Rust)     | Development | High throughput, scalable attestation storage           |
-| Starknet   | Cairo             | Development | ZK-friendly proofs, privacy-preserving attestations     |
-| Sui        | Move              | Planned     | Object-oriented attestation model                       |
-| Aptos      | Move              | Planned     | Resource-oriented attestation model                     |
-
-## 🧩 Key Components
+## Key Components
 
 ### 1. Smart Contracts
-
-The repository contains modular smart contract implementations for multiple blockchain platforms:
-
-#### Stellar/Soroban Implementation
 
 Our Stellar implementation, built with Soroban, provides a robust framework for on-chain attestations. It leverages Rust for performance and safety, and is designed to integrate seamlessly with the Stellar ecosystem, including Horizon and the Stellar SDK.
 
 ```
 contracts/stellar/
-├── authority/        # Manages and resolves authorities
 ├── protocol/         # Core attestation protocol logic
 ├── resolvers/        # Schema and attestation resolvers
 └── ...               # Other configuration and build files
@@ -148,13 +103,9 @@ contracts/stellar/
 - **Soroban Integration**: Fully leverages Soroban's features for storage, authorization, and events.
 - **Fee and Levy System**: Optional fee collection mechanism for monetizing attestation services.
 
-#### Additional Blockchain Implementations
-
-Implementation details for Solana (Anchor), Starknet (Cairo), and Aptos (Move) with blockchain-specific optimizations.
-
 ### 2. SDK (Software Development Kit)
 
-A TypeScript SDK that provides a unified interface for interacting with our attestation infrastructure across different blockchains.
+A TypeScript SDK that provides a unified interface for interacting with our attestation infrastructure on Stellar.
 
 ```typescript
 // Example: Interacting with Stellar contracts via the SDK
@@ -182,7 +133,6 @@ const attestation = await client.attest({
 - Blockchain connection management
 - Schema creation and registration
 - Attestation lifecycle management
-- Cross-chain verification utilities
 - TypeScript-first for a better developer experience
 
 ### 3. CLI (Command Line Interface)
@@ -211,7 +161,7 @@ Comprehensive documentation and example implementations to facilitate integratio
 - Example applications
 - Best practices
 
-## 📦 Project Structure
+## Project Structure
 
 The repository follows a monorepo structure using pnpm workspaces:
 
@@ -221,40 +171,28 @@ attest.so/
 │   ├── docs/          # Documentation site (Mintlify)
 │   └── horizon/       # Stellar blockchain indexer (Express.js + MongoDB)
 ├── contracts/
-│   ├── stellar/       # Soroban contracts (authority, protocol, resolvers)
-│   ├── solana/        # Anchor-based Solana contracts
-│   ├── starknet/      # Cairo contracts
-│   ├── sui/           # Move contracts
-│   └── aptos/         # Move contracts
+│   └── stellar/       # Soroban contracts (protocol, resolvers)
 ├── packages/
 │   ├── sdk/           # Unified TypeScript SDK
 │   ├── stellar-sdk/   # Stellar-specific SDK implementation
-│   ├── solana-sdk/    # Solana-specific SDK implementation
-│   ├── starknet-sdk/  # Starknet-specific SDK implementation
-│   ├── cli/           # CLI for all chains
+│   ├── cli/           # CLI tool
 │   └── core/          # Core SDK abstractions
 └── examples/
 ```
 
 See [NAMING.md](./NAMING.md) for detailed information about naming conventions and directory structure standards.
 
-## 🛠️ Technical Stack
+## Technical Stack
 
-- **Frontend**: Next.js, React, Tailwind CSS
 - **SDK/CLI**: TypeScript, Node.js, Stellar SDK, Horizon Client
-- **Smart Contracts**:
-  - **Stellar**: Rust with Soroban
-  - **Solana**: Rust with Anchor
-  - **Starknet**: Cairo
-  - **Sui**: Move
-  - **Aptos**: Move
+- **Smart Contracts**: Rust with Soroban
 - **Developer Experience**:
   - pnpm workspaces for monorepo management
   - TypeScript
   - ESLint/Prettier
-  - Jest for testing
+  - Vitest for testing
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Installation
 
@@ -276,11 +214,8 @@ pnpm build
 # Start the documentation site
 pnpm run dev:docs
 
-# Run the SDK tests
-pnpm run test:sdk
-
-# Deploy contracts to local development network
-pnpm run deploy:local
+# Run tests
+pnpm test
 ```
 
 ### Working with Contracts
@@ -297,7 +232,7 @@ soroban contract deploy \
   --source <YOUR_ACCOUNT>
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please see our [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
@@ -311,24 +246,19 @@ Contributions are welcome! Please see our [CONTRIBUTING.md](./CONTRIBUTING.md) f
 
 ## Setting up Rust Analyzer
 
-With Rust Analyzer installed, you can configure it to recognize all our Rust-based contract projects. This is essential for a smooth development experience, providing features like auto-completion and type-checking.
-
-Add the following to your `.vscode/settings.json` file:
+With Rust Analyzer installed, you can configure it to recognize our Rust-based contract project:
 
 ```json
 {
   "rust-analyzer.linkedProjects": [
-    "contracts/stellar/Cargo.toml",
-    "contracts/solana/Cargo.toml"
+    "contracts/stellar/Cargo.toml"
   ]
 }
 ```
 
-This configuration ensures that Rust Analyzer can correctly interpret the dependencies and structure of each contract crate within our monorepo.
-
 ---
 
-## 🔗 Resources & Links
+## Resources & Links
 
 - [Product Development Log](https://daccred.notion.site/We-re-building-https-on-the-blockchain-df20b05cb5a04e379a165714aab024fb?pvs=4)
 - [Technical Documentation](https://attest.so) (Coming Soon)
@@ -336,7 +266,7 @@ This configuration ensures that Rust Analyzer can correctly interpret the depend
 
 ---
 
-## 🏆 Awards & Recognition
+## Awards & Recognition
 
 <div align="center">
 
@@ -344,7 +274,7 @@ This configuration ensures that Rust Analyzer can correctly interpret the depend
 <tr>
 <td align="center" width="50%">
 <img src="https://cryptologos.cc/logos/solana-sol-logo.png" width="80" alt="Solana Logo"/>
-<h3>🎖️ Solana Radar Hackathon</h3>
+<h3>Solana Radar Hackathon</h3>
 <p><b>Public Goods Award Winner</b></p>
 <p>Recognized for building critical public infrastructure for the Solana ecosystem</p>
 <a href="https://x.com/solana/status/1856362113561964676">
@@ -353,7 +283,7 @@ This configuration ensures that Rust Analyzer can correctly interpret the depend
 </td>
 <td align="center" width="50%">
 <img src="https://cryptologos.cc/logos/stellar-xlm-logo.png" width="80" alt="Stellar Logo"/>
-<h3>⭐ Stellar Community Fund</h3>
+<h3>Stellar Community Fund</h3>
 <p><b>SCF Award Recipient</b></p>
 <p>Selected for advancing attestation infrastructure on the Stellar network</p>
 <a href="https://communityfund.stellar.org/submissions/recIHN98Ja7MMb4DX">
@@ -367,6 +297,6 @@ This configuration ensures that Rust Analyzer can correctly interpret the depend
 
 ---
 
-## 📝 License
+## License
 
 This project is licensed under the [MIT License](./LICENSE).

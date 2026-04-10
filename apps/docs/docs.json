@@ -50,13 +50,6 @@
             ]
           },
           {
-            "group": "Solana",
-            "pages": [
-              "solana/getting-started",
-              "chains/solana/overview"
-            ]
-          },
-          {
             "group": "Examples",
             "pages": [
               "examples/react-integration",

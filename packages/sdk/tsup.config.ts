@@ -18,8 +18,6 @@ export default defineConfig({
   // Mark all dependencies as external since this is a meta-package
   external: [
     '@attestprotocol/core',
-    '@attestprotocol/stellar-sdk',
-    '@attestprotocol/solana-sdk',
-    '@attestprotocol/starknet-sdk'
+    '@attestprotocol/stellar-sdk'
   ]
 })

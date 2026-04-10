@@ -1,8 +1,6 @@
 import { BaseHandler } from './base'
 import { StellarHandler } from './stellar'
-import { SolanaHandler } from './solana'
-import { StarknetHandler } from './starknet'
-import { handleKeyFile, validateChain, SupportedChain } from '../utils'
+import { handleKeyFile, validateChain } from '../utils'
 import { logger } from '../logger'
 import { red } from 'picocolors'
 
@@ -12,26 +10,11 @@ export const getHandler = async (
   url?: string
 ): Promise<BaseHandler | null> => {
   if (!validateChain(chain)) {
-    logger.log(red(`Unsupported chain: ${chain}. Supported chains: stellar, solana, starknet`))
+    logger.log(red(`Unsupported chain: ${chain}. Supported chains: stellar`))
     return null
   }
 
-  let handler: BaseHandler
-
-  switch (chain as SupportedChain) {
-    case 'stellar':
-      handler = new StellarHandler()
-      break
-    case 'solana':
-      handler = new SolanaHandler()
-      break
-    case 'starknet':
-      handler = new StarknetHandler()
-      break
-    default:
-      logger.log(red(`Unsupported chain: ${chain}`))
-      return null
-  }
+  const handler = new StellarHandler()
 
   try {
     const keyData = await handleKeyFile(keyFile)
@@ -48,4 +31,4 @@ export const getHandler = async (
   }
 }
 
-export { BaseHandler, StellarHandler, SolanaHandler, StarknetHandler }
+export { BaseHandler, StellarHandler }

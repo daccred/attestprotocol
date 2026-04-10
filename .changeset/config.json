@@ -7,6 +7,6 @@
   "access": "restricted",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "packages": ["packages/*", "contracts/stellar/*", "contracts/solana/*", "contracts/starknet/*"],
+  "packages": ["packages/*", "contracts/stellar/*"],
   "ignore": []
 }

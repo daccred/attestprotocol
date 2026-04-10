@@ -42,8 +42,6 @@
     "attestation",
     "blockchain",
     "cli",
-    "solana",
-    "starknet",
     "stellar"
   ],
   "license": "MIT",
