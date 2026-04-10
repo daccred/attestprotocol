@@ -5,14 +5,14 @@
   "author": "daccred",
   "bugs": "https://github.com/daccred/attest.so/issues",
   "dependencies": {
-    "@attestprotocol/core": "2.0.2",
-    "@attestprotocol/stellar-sdk": "2.0.2"
+    "@attestprotocol/core": "workspace:*",
+    "@attestprotocol/stellar-sdk": "workspace:*"
   },
   "devDependencies": {
     "@sebbo2002/semantic-release-jsr": "3.0.0",
-    "@semantic-release/exec": "^7.0.3",
-    "semantic-release-plugin-update-version-in-files": "^2.0.0",
-    "tsup": "^8.5.0"
+    "@semantic-release/exec": "^7.1.0",
+    "semantic-release-plugin-update-version-in-files": "^2.1.0",
+    "tsup": "^8.5.1"
   },
   "directories": {
     "test": "test"

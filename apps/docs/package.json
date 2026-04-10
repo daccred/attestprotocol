@@ -12,7 +12,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@mintlify/cli": "^4.0.782"
+    "@mintlify/cli": "^4.0.1109"
   },
   "keywords": [
     "attestation",
