@@ -87,6 +87,12 @@ Resolvers should be CPI by default.
 
 > the logical flow will be one of such, if a schema provides us it's own custom resolver, we will use it, otherwise we will route the attestation to the internal resolver which implements the interface for resolvers.
 
+### Removed Packages
+
+The following packages were removed due to unpatched security vulnerabilities in their transitive dependency trees:
+
+- **`@solana/spl-token`** — depends on `@solana/buffer-layout-utils` → `bigint-buffer@1.1.5`, which has a high-severity buffer overflow vulnerability ([GHSA-3gc7-fjrx-p6mg](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg)) with no patched version available. Re-add when the upstream dependency is fixed or replaced.
+
 ### Deployments
 
 ```bash
