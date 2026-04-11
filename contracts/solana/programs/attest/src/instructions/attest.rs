@@ -80,7 +80,7 @@ pub fn attest_handler(
         if lev.asset.is_none() {
             system_program::transfer(
                 CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
+                    ctx.accounts.system_program.key(),
                     system_program::Transfer {
                         from: ctx.accounts.attester.to_account_info(),
                         to: ctx.accounts.levy_receipent.to_account_info(),
@@ -96,7 +96,7 @@ pub fn attest_handler(
 
             transfer(
                 CpiContext::new(
-                    ctx.accounts.token_program.to_account_info(),
+                    ctx.accounts.token_program.key(),
                     Transfer {
                         from: ctx.accounts.attester_token_account.to_account_info(),
                         to: ctx.accounts.levy_receipent_token_account.to_account_info(),
