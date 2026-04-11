@@ -19,7 +19,7 @@ impl anchor_lang::Id for ED25519 {
 }
 
 #[derive(Accounts)]
-#[instruction(recipient: Pubkey, attester: Pubkey,)]
+#[instruction(attestation_data: AttestationData, attester_info: AttesterInfo, recipient: Pubkey, attester: Pubkey)]
 pub struct DelegatedAttest<'info> {
     #[account(mut)]
     pub delegated_attester: Signer<'info>,

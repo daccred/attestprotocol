@@ -3,7 +3,7 @@ use crate::state::{AttesterInfo, Levy};
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use anchor_spl::token::{transfer, Mint, Transfer};
-use solana_program::instruction::Instruction;
+use anchor_lang::solana_program::instruction::Instruction;
 
 pub fn create_verify_signature_instruction(
     program_id: &Pubkey,
@@ -47,7 +47,7 @@ pub fn settle_levy<'info>(
                     // Transfer SOL
                     system_program::transfer(
                         CpiContext::new(
-                            system_program.clone(),
+                            system_program.key(),
                             system_program::Transfer {
                                 from: from.clone(),
                                 to: recipient.clone(),
@@ -63,7 +63,7 @@ pub fn settle_levy<'info>(
                     let adjusted_amount = lev.amount * 10u64.pow(mint.decimals as u32);
                     transfer(
                         CpiContext::new(
-                            token_program.clone(),
+                            token_program.key(),
                             Transfer {
                                 from: from_token.clone(),
                                 to: recipient_token.clone(),
