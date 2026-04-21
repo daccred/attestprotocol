@@ -144,6 +144,11 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         .get::<DataKey, Attestation>(&attest_key)
         .ok_or(Error::AttestationNotFound)?;
 
+    // Indicate if already revoked
+    if attestation.revoked {
+        return Err(Error::AlreadyRevoked)
+    }
+
     // Verify the revoker is the original attester
     if attestation.attester != request.revoker {
         return Err(Error::NotAuthorized);

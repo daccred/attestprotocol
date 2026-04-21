@@ -34,4 +34,5 @@ pub enum Error {
     /// A schema with the same definition, authority, and resolver already exists.
     /// This indicates an attempt to register a duplicate schema.
     SchemaAlreadyExists = 28,
+    AlreadyRevoked = 29,
 }

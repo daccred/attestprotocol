@@ -264,7 +264,7 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
 
     // Verify the attestation isn't already revoked
     if attestation.revoked {
-        return Err(Error::AttestationNotFound);
+        return Err(Error::AlreadyRevoked);
     }
 
     // Verify schema is revocable
