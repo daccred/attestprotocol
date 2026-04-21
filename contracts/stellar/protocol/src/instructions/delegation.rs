@@ -64,7 +64,7 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Only increment nonce AFTER signature is verified to prevent DoS attacks
     verify_and_increment_nonce(env, &request.attester, request.nonce)?;
 
-    let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, request.nonce);
+    let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, &request.attester, request.nonce);
 
     // Create attestation record
     let attestation = Attestation {
@@ -82,6 +82,11 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
 
     // Store attestation
     let attest_key = DataKey::AttestationUID(attestation_uid);
+
+    if env.storage().persisten().has(&key) {
+        return Err(Error::UIDAlreadyExists);
+    }
+
     env.storage().persistent().set(&attest_key, &attestation);
 
     // Emit event
@@ -240,7 +245,7 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 ///
 /// This function constructs the exact message that was signed off-chain by the attester.
 /// The message construction MUST be deterministic and match exactly between:
-/// 1. Off-chain signing (JavaScript/TypeScript with @noble/curves)  
+/// 1. Off-chain signing (JavaScript/TypeScript with @noble/curves)
 /// 2. On-chain verification (this Rust function)
 /// Any mismatch will cause signature verification to fail.
 ///

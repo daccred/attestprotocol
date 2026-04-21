@@ -59,15 +59,22 @@ pub fn generate_schema_uid(
 ///     nonce
 /// );
 /// ```
-pub fn generate_attestation_uid(env: &Env, schema_uid: &BytesN<32>, subject: &Address, nonce: u64) -> BytesN<32> {
+pub fn generate_attestation_uid(
+    env: &Env,
+    schema_uid: &BytesN<32>,
+    subject: &Address,
+    attester: & Address,
+    nonce: u64
+) -> BytesN<32> {
     // Simple hash generation - combine schema_uid and nonce only for now
-    let mut hash_input = Bytes::new(env);
+    let mut hash_input = Vec::new(env);
     hash_input.append(&schema_uid.to_xdr(env));
-    hash_input.append(&subject.clone().to_xdr(env));
+    hash_input.append(&subject.to_xdr(env));
+    hash_input.append(&attester.to_xdr(env));
 
     // Add nonce bytes directly
     let nonce_bytes = nonce.to_be_bytes();
-    hash_input.extend_from_array(&nonce_bytes);
+    hash_input.append(&nonce_bytes.to_vec());
 
     env.crypto().keccak256(&hash_input).into()
 }
