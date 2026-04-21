@@ -56,6 +56,19 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Create message for signature verification
     let message = create_attestation_message(env, &request);
 
+    // Enforce resolver
+    let resolver_attestation = create_resolver_attestation(env, &request, &attester);
+
+    if let Some(resolver) = _schema.resolver {
+        let client = ResolverClient::new(env, &resolver);
+
+        let allowed = client.onattest(&resolver_attestation);
+
+        if !allowed {
+            return Err(Error::ResolverRejected);
+        }
+    }
+
     // CRITICAL: Verify BLS12-381 signature BEFORE incrementing nonce.
     // If we increment nonce first, an attacker can submit invalid signatures
     // to permanently skip nonces, causing DoS on legitimate attesters.
@@ -88,6 +101,11 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     }
 
     env.storage().persistent().set(&attest_key, &attestation);
+
+    if let Some(resolver) = _schema.resolver {
+        let client = ResolverClient::new(env, &resolver);
+        client.onresolve(&resolver_attestation);
+    }
 
     // Emit event
     events::publish_attestation_event(env, &attestation);
@@ -144,6 +162,18 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         return Err(Error::AttestationNotRevocable);
     }
 
+    let resolver_attestation = create_resolver_attestation(env, &request);
+
+    if let Some(resolver) = schema.resolver {
+        let client = ResolverClient::new(env, &resolver);
+
+        let allowed = client.onrevoke(&resolver_attestation);
+
+        if !allowed {
+            return Err(Error::ResolverRejected);
+        }
+    }
+
     // Create message for signature verification
     let message = create_revocation_message(env, &request);
 
@@ -156,6 +186,12 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
 
     // Store updated attestation
     env.storage().persistent().set(&attest_key, &attestation);
+
+    if let Some(resolver) = schema.resolver {
+        let client = ResolverClient::new(env, &request);
+
+        client.onresolve(&resolver_attestation);
+    }
 
     // Emit revocation event
     events::publish_revocation_event(env, &attestation);
