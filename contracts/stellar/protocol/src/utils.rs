@@ -68,6 +68,10 @@ pub fn generate_attestation_uid(
 ) -> BytesN<32> {
     // Simple hash generation - combine schema_uid and nonce only for now
     let mut hash_input = Vec::new(env);
+
+    hash_input.append(&Bytes::from_slice(env, b"ATTEST_UID_V1"));
+    hash_input.append(&env.current_contract_address().to_xdr(env));
+
     hash_input.append(&schema_uid.to_xdr(env));
     hash_input.append(&subject.to_xdr(env));
     hash_input.append(&attester.to_xdr(env));
