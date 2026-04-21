@@ -41,6 +41,7 @@ const REVOKE_DOMAIN_SEPARATOR: &[u8] = b"REVOKE_PROTOCOL_V1_DELEGATED";
 /// * `Error::BlsPubKeyNotRegistered` - If the BLS public key is not registered
 /// * `Error::InvalidNonce` - If the nonce doesn't match expected value
 /// * `Error::SchemaNotFound` - If the schema doesn't exist
+/// * `Error::ResolverRejected` - If the resolver is not accepted
 pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAttestationRequest) -> Result<(), Error> {
     submitter.require_auth();
 
@@ -62,10 +63,10 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     if let Some(resolver) = _schema.resolver {
         let client = ResolverClient::new(env, &resolver);
 
-        let allowed = client.onattest(&resolver_attestation);
-
-        if !allowed {
-            return Err(Error::ResolverRejected);
+        match client.onattest(resolver_attestation.clone()) {
+            Ok(true) => {}
+            Ok(false) => return Err(Error::ResolverRejected),
+            Err(_) => return Err(Error::ResolverCallFailed),
         }
     }
 
@@ -142,7 +143,7 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         .storage()
         .persistent()
         .get::<DataKey, Attestation>(&attest_key)
-        .ok_or(Error::AttestationNotFound)?;
+        .ok_or(Error::AlreadyRevoked)?;
 
     // Indicate if already revoked
     if attestation.revoked {
@@ -172,10 +173,10 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     if let Some(resolver) = schema.resolver {
         let client = ResolverClient::new(env, &resolver);
 
-        let allowed = client.onrevoke(&resolver_attestation);
-
-        if !allowed {
-            return Err(Error::ResolverRejected);
+        match client.onrevoke(resolver_attestation.clone()) {
+            Ok(true) => {}
+            Ok(false) => return Err(Error::ResolverRejected),
+            Err(_) => return Err(Error:ResolverCallFailed),
         }
     }
 
@@ -187,7 +188,6 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
 
     // Update attestation
     attestation.revoked = true;
-    attestation.revocation_time = Some(current_time);
 
     // Store updated attestation
     env.storage().persistent().set(&attest_key, &attestation);

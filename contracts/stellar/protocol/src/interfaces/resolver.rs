@@ -17,6 +17,7 @@ pub struct ResolverAttestation {
     pub ref_uid: Bytes, // Flattened: empty bytes = not set
     pub data: Bytes,
     pub value: i128, // Flattened: 0 = not set
+    pub revoked: bool,
 }
 
 /// Resolver Contract Client Interface
@@ -30,7 +31,7 @@ pub struct ResolverAttestation {
 /// a specific hook in the attestation lifecycle:
 ///
 /// - onattest: Validates whether an attestation should be allowed (pre-creation)
-/// - onrevoke: Validates whether a revocation should be allowed (pre-revocation)  
+/// - onrevoke: Validates whether a revocation should be allowed (pre-revocation)
 /// - onresolve: Handles post-processing after attestation/revocation (side effects)
 ///
 /// Security Model:
@@ -42,13 +43,13 @@ pub struct ResolverAttestation {
 pub trait Resolver {
     /// Called before an attestation is created - CRITICAL for access control
     /// Returns true if attestation should be allowed, false to reject
-    fn onattest(env: &Env, attestation: &ResolverAttestation) -> bool;
+    fn onattest(env: &Env, attestation: &ResolverAttestation) -> Result<bool, ResolverError>;
 
     /// Called before an attestation is revoked - CRITICAL for access control
     /// Returns true if revocation should be allowed, false to reject
-    fn onrevoke(env: &Env, attestation: &ResolverAttestation) -> bool;
+    fn onrevoke(env: &Env, attestation: &ResolverAttestation) -> Result<bool, ResolverError>;
 
     /// Called after an attestation is attested or revoked - for side effects (rewards, cleanup, etc.)
     /// Failures are logged but don't revert the attestation or revocation
-    fn onresolve(env: &Env, attestation: &ResolverAttestation);
+    fn onresolve(env: &Env, attestation: &ResolverAttestation) -> Result<(), ResolverError>;
 }

@@ -14,6 +14,7 @@ pub struct ResolverAttestationData {
     pub ref_uid: soroban_sdk::Bytes, // empty bytes = not set
     pub data: soroban_sdk::Bytes,
     pub value: i128, // 0 = not set
+    pub revoked: bool,
 }
 
 #[contracttype]
@@ -93,7 +94,7 @@ pub enum ResolverError {
 /// - **Economic Model**: Gas costs provide spam resistance
 /// - **Use Case**: Open attestation ecosystems with token incentives
 ///
-/// ## 2. Permission-based Resolvers (e.g., AuthorityResolver)  
+/// ## 2. Permission-based Resolvers (e.g., AuthorityResolver)
 /// - **onattest**: Validates attester authorization/permissions
 /// - **onresolve**: Updates reputation, access controls, or handles state cleanup
 /// - **Economic Model**: Access control prevents spam
@@ -148,7 +149,7 @@ pub trait ResolverInterface {
     ///
     /// # Validation Patterns
     /// - **Permissionless**: Always return Ok(true), rely on economic barriers
-    /// - **Permissioned**: Check authorization, roles, or credentials  
+    /// - **Permissioned**: Check authorization, roles, or credentials
     /// - **Economic**: Collect fees, check stakes, verify balances
     /// - **Conditional**: Validate data, check external conditions
     ///
@@ -173,7 +174,7 @@ pub trait ResolverInterface {
     /// the revocation should be allowed. Implements revocation policies and
     /// business logic for attestation lifecycle management.
     ///
-    /// # Revocation Patterns  
+    /// # Revocation Patterns
     /// - **Open**: Allow any revocation by attester or recipient
     /// - **Restricted**: Require specific permissions or conditions
     /// - **Time-limited**: Only allow revocation within time windows
@@ -185,7 +186,7 @@ pub trait ResolverInterface {
     ///
     /// # Returns
     /// * `Ok(true)` - Revocation allowed, proceed with marking revoked
-    /// * `Ok(false)` - Revocation denied (soft failure)  
+    /// * `Ok(false)` - Revocation denied (soft failure)
     /// * `Err(ResolverError)` - Revocation failed with specific error
     ///
     /// # Security Notes
@@ -203,7 +204,7 @@ pub trait ResolverInterface {
     ///
     /// # Processing Patterns
     /// ## For Attestations:
-    /// - **Token Rewards**: Distribute rewards to attesters  
+    /// - **Token Rewards**: Distribute rewards to attesters
     /// - **Reputation**: Update attester/recipient reputation scores
     /// - **Analytics**: Track attestation metrics and statistics
     /// - **Integration**: Trigger external system updates
@@ -239,7 +240,7 @@ pub trait ResolverInterface {
     /// # Metadata Fields
     /// - **name**: Human-readable resolver name
     /// - **version**: Semantic version for compatibility tracking
-    /// - **description**: Detailed description of resolver functionality  
+    /// - **description**: Detailed description of resolver functionality
     /// - **resolver_type**: Enum categorizing the resolver's primary purpose
     ///
     /// # Returns
