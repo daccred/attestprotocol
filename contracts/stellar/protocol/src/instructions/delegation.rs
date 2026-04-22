@@ -428,6 +428,15 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
     // DOMAIN SEPARATION: Use the defined constant.
     message.extend_from_slice(REVOKE_DOMAIN_SEPARATOR);
 
+    // CONTRACT ID: Binds signature to this deployment
+    let contract_id_xdr = env.current_contract_address().to_xdr(env);
+    let contract_hash = env.crypto().sha256(&contract_id_xdr);
+    message.extend_from_slice(&contract_hash.to_array());
+
+    // NETWORK ID: Prevents Testnet signatures from being used on Mainnet
+    let network_id = env.ledger().network_id();
+    message.extend_from_slice(&network_id.to_array());
+
     // FIELD 1: Schema UID (32 bytes)
     message.extend_from_slice(&request.schema_uid.to_array());
 
