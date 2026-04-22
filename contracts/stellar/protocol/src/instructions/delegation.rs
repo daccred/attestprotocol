@@ -109,7 +109,9 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
 
     if let Some(resolver) = _schema.resolver {
         let client = ResolverClient::new(env, &resolver);
-        client.onresolve(&resolver_attestation);
+
+        client.onresolve(&resolver_attestation)
+            .map_err(|_| Error::ResolverCallFailed)?;
     }
 
     // Emit event
@@ -172,7 +174,7 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         return Err(Error::AttestationNotRevocable);
     }
 
-    let resolver_attestation = create_resolver_attestation(env, &request);
+    let resolver_attestation = create_resolver_attestation(env, &request, &attestation.attester);
 
     if let Some(resolver) = schema.resolver {
         let client = ResolverClient::new(env, &resolver);
@@ -197,9 +199,10 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     env.storage().persistent().set(&attest_key, &attestation);
 
     if let Some(resolver) = schema.resolver {
-        let client = ResolverClient::new(env, &request);
+        let client = ResolverClient::new(env, &resolver);
 
-        client.onresolve(&resolver_attestation);
+        client.onresolve(&resolver_attestation)
+            .map_err(|_| Error::ResolverCallFailed)?;
     }
 
     // Emit revocation event
