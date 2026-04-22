@@ -68,7 +68,7 @@ fn create_resolver_attestation(
     revocable: bool,
 ) -> ResolverAttestation {
     // Generate a UID for this attestation (protocol doesn't store UIDs currently)
-    let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.attester, attestation.nonce);
+    let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, &attestation.attester, attestation.nonce);
 
     // Convert attestation value (String) to Bytes for the resolver interface
     // We use XDR serialization to ensure consistent encoding across platforms

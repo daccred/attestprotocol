@@ -63,7 +63,7 @@ pub fn generate_attestation_uid(
     env: &Env,
     schema_uid: &BytesN<32>,
     subject: &Address,
-    attester: & Address,
+    attester: &Address,
     nonce: u64
 ) -> BytesN<32> {
     // Simple hash generation - combine schema_uid and nonce only for now
