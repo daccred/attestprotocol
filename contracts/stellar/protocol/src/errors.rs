@@ -37,5 +37,6 @@ pub enum Error {
     ResolverRejected = 29,
     AlreadyRevoked = 30,
     UIDAlreadyExists = 31,
+    InvalidExpirationTime = 32,
 
 }

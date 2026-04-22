@@ -126,11 +126,16 @@ pub fn attest(
     let current_time = env.ledger().timestamp();
 
     // Check if expiration time is valid (if provided)
+    if current_time > request.deadline {
+        return Err(Error::ExpiredSignature);
+    }
+
     if let Some(exp_time) = expiration_time {
-        if exp_time <= current_time {
-            return Err(Error::InvalidDeadline);
+        if exp_time != 0 && exp_time <= current_time {
+            return Err(Error::InvalidExpirationTime);
         }
     }
+
     let subject = attester.clone();
     let attestation_uid = generate_attestation_uid(env, &schema_uid, &subject, nonce);
 

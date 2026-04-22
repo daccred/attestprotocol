@@ -51,6 +51,10 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
         return Err(Error::ExpiredSignature);
     }
 
+    if request.expiration_time != 0 && request.expiration_time <= current_time {
+        return Err(Error::InvalidExpirationTime);
+    }
+
     // Verify schema exists
     let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
