@@ -39,4 +39,5 @@ pub enum Error {
     UIDAlreadyExists = 31,
     InvalidExpirationTime = 32,
     InvalidPublicKey = 33,
+    AttestationAlreadyRevoked = 34,
 }
