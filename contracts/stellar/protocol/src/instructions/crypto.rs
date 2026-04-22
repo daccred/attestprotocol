@@ -272,11 +272,23 @@ pub fn verify_bls_signature(
      */
     let neg_hashed_message = -hashed_message;
 
-    // Deserialize signature - traps on invalid G1 point (malformed input)
-    let s = G1Affine::from_bytes(signature.clone());
-
     // Deserialize public key - already validated during registration
-    let pk = G2Affine::from_bytes(bls_key.key);
+    let pk_ct = G2Affine::from_bytes(bls_key.key);
+
+    if !bool::from(pk_ct.is_some()) {
+        return Err(Error::InvalidPublicKey);
+    }
+
+    let pk = pk_ct.unwrap();
+
+    // Deserialize signature - traps on invalid G1 point (malformed input)
+    let s_ct = G1Affine::from_bytes(signature.clone());
+
+    if !bool::from(s_ct.is_some()) {
+        return Err(Error::InvalidSignature);
+    }
+
+    let s = s_ct.unwrap();
 
     /*
      * STEP 3: Prepare the points for the pairing check.
