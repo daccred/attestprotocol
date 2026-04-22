@@ -195,6 +195,8 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // Update attestation
     attestation.revoked = true;
 
+    attestation.revocation_time = Some(current_time);
+
     // Store updated attestation
     env.storage().persistent().set(&attest_key, &attestation);
 
