@@ -205,7 +205,7 @@ pub fn attest(
     }
 
     // Emit event
-    events::publish_attestation_event(env, &attestation);
+    events::publish_attestation_event(env, &attestation, schema_uid.clone());
 
     Ok(attestation_uid)
 }
