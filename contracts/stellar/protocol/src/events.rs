@@ -1,16 +1,17 @@
 use crate::state::{Attestation, Schema};
 use soroban_sdk::{symbol_short, Address, BytesN, Env, String};
 
-pub fn schema_registered(env: &Env, schema_uid: &BytesN<32>, schema: &Schema, authority: &Address) {
+pub fn schema_registered(env: &Env, schema_uid: &BytesN<32>, schema: &Schema) {
     let topics = (symbol_short!("SCHEMA"), symbol_short!("REGISTER"));
-    let data: (BytesN<32>, Schema, Address) = (schema_uid.clone(), schema.clone(), authority.clone());
+    let data: (BytesN<32>, Schema) = (schema_uid.clone(), schema.clone());
     env.events().publish(topics, data);
 }
 
 pub fn publish_attestation_event(env: &Env, attestation: &Attestation) {
     let topics = (symbol_short!("ATTEST"), symbol_short!("CREATE"));
-    let data: (BytesN<32>, Address, Address, String, u64, u64) = (
+    let data: (BytesN<32>, BytesN<32>, Address, Address, String, u64, u64) = (
         attestation.uid.clone(),
+        attestation.schema_uid.clone(),
         attestation.subject.clone(),
         attestation.attester.clone(),
         attestation.value.clone(),

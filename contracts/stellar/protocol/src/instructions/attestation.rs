@@ -3,78 +3,111 @@ use crate::state::{Attestation, DataKey};
 use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env, String};
 
 use crate::events;
-use crate::interfaces::resolver::{ResolverAttestation, ResolverClient};
+use crate::interfaces::resolver::{ResolverAttestationData, ResolverClient};
 use crate::utils::{self, generate_attestation_uid};
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ► Resolver Cross-Contract Call Helpers
 // ══════════════════════════════════════════════════════════════════════════════
+//
+// HAL-04: These helpers were updated to call the unified resolver ABI:
+//   - onattest / onrevoke now return Result<bool, ResolverError> on the wire,
+//     so we unwrap the outer Soroban host result AND the inner resolver Result.
+//   - onresolve takes (uid, attester) rather than the full struct, and is
+//     invoked best-effort via try_onresolve (failures are not propagated).
+//   - The struct passed to onattest/onrevoke is the canonical
+//     `ResolverAttestationData` from the resolvers crate.
 
-/// Calls onattest on a resolver contract
-/// Returns true if the attestation should be allowed, false otherwise
-fn call_resolver_onattest(
+/// Calls onattest on a resolver contract.
+///
+/// Returns `Ok(true)` if the resolver allowed the attestation, `Ok(false)` if
+/// it explicitly denied, and `Err(Error::ResolverCallFailed)` if either the
+/// host-level invocation or the resolver itself returned an error.
+///
+/// Visibility: pub(crate) so delegation.rs can call it post-HAL-02.
+pub(crate) fn call_resolver_onattest(
     env: &Env,
     resolver_address: &Address,
-    attestation: &ResolverAttestation,
+    attestation: &ResolverAttestationData,
 ) -> Result<bool, Error> {
     let resolver_client = ResolverClient::new(env, resolver_address);
 
+    // Outer Result: host-level invocation success/failure (XDR decode, trap, etc.)
+    // Inner Result: resolver's Result<bool, ResolverError> return value.
     match resolver_client.try_onattest(attestation) {
-        Ok(result) => match result {
-            Ok(allowed) => Ok(allowed),
-            Err(_) => Err(Error::ResolverCallFailed),
-        },
-        Err(_) => Err(Error::ResolverCallFailed),
+        Ok(Ok(allowed)) => Ok(allowed),
+        Ok(Err(_)) | Err(_) => Err(Error::ResolverCallFailed),
     }
 }
 
-/// Calls onrevoke on a resolver contract
-/// Returns true if the revocation should be allowed, false otherwise
-fn call_resolver_onrevoke(
+/// Calls onrevoke on a resolver contract.
+///
+/// Same Result-unwrapping semantics as `call_resolver_onattest`.
+/// Visibility: pub(crate) so delegation.rs can call it post-HAL-02.
+pub(crate) fn call_resolver_onrevoke(
     env: &Env,
     resolver_address: &Address,
-    attestation: &ResolverAttestation,
+    attestation: &ResolverAttestationData,
 ) -> Result<bool, Error> {
     let resolver_client = ResolverClient::new(env, resolver_address);
 
     match resolver_client.try_onrevoke(attestation) {
-        Ok(result) => match result {
-            Ok(allowed) => Ok(allowed),
-            Err(_) => Err(Error::ResolverCallFailed),
-        },
-        Err(_) => Err(Error::ResolverCallFailed),
+        Ok(Ok(allowed)) => Ok(allowed),
+        Ok(Err(_)) | Err(_) => Err(Error::ResolverCallFailed),
     }
 }
 
-/// Calls onresolve on a resolver contract
-/// Failures are logged but don't revert the attestation or revocation
-fn call_resolver_onresolve(env: &Env, resolver_address: &Address, attestation: &ResolverAttestation) {
+/// Calls onresolve on a resolver contract. Failures are logged but do not
+/// revert the parent attestation or revocation.
+///
+/// Under the unified ABI (HAL-04), onresolve takes only
+/// `(attestation_uid, attester)` — the resolver looks up any state it owns
+/// by UID, and the attester is forwarded for accounting purposes.
+///
+/// Visibility: pub(crate) so delegation.rs can call it post-HAL-02.
+pub(crate) fn call_resolver_onresolve(
+    env: &Env,
+    resolver_address: &Address,
+    attestation_uid: &BytesN<32>,
+    attester: &Address,
+) {
     let resolver_client = ResolverClient::new(env, resolver_address);
 
-    // Ignore failures in onresolve - they're non-critical side effects
-    let _ = resolver_client.try_onresolve(attestation);
+    // Best-effort: discard both host-level and resolver-level errors.
+    let _ = resolver_client.try_onresolve(attestation_uid, attester);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ► Helper Functions for Resolver Integration
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Creates a ResolverAttestation from protocol Attestation data
-/// This converts between the protocol's internal format and the resolver interface format
-fn create_resolver_attestation(
+/// Builds a `ResolverAttestationData` (the canonical resolvers-crate struct)
+/// from the protocol's internal `Attestation`. The field set is identical
+/// between the deleted `ResolverAttestation` and `ResolverAttestationData`,
+/// so this is a rename-only change.
+///
+/// Visibility: pub(crate) so delegation.rs can call it post-HAL-02.
+pub(crate) fn create_resolver_attestation(
     env: &Env,
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
     revocable: bool,
-) -> ResolverAttestation {
-    // Generate a UID for this attestation (protocol doesn't store UIDs currently)
-    let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.nonce);
+) -> ResolverAttestationData {
+    // Generate a UID using the HAL-01 hardened formula
+    // (includes attester to prevent same-subject/nonce collisions across attesters).
+    let uid = generate_attestation_uid(
+        env,
+        schema_uid,
+        &attestation.subject,
+        &attestation.attester,
+        attestation.nonce,
+    );
 
     // Convert attestation value (String) to Bytes for the resolver interface
     // We use XDR serialization to ensure consistent encoding across platforms
     let data = attestation.value.clone().to_xdr(env);
 
-    ResolverAttestation {
+    ResolverAttestationData {
         uid,
         schema_uid: schema_uid.clone(),
         recipient: attestation.subject.clone(),
@@ -132,7 +165,10 @@ pub fn attest(
         }
     }
     let subject = attester.clone();
-    let attestation_uid = generate_attestation_uid(env, &schema_uid, &subject, nonce);
+    // Direct-path UID derivation (HAL-01). subject == attester here, but we
+    // pass &attester explicitly so the formula matches the delegated path
+    // and any future divergence between subject and attester is handled.
+    let attestation_uid = generate_attestation_uid(env, &schema_uid, &subject, &attester, nonce);
 
     let attestation = Attestation {
         uid: attestation_uid.clone(),
@@ -184,13 +220,15 @@ pub fn attest(
 
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
-        // Create resolver attestation format
-        let resolver_attestation =
-            create_resolver_attestation(env, &attestation, &schema_uid, schema.revocable);
-
-        // Call onresolve hook for side effects (rewards, registration, etc.)
-        // Note: Failures here don't revert the attestation
-        call_resolver_onresolve(env, resolver_address, &resolver_attestation);
+        // Under the unified ABI (HAL-04), onresolve takes only (uid, attester);
+        // the resolver looks up any additional state it owns by UID.
+        // Failures here don't revert the attestation.
+        call_resolver_onresolve(
+            env,
+            resolver_address,
+            &attestation_uid,
+            &attestation.attester,
+        );
     }
 
     // Emit event
@@ -262,9 +300,11 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
         return Err(Error::NotAuthorized);
     }
 
-    // Verify the attestation isn't already revoked
+    // Verify the attestation isn't already revoked (HAL-08).
+    // Returning `AlreadyRevoked` rather than `AttestationNotFound` lets callers
+    // and indexers distinguish a missing record from a terminal one.
     if attestation.revoked {
-        return Err(Error::AttestationNotFound);
+        return Err(Error::AlreadyRevoked);
     }
 
     // Verify schema is revocable
@@ -312,17 +352,15 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
 
     // Call resolver onresolve hook if schema has a resolver
     if let Some(resolver_address) = &schema.resolver {
-        // Create resolver attestation format with updated revocation status
-        let resolver_attestation = create_resolver_attestation(
+        // Under the unified ABI (HAL-04), onresolve takes only (uid, attester);
+        // the resolver looks up its own state by UID. Failures here don't
+        // revert the revocation.
+        call_resolver_onresolve(
             env,
-            &attestation,
-            &attestation.schema_uid,
-            schema.revocable,
+            resolver_address,
+            &attestation.uid,
+            &attestation.attester,
         );
-
-        // Call onresolve hook for side effects (cleanup, notifications, etc.)
-        // Note: Failures here don't revert the revocation
-        call_resolver_onresolve(env, resolver_address, &resolver_attestation);
     }
 
     // Emit revocation event

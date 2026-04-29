@@ -124,6 +124,79 @@ const G2_GENERATOR: [u8; 192] = [
     146, 58, 201, 204, 59, 172, 162, 137, 225, 147, 84, 134, 8, 184, 40, 1,
 ];
 
+// =======================================================================================
+//
+//                      HAL-07: STRUCTURAL FLAG-BYTE PRE-CHECKS
+//
+// =======================================================================================
+//
+// API investigation (soroban-sdk 22.0.11, the version pinned by
+// `contracts/stellar/Cargo.lock`) confirms that the BLS12-381 affine types
+// expose ONLY the infallible constructor:
+//
+//   pub fn from_bytes(bytes: BytesN<G1_SERIALIZED_SIZE>) -> Self
+//   pub fn from_bytes(bytes: BytesN<G2_SERIALIZED_SIZE>) -> Self
+//
+// (see ~/.cargo/registry/src/.../soroban-sdk-22.0.11/src/crypto/bls12_381.rs
+//  lines 189-199). No `try_from_bytes` / `Option<Self>` / `Result<Self, _>`
+// variant is exported. When `from_bytes` is invoked at runtime against bytes
+// that do not represent a valid in-subgroup curve point, the Soroban host
+// traps the transaction (WASM abort) before any wrapper return value is
+// produced — a `CtOption`/`is_some()` pattern at the Rust call site cannot
+// catch this.
+//
+// The two helpers below validate the *encoding flag byte* of an uncompressed
+// G1 / G2 point before `from_bytes` is reached. For uncompressed BLS12-381
+// points, byte 0 encodes three flags in its top bits:
+//   - bit 7 (0x80): compression flag — MUST be 0 for an uncompressed point
+//   - bit 6 (0x40): infinity flag    — MUST be 0 for any non-identity point
+//                                       (the identity is not a valid public
+//                                        key or signature)
+//   - bit 5 (0x20): sort flag        — MUST be 0 when the compression flag
+//                                       is 0 (i.e., always 0 here)
+//
+// Checking `(byte_0 & 0xC0) != 0` is an O(1) gate that rejects the
+// most-common malformed inputs (compressed-format blobs, identity-point
+// encodings, zero-padded blobs with wrong flags) with a structured
+// `Err(Error::InvalidSignaturePoint)` instead of a host trap.
+//
+// LIMITATION: this is a structural pre-check ONLY. Off-curve or
+// wrong-subgroup points whose flag byte happens to be 0x00 will still
+// reach `from_bytes` and still trap. Constructing such bytes requires
+// deliberate effort and the submitter pays gas in both cases. A complete
+// fix requires either a fallible host API or an in-WASM subgroup check;
+// neither is currently available.
+
+/// Validates the structural flag byte of an uncompressed G1 point (96 bytes).
+///
+/// Checks that bit 7 (compression) and bit 6 (infinity) of byte 0 are both 0.
+/// Returns `Err(Error::InvalidSignaturePoint)` if either flag is set.
+///
+/// LIMITATION: This does NOT verify on-curve membership or G1 subgroup
+/// membership. Points with valid flag bytes but invalid curve coordinates
+/// will still cause `G1Affine::from_bytes` to trap inside the Soroban host.
+fn validate_g1_point_bytes(bytes: &BytesN<96>) -> Result<(), Error> {
+    // BytesN<96> is structurally guaranteed to be exactly 96 bytes long, so
+    // index 0 is always in-bounds. `get_unchecked` returns the raw u8 byte.
+    let b = bytes.get_unchecked(0);
+    if (b & 0xC0) != 0 {
+        return Err(Error::InvalidSignaturePoint);
+    }
+    Ok(())
+}
+
+/// Validates the structural flag byte of an uncompressed G2 point (192 bytes).
+///
+/// Same flag-bit semantics as [`validate_g1_point_bytes`]. Same on-curve /
+/// subgroup limitation applies.
+fn validate_g2_point_bytes(bytes: &BytesN<192>) -> Result<(), Error> {
+    let b = bytes.get_unchecked(0);
+    if (b & 0xC0) != 0 {
+        return Err(Error::InvalidSignaturePoint);
+    }
+    Ok(())
+}
+
 /// Registers a BLS public key for an attester.
 ///
 /// Each wallet address can register exactly one BLS public key.
@@ -139,10 +212,12 @@ const G2_GENERATOR: [u8; 192] = [
 /// * `Result<(), Error>` - Success or error (fails if key already exists or is invalid)
 ///
 /// # Security
-/// The public key is validated by deserializing it as a G2Affine point.
-/// This ensures the key is a valid point on the BLS12-381 G2 curve.
-/// Invalid keys (off-curve, identity element, wrong subgroup) will cause
-/// deserialization to fail, preventing registration of malicious keys.
+/// The public key is structurally pre-validated, then materialised as a
+/// G2Affine point. The pre-check rejects malformed encodings (compressed
+/// flag set, infinity flag set) with `Err(Error::InvalidSignaturePoint)`
+/// before the host's `G2Affine::from_bytes` is reached. Off-curve or
+/// wrong-subgroup points whose flag byte is well-formed will still cause
+/// `from_bytes` to trap inside the Soroban host (HAL-07 residual).
 pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<192>) -> Result<(), Error> {
     attester.require_auth();
 
@@ -154,11 +229,17 @@ pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<
         return Err(Error::AlreadyInitialized);
     }
 
-    // Validate the public key is a valid G2 curve point.
-    // G2Affine::from_bytes will panic if the bytes don't represent a valid
-    // point on the BLS12-381 G2 curve (off-curve, identity, wrong subgroup).
-    // This prevents registration of malicious or invalid keys that could
-    // break the pairing equation in verify_bls_signature.
+    // HAL-07 mitigation: structural flag-byte check rejects the common
+    // class of malformed encodings (compressed format, infinity point,
+    // zero-padded blobs with wrong flags) with a structured error before
+    // `G2Affine::from_bytes` can trap the host. See `validate_g2_point_bytes`
+    // for the residual limitation (off-curve / wrong-subgroup points still trap).
+    validate_g2_point_bytes(&public_key)?;
+
+    // Materialise the public key as a G2 point. With the pre-check above,
+    // this can still trap on geometrically malformed (off-curve or
+    // wrong-subgroup) inputs that nonetheless have a clean flag byte —
+    // submitter pays gas in that case.
     let _validated_pk = G2Affine::from_bytes(public_key.clone());
 
     let timestamp = env.ledger().timestamp();
@@ -225,13 +306,18 @@ pub fn get_bls_public_key(env: &Env, attester: &Address) -> Result<BlsPublicKey,
 /// # Returns
 /// * `Ok(())` if the signature is cryptographically valid for the given message and attester.
 /// * `Err(Error::InvalidSignature)` if the pairing check fails (signature doesn't match).
+/// * `Err(Error::InvalidSignaturePoint)` if the signature bytes have invalid encoding flags
+///   (compression bit set, or infinity bit set on a non-identity point). Rejected by the
+///   structural pre-check before `G1Affine::from_bytes` is reached.
 /// * `Err(Error::BlsPubKeyNotRegistered)` if the attester has no registered key.
 ///
-/// # Panics
-/// The function will trap (panic) if the signature bytes do not represent a valid G1 curve
-/// point. This is enforced by the Soroban host's BLS12-381 implementation which validates
-/// that deserialized points are on the curve and in the correct subgroup. Invalid signatures
-/// should be validated off-chain before submission to avoid wasted gas.
+/// # Traps (Soroban host abort) — HAL-07 residual
+/// If the `signature` bytes pass the structural flag pre-check but represent an off-curve
+/// or wrong-subgroup G1 point, the Soroban host will abort execution. Callers MUST generate
+/// signatures using a conformant BLS12-381 library. Inputs with invalid encoding flags are
+/// rejected upstream with `Err(Error::InvalidSignaturePoint)` and will NOT reach the host.
+/// The submitter pays gas for the trap path; this is the documented limitation of the
+/// in-WASM mitigation, since soroban-sdk 22.x does not expose a fallible `from_bytes` API.
 ///
 /// # Cross-Platform Compatibility
 /// This on-chain function is designed to verify signatures created by standard off-chain
@@ -266,16 +352,30 @@ pub fn verify_bls_signature(
      * STEP 2: Deserialize the signature and public key into curve points.
      * The signature is a G1 point, and the public key is a G2 point.
      *
-     * NOTE: from_bytes will trap if the bytes don't represent valid curve points.
-     * - signature: User-provided, will trap on invalid G1 point (DoS protection)
-     * - bls_key.key: Validated during registration, always valid G2 point
+     * Trap surface (HAL-07): `G1Affine::from_bytes` / `G2Affine::from_bytes` are
+     * infallible thin wrappers in soroban-sdk 22.x and abort the host when the
+     * bytes are not a valid in-subgroup point.
+     *   - `signature`     : caller-supplied. The structural pre-check below
+     *                       (`validate_g1_point_bytes`) rejects malformed
+     *                       encodings up front; off-curve / wrong-subgroup
+     *                       points with clean flag bytes still trap.
+     *   - `bls_key.key`   : structurally validated at registration time, so
+     *                       only a flag-clean blob can be stored. The same
+     *                       residual (off-curve trap) applies.
      */
     let neg_hashed_message = -hashed_message;
 
-    // Deserialize signature - traps on invalid G1 point (malformed input)
+    // HAL-07 mitigation: structural flag-byte check on the caller-supplied
+    // signature before `G1Affine::from_bytes` can trap the host.
+    validate_g1_point_bytes(signature)?;
+
+    // Deserialize signature into a G1 point. With the pre-check above, this
+    // only traps on geometrically malformed (off-curve / wrong-subgroup)
+    // inputs that nonetheless carry a well-formed flag byte.
     let s = G1Affine::from_bytes(signature.clone());
 
-    // Deserialize public key - already validated during registration
+    // Deserialize public key — already structurally validated during
+    // registration; same trap residual as above.
     let pk = G2Affine::from_bytes(bls_key.key);
 
     /*

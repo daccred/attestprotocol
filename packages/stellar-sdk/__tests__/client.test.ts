@@ -19,6 +19,8 @@ import { ClientOptions, TransactionSigner } from '../src/types'
 import { Keypair, Transaction, Networks } from '@stellar/stellar-sdk'
 
 const accountKeyPair = Keypair.random();
+// A syntactically valid contract address for tests that need contractAddress.
+const TEST_CONTRACT = 'CDJG5ZH7MU7KREGS256QAWO2QDKQJEZHBUJRF6S6ACG5BIS3M4D5WPQT'
 
 describe('StellarAttestationClient', () => {
   let client: StellarAttestationClient
@@ -73,10 +75,17 @@ describe('StellarAttestationClient', () => {
     it('should generate attestation UID', () => {
       const schemaUid = Buffer.alloc(32, 1)
       const subject = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+      const attester = accountKeyPair.publicKey()
       const nonce = BigInt(12345)
-      
-      const uid = client.generateAttestationUid(schemaUid, subject, nonce)
-      
+
+      const uid = client.generateAttestationUid({
+        contractAddress: TEST_CONTRACT,
+        schemaUid,
+        subject,
+        attester,
+        nonce,
+      })
+
       expect(uid).toBeInstanceOf(Buffer)
       expect(uid.length).toBe(32)
     })
@@ -84,20 +93,25 @@ describe('StellarAttestationClient', () => {
     it('should generate deterministic attestation UIDs', () => {
       const schemaUid = Buffer.alloc(32, 2)
       const subject = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+      const attester = accountKeyPair.publicKey()
       const nonce = BigInt(99999)
-      
-      const uid1 = generateAttestationUid(schemaUid, subject, nonce)
-      const uid2 = generateAttestationUid(schemaUid, subject, nonce)
-      
+
+      const uid1 = generateAttestationUid(TEST_CONTRACT, schemaUid, subject, attester, nonce)
+      const uid2 = generateAttestationUid(TEST_CONTRACT, schemaUid, subject, attester, nonce)
+
       expect(uid1.equals(uid2)).toBe(true)
     })
 
     it('should generate schema UID', () => {
       const definition = 'name:string,age:u32'
       const authority = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
-      
-      const uid = client.generateSchemaUid(definition, authority)
-      
+
+      const uid = client.generateSchemaUid({
+        definition,
+        authority,
+        revocable: true,
+      })
+
       expect(uid).toBeInstanceOf(Buffer)
       expect(uid.length).toBe(32)
     })
@@ -105,11 +119,11 @@ describe('StellarAttestationClient', () => {
     it('should generate deterministic schema UIDs', () => {
       const definition = 'name:string,verified:bool'
       const authority = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
-      const resolver = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWHF'
-      
-      const uid1 = generateSchemaUid(definition, authority, resolver)
-      const uid2 = generateSchemaUid(definition, authority, resolver)
-      
+      const resolver = accountKeyPair.publicKey()
+
+      const uid1 = generateSchemaUid(definition, authority, resolver, true)
+      const uid2 = generateSchemaUid(definition, authority, resolver, true)
+
       expect(uid1.equals(uid2)).toBe(true)
     })
   })
@@ -188,7 +202,7 @@ describe('StellarAttestationClient', () => {
       const request = {
         schema_uid: Buffer.alloc(32, 3),
         subject: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
-        attester: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWHF',
+        attester: accountKeyPair.publicKey(),
         value: 'test-value',
         nonce: BigInt(1000),
         deadline: BigInt(Date.now() + 3600000),
@@ -226,8 +240,10 @@ describe('StellarAttestationClient', () => {
     it('should throw error for invalid schema UID in attestation generation', () => {
       expect(() => {
         generateAttestationUid(
+          TEST_CONTRACT,
           Buffer.alloc(16), // Wrong size
           'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          accountKeyPair.publicKey(),
           BigInt(1)
         )
       }).toThrow('schemaUid must be a 32-byte Buffer')
@@ -236,8 +252,10 @@ describe('StellarAttestationClient', () => {
     it('should throw error for invalid subject in attestation generation', () => {
       expect(() => {
         generateAttestationUid(
+          TEST_CONTRACT,
           Buffer.alloc(32),
           'invalid-address',
+          accountKeyPair.publicKey(),
           BigInt(1)
         )
       }).toThrow('subject must be a valid Stellar public key')
@@ -274,21 +292,27 @@ describe('StellarAttestationClient', () => {
       expect(signer.signTransaction).toBeInstanceOf(Function)
     })
 
-    it('should generate UIDs with both object and positional params', () => {
+    it('should generate UIDs deterministically via object form', () => {
       const schemaUid = Buffer.alloc(32, 1)
       const subject = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+      const attester = accountKeyPair.publicKey()
       const nonce = BigInt(12345)
-      
-      // Object params
+
       const uid1 = client.generateAttestationUid({
+        contractAddress: TEST_CONTRACT,
         schemaUid,
-        subject, 
-        nonce
+        subject,
+        attester,
+        nonce,
       })
-      
-      // Positional params
-      const uid2 = client.generateAttestationUid(schemaUid, subject, nonce)
-      
+      const uid2 = client.generateAttestationUid({
+        contractAddress: TEST_CONTRACT,
+        schemaUid,
+        subject,
+        attester,
+        nonce,
+      })
+
       expect(uid1).toBeInstanceOf(Buffer)
       expect(uid2).toBeInstanceOf(Buffer)
       expect(Buffer.compare(uid1, uid2)).toBe(0)
@@ -308,7 +332,7 @@ describe('StellarAttestationClient', () => {
       const attestRequest = {
         schema_uid: Buffer.alloc(32, 3),
         subject: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
-        attester: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWHF',
+        attester: accountKeyPair.publicKey(),
         value: 'test-value',
         nonce: BigInt(1000),
         deadline: BigInt(Date.now() + 3600000),

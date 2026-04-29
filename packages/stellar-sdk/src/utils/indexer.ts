@@ -114,7 +114,6 @@ export const REGISTRY_ENDPOINTS = {
  * Transform raw attestation data to ContractAttestation
  */
 function transformAttestation(item: RawAttestationData): ContractAttestation {
-  console.log('transformAttestation', item)
   return {
     uid: Buffer.from(item.attestation_uid, 'hex'),
     schemaUid: Buffer.from(item.schema_uid, 'hex'),
@@ -136,8 +135,6 @@ function transformAttestation(item: RawAttestationData): ContractAttestation {
  * Transform raw schema data to ContractSchema
  */
 function transformSchema(item: RawSchemaData): ContractSchema {
-  console.log('transformSchema', item)
-
   if (!item.uid) {
     throw new Error('Schema UID is required but was not provided in the API response')
   }

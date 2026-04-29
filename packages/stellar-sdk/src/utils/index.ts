@@ -14,8 +14,6 @@ export { encodeSchema, decodeSchema, validateSchema, createSimpleSchema } from '
 export {
   createAttestMessage,
   createRevokeMessage,
-  getAttestDST,
-  getRevokeDST,
   createDelegatedAttestationRequest,
   createDelegatedRevocationRequest,
 } from '../delegation'
@@ -25,6 +23,7 @@ export {
   generateBlsKeys,
   signHashedMessage,
   verifySignature,
+  validateG1PointFormat,
   aggregateSignatures,
   aggregatePublicKeys,
   verifyAggregateSignature,

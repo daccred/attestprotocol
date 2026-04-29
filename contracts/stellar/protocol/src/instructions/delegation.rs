@@ -1,5 +1,9 @@
 use crate::errors::Error;
 use crate::events;
+use crate::instructions::attestation::{
+    call_resolver_onattest, call_resolver_onresolve, call_resolver_onrevoke,
+    create_resolver_attestation,
+};
 use crate::instructions::verify_bls_signature;
 use crate::state::{Attestation, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest};
 use crate::utils::{self, generate_attestation_uid};
@@ -50,8 +54,16 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
         return Err(Error::ExpiredSignature);
     }
 
+    // Validate expiration_time is in the future if provided (HAL-05).
+    // Mirrors the equivalent guard already present in the direct `attest` path.
+    if let Some(exp_time) = request.expiration_time {
+        if exp_time <= current_time {
+            return Err(Error::InvalidDeadline);
+        }
+    }
+
     // Verify schema exists
-    let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
+    let schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
     // Create message for signature verification
     let message = create_attestation_message(env, &request);
@@ -64,7 +76,27 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Only increment nonce AFTER signature is verified to prevent DoS attacks
     verify_and_increment_nonce(env, &request.attester, request.nonce)?;
 
-    let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, request.nonce);
+    // Generate the attestation UID using the HAL-01 hardened formula:
+    // domain prefix || contract address || schema_uid || subject || attester || nonce.
+    let attestation_uid = generate_attestation_uid(
+        env,
+        &request.schema_uid,
+        &request.subject,
+        &request.attester,
+        request.nonce,
+    );
+
+    // Duplicate-UID guard (HAL-01). Even though the per-attester nonce check above
+    // makes a true collision unreachable on the happy path, this is a defence-in-
+    // depth invariant that any future code path producing an existing UID is
+    // refused rather than silently overwriting a stored attestation.
+    if env
+        .storage()
+        .persistent()
+        .has(&DataKey::AttestationUID(attestation_uid.clone()))
+    {
+        return Err(Error::AttestationExists);
+    }
 
     // Create attestation record
     let attestation = Attestation {
@@ -80,9 +112,41 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
         revocation_time: None,
     };
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER PRE-HOOK: onattest (HAL-02 / C-CONTRACT-4)
+    // The hook fires AFTER signature verification, nonce increment, and the
+    // duplicate-UID guard. Firing earlier (as the prior code did NOT, since
+    // the delegated path called no hook at all) would let an unauthenticated
+    // submitter spam the resolver's onattest endpoint and grief its state.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        let allowed = call_resolver_onattest(env, resolver_address, &resolver_attestation)?;
+        if !allowed {
+            return Err(Error::ResolverError);
+        }
+    }
+
     // Store attestation
     let attest_key = DataKey::AttestationUID(attestation_uid);
     env.storage().persistent().set(&attest_key, &attestation);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER POST-HOOK: onresolve (C-CONTRACT-2 invariant)
+    // SECURITY: onresolve failures MUST NOT revert. The helper uses the
+    // try_onresolve client variant and discards the result; a malicious or
+    // buggy resolver cannot block a successfully-validated attestation.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        // Post-HAL-04 onresolve takes (uid, attester); the resolver looks up
+        // any state it owns by UID and uses attester for accounting.
+        call_resolver_onresolve(env, resolver_address, &attestation.uid, &attestation.attester);
+    }
 
     // Emit event
     events::publish_attestation_event(env, &attestation);
@@ -121,6 +185,13 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         .get::<DataKey, Attestation>(&attest_key)
         .ok_or(Error::AttestationNotFound)?;
 
+    // Already-revoked early-out (HAL-08). Mirrors the direct-path fix and is
+    // positioned before the BLS verification so we don't burn compute on an
+    // already-terminal record.
+    if attestation.revoked {
+        return Err(Error::AlreadyRevoked);
+    }
+
     // Verify the revoker is the original attester
     if attestation.attester != request.revoker {
         return Err(Error::NotAuthorized);
@@ -130,6 +201,15 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // This prevents an attacker from bypassing revocability by providing a different
     // revocable schema_uid while revoking an attestation from a non-revocable schema.
     if attestation.schema_uid != request.schema_uid {
+        return Err(Error::InvalidReference);
+    }
+
+    // Enforce subject match (H-CONTRACT-4). The signed message commits to a
+    // subject hash, so a mismatch would already fail at BLS verify, but
+    // checking here surfaces a precise, cheap error and keeps the invariant
+    // explicit even if the off-chain message construction ever drops the
+    // subject field.
+    if attestation.subject != request.subject {
         return Err(Error::InvalidReference);
     }
 
@@ -145,12 +225,52 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // Verify BLS12-381 signature
     verify_bls_signature(env, &message, &request.signature, &request.revoker)?;
 
+    // Verify and increment per-revoker nonce to prevent replay attacks.
+    // The DelegatedRevocationRequest's nonce is dimensioned against a
+    // per-revoker counter independent from AttesterNonce so that revoking
+    // attestation N never requires the attester's current nonce.
+    // Source: C-CONTRACT-1 (independent audit) / HAL-03 (Halborn §7.3).
+    verify_and_increment_revoker_nonce(env, &request.revoker, request.nonce)?;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER PRE-HOOK: onrevoke (HAL-02 / C-CONTRACT-4)
+    // Fires AFTER signature verification, schema/subject checks, and nonce
+    // increment. The pre-fix delegated path called no resolver hook, so a
+    // schema's revocation policy (e.g. permission, time-window) was simply
+    // ignored when revocation was submitted via the delegated route.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        // Build the resolver-facing struct from the *current* (pre-mutation)
+        // attestation so the resolver sees revoked=false.
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        let allowed = call_resolver_onrevoke(env, resolver_address, &resolver_attestation)?;
+        if !allowed {
+            return Err(Error::ResolverError);
+        }
+    }
+
     // Update attestation
     attestation.revoked = true;
     attestation.revocation_time = Some(current_time);
 
     // Store updated attestation
     env.storage().persistent().set(&attest_key, &attestation);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER POST-HOOK: onresolve (C-CONTRACT-2 invariant)
+    // SECURITY: onresolve failures MUST NOT revert. The helper uses the
+    // try_onresolve client variant; a panicking resolver cannot block a
+    // successfully-validated revocation from committing.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        // Post-HAL-04 onresolve takes (uid, attester).
+        call_resolver_onresolve(env, resolver_address, &attestation.uid, &attestation.attester);
+    }
 
     // Emit revocation event
     events::publish_revocation_event(env, &attestation);
@@ -236,6 +356,35 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
     Ok(())
 }
 
+/// **CRITICAL SECURITY FUNCTION**: Verifies and increments the nonce for a
+/// delegated revoker.
+///
+/// Mirrors `verify_and_increment_nonce` but uses `DataKey::RevokerNonce` so
+/// the revocation nonce sequence is independent from the attestation nonce
+/// sequence. Without this, a delegated revocation request signed with an
+/// arbitrary nonce dimension could be replayed, since `revoke_by_delegation`
+/// previously had no on-chain nonce check at all.
+///
+/// Source: C-CONTRACT-1 (independent audit), extends HAL-03 (Halborn §7.3).
+fn verify_and_increment_revoker_nonce(
+    env: &Env,
+    revoker: &Address,
+    expected_nonce: u64,
+) -> Result<(), Error> {
+    let nonce_key = DataKey::RevokerNonce(revoker.clone());
+    let current_nonce = env
+        .storage()
+        .persistent()
+        .get::<DataKey, u64>(&nonce_key)
+        .unwrap_or(0);
+    if current_nonce != expected_nonce {
+        return Err(Error::InvalidNonce);
+    }
+    let new_nonce = current_nonce.checked_add(1).ok_or(Error::IntegerOverflow)?;
+    env.storage().persistent().set(&nonce_key, &new_nonce);
+    Ok(())
+}
+
 /// **CRITICAL CRYPTOGRAPHIC FUNCTION**: Creates deterministic message for BLS signature verification
 ///
 /// This function constructs the exact message that was signed off-chain by the attester.
@@ -250,9 +399,11 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 /// - **Field Ordering**: Fixed order prevents signature malleability
 /// - **Type Safety**: Big-endian encoding ensures cross-platform consistency
 ///
-/// # Message Structure
+/// # Message Structure (post-HAL-06)
 /// ```rust,ignore
 /// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Contract ID hash: 32 bytes (SHA256 of XDR-encoded current contract address)
+/// Network ID:       32 bytes (env.ledger().network_id())
 /// Schema UID:       32 bytes
 /// Subject Hash:     32 bytes (SHA256 of XDR-encoded subject address)
 /// Nonce:            8 bytes (big-endian u64)
@@ -300,6 +451,18 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 
     // DOMAIN SEPARATION: Use the defined constant for clarity and safety.
     message.extend_from_slice(ATTEST_DOMAIN_SEPARATOR);
+
+    // CONTRACT BINDING (HAL-06): bind the signature to this specific contract
+    // deployment. Without this, a signature minted against a staging or fork
+    // deployment is replayable on mainnet (and vice versa).
+    let contract_id_xdr = env.current_contract_address().clone().to_xdr(env);
+    message.extend_from_array(&env.crypto().sha256(&contract_id_xdr).to_array());
+
+    // NETWORK BINDING (HAL-06): bind to the Stellar network passphrase. This
+    // closes the cross-network replay path independently of the contract
+    // address (different deployments on the same network are also possible).
+    let network_id = env.ledger().network_id();
+    message.extend_from_array(&network_id.to_array());
 
     // FIELD 1: Schema UID (32 bytes, deterministic order)
     message.extend_from_slice(&request.schema_uid.to_array());
@@ -349,9 +512,11 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 /// # Returns
 /// * `BytesN<32>` - The hash of the message to be signed
 ///
-/// # Message Structure
+/// # Message Structure (post-HAL-06)
 /// ```rust,ignore
 /// Domain Separator:  "REVOKE_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Contract ID hash:  32 bytes (SHA256 of XDR-encoded current contract address)
+/// Network ID:        32 bytes (env.ledger().network_id())
 /// Schema UID:        32 bytes
 /// Attestation UID:   32 bytes (binds signature to specific attestation)
 /// Subject Hash:      32 bytes (SHA256 of XDR-encoded subject address)
@@ -363,6 +528,14 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
 
     // DOMAIN SEPARATION: Use the defined constant.
     message.extend_from_slice(REVOKE_DOMAIN_SEPARATOR);
+
+    // CONTRACT BINDING (HAL-06): bind to this specific contract deployment.
+    let contract_id_xdr = env.current_contract_address().clone().to_xdr(env);
+    message.extend_from_array(&env.crypto().sha256(&contract_id_xdr).to_array());
+
+    // NETWORK BINDING (HAL-06): bind to the Stellar network passphrase.
+    let network_id = env.ledger().network_id();
+    message.extend_from_array(&network_id.to_array());
 
     // FIELD 1: Schema UID (32 bytes)
     message.extend_from_slice(&request.schema_uid.to_array());
@@ -398,6 +571,14 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
 /// This is a public utility function for clients to ensure they are using the exact,
 /// correct domain separator when constructing messages for off-chain signing.
 ///
+/// # Important (post-HAL-06)
+/// The DST is no longer sufficient on its own to construct the message hash.
+/// Off-chain callers must follow the wire layout documented on
+/// `create_attestation_message`, which now also includes the contract ID hash
+/// and the network ID immediately after the DST. The W5 SDK port must take
+/// these inputs from the deployed contract address and the network passphrase
+/// rather than relying on the simulation fallback removed in H-SDK-1.
+///
 /// # Returns
 /// * `&[u8]` - The byte slice for the attestation domain separator.
 pub fn get_attest_dst() -> &'static [u8] {
@@ -408,6 +589,12 @@ pub fn get_attest_dst() -> &'static [u8] {
 ///
 /// This is a public utility function for clients to ensure they are using the exact,
 /// correct domain separator when constructing messages for off-chain signing.
+///
+/// # Important (post-HAL-06)
+/// The DST is no longer sufficient on its own to construct the message hash.
+/// Off-chain callers must follow the wire layout documented on
+/// `create_revocation_message`, which now also includes the contract ID hash
+/// and the network ID immediately after the DST.
 ///
 /// # Returns
 /// * `&[u8]` - The byte slice for the revocation domain separator.

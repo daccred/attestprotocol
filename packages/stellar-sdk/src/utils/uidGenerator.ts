@@ -2,114 +2,159 @@
  * UID Generation Utilities
  *
  * Functions for generating deterministic UIDs for attestations and schemas
- * that match the Rust contract implementation exactly.
+ * that match the Rust contract implementation byte-for-byte.
+ *
+ * Layout references (HAL-06 / C-SDK-1 / C-CONTRACT-3):
+ *  - Layout A — Attestation UID input (keccak256 preimage)
+ *  - Layout B — Schema UID input (sha256 preimage with revocable flag)
+ *
+ * Reference vectors live in __tests__/parity.test.ts and are filled by W1.
  */
 
 import { Address, nativeToScVal } from '@stellar/stellar-sdk'
-import { keccak256 } from 'js-sha3'
+import { keccak_256 } from '@noble/hashes/sha3.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+
+const ATTEST_UID_PREFIX = Buffer.from('ATTEST_UID_V1', 'utf8')
+
+/**
+ * Encode a 32-byte buffer as the Soroban `BytesN<32>::to_xdr(env)` byte
+ * sequence: a 4-byte big-endian length prefix (always 0x00000020) followed
+ * by the 32 raw bytes. Total length: 36 bytes.
+ *
+ * This is intentionally NOT `nativeToScVal(buf).toXDR()` — that wraps the
+ * payload in `ScVal::Bytes` and emits a different prefix.
+ */
+function encodeBytesN32Xdr(buf: Buffer): Buffer {
+  if (buf.length !== 32) {
+    throw new Error('BytesN<32> XDR encoding requires exactly 32 bytes of input')
+  }
+  return Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x20]), buf])
+}
+
+/**
+ * Encode a Stellar address as `Address::to_xdr(env)` (raw ScAddress XDR).
+ *
+ * Equivalent to `new Address(addr).toScVal().toXDR()` (which defaults to
+ * the `'raw'` format and returns a Buffer matching Soroban's wire form).
+ */
+function encodeAddressXdr(addr: string): Buffer {
+  return new Address(addr).toScVal().toXDR()
+}
 
 /**
  * Generate an attestation UID matching the Rust contract implementation.
  *
- * This function replicates the logic from `generate_attestation_uid` in the
- * Soroban smart contract, using XDR serialization and Keccak-256 hashing.
+ * Layout A (keccak256 preimage):
+ *   "ATTEST_UID_V1"  || contract_xdr || schema_uid_xdr_36 ||
+ *   subject_xdr      || attester_xdr || nonce_be8
  *
- * @algorithm
- * - Converts schema UID to XDR representation
- * - Converts subject address to XDR representation
- * - Converts nonce to 8-byte big-endian buffer
- * - Concatenates all parts in the correct order
- * - Computes Keccak-256 hash of the concatenated buffer
+ * Hash: keccak256 of the concatenation.
  *
- * @param schemaUid - A 32-byte buffer representing the schema UID
- * @param subject - The Stellar public key string of the subject (e.g., "G...")
- * @param nonce - The nonce as a BigInt (corresponds to Rust u64)
- * @returns A 32-byte buffer representing the attestation UID
+ * @param contractAddress - Stellar address of the deployed protocol contract
+ *   (`env.current_contract_address()` on the Rust side).
+ * @param schemaUid - 32-byte schema UID
+ * @param subject - Stellar account/contract address being attested
+ * @param attester - Stellar account/contract address producing the attestation
+ * @param nonce - u64 attester nonce
+ * @returns 32-byte attestation UID
  */
-export function generateAttestationUid(schemaUid: Buffer, subject: string, nonce: bigint): Buffer {
+export function generateAttestationUid(
+  contractAddress: string,
+  schemaUid: Buffer,
+  subject: string,
+  attester: string,
+  nonce: bigint
+): Buffer {
+  if (typeof contractAddress !== 'string' || contractAddress.length === 0) {
+    throw new Error('contractAddress must be a non-empty Stellar address string')
+  }
   if (!(schemaUid instanceof Buffer) || schemaUid.length !== 32) {
     throw new Error('schemaUid must be a 32-byte Buffer')
   }
   if (typeof subject !== 'string' || !subject.startsWith('G')) {
     throw new Error('subject must be a valid Stellar public key string')
   }
+  if (typeof attester !== 'string' || !attester.startsWith('G')) {
+    throw new Error('attester must be a valid Stellar public key string')
+  }
   if (typeof nonce !== 'bigint') {
     throw new Error('nonce must be a BigInt')
   }
 
-  const schemaUidScVal = nativeToScVal(schemaUid)
-  const schemaUidXdr = schemaUidScVal.toXDR()
-
-  const subjectAddress = new Address(subject)
-  const subjectScVal = subjectAddress.toScVal()
-  const subjectXdr = subjectScVal.toXDR()
+  const contractXdr = encodeAddressXdr(contractAddress)
+  const schemaUidXdr = encodeBytesN32Xdr(schemaUid)
+  const subjectXdr = encodeAddressXdr(subject)
+  const attesterXdr = encodeAddressXdr(attester)
 
   const nonceBuffer = Buffer.alloc(8)
   nonceBuffer.writeBigUInt64BE(nonce, 0)
 
-  const hashInput = Buffer.concat([schemaUidXdr, subjectXdr, nonceBuffer])
+  const hashInput = Buffer.concat([
+    ATTEST_UID_PREFIX,
+    contractXdr,
+    schemaUidXdr,
+    subjectXdr,
+    attesterXdr,
+    nonceBuffer,
+  ])
 
-  const hash = keccak256(hashInput)
-
-  return Buffer.from(hash, 'hex')
+  return Buffer.from(keccak_256(hashInput))
 }
 
 /**
  * Generate a schema UID matching the Rust contract implementation.
  *
- * This function replicates the logic from `generate_schema_uid` in the
- * Soroban smart contract, using XDR serialization and SHA-256 hashing.
+ * Layout B (sha256 preimage):
+ *   schema_definition_xdr || authority_xdr || [resolver_xdr]? || revocable_byte
  *
- * @algorithm
- * 1. Convert definition string to XDR representation
- * 2. Convert authority address to XDR representation
- * 3. Convert resolver address to XDR representation (if provided)
- * 4. Concatenate all XDR components in the correct order
- * 5. Compute SHA-256 hash of the concatenated buffer
+ * `revocable_byte` is `0x01` for true and `0x00` for false. The resolver
+ * component is omitted entirely when no resolver is supplied (matching
+ * the Rust `Option<Address>::None` branch which writes nothing).
  *
- * @param definition - The schema definition string
- * @param authority - The authority address registering the schema
- * @param resolver - Optional resolver address
- * @returns A 32-byte buffer representing the schema UID
+ * @param definition - Schema definition string (Soroban String XDR is computed)
+ * @param authority - Stellar address registering the schema
+ * @param resolver - Optional resolver contract address
+ * @param revocable - Whether attestations against this schema may be revoked
+ * @returns 32-byte schema UID
  */
-export function generateSchemaUid(definition: string, authority: string, resolver?: string): Buffer {
+export function generateSchemaUid(
+  definition: string,
+  authority: string,
+  resolver: string | undefined,
+  revocable: boolean
+): Buffer {
   if (!definition || typeof definition !== 'string') {
     throw new Error('definition must be a non-empty string')
   }
   if (!authority || typeof authority !== 'string') {
     throw new Error('authority must be a non-empty string')
   }
+  if (typeof revocable !== 'boolean') {
+    throw new Error('revocable must be a boolean')
+  }
 
   const components: Buffer[] = []
 
-  const definitionScVal = nativeToScVal(definition)
-  components.push(definitionScVal.toXDR())
+  components.push(nativeToScVal(definition).toXDR())
 
   try {
-    const authorityAddress = new Address(authority)
-    const authorityScVal = authorityAddress.toScVal()
-    components.push(authorityScVal.toXDR())
+    components.push(encodeAddressXdr(authority))
   } catch {
-    const authorityScVal = nativeToScVal(authority)
-    components.push(authorityScVal.toXDR())
+    components.push(nativeToScVal(authority).toXDR())
   }
 
   if (resolver) {
     try {
-      const resolverAddress = new Address(resolver)
-      const resolverScVal = resolverAddress.toScVal()
-      components.push(resolverScVal.toXDR())
+      components.push(encodeAddressXdr(resolver))
     } catch {
-      const resolverScVal = nativeToScVal(resolver)
-      components.push(resolverScVal.toXDR())
+      components.push(nativeToScVal(resolver).toXDR())
     }
   }
 
-  const hashInput = Buffer.concat(components)
-  const hash = sha256(hashInput)
+  components.push(Buffer.from([revocable ? 0x01 : 0x00]))
 
-  return Buffer.from(hash)
+  return Buffer.from(sha256(Buffer.concat(components)))
 }
 
 /**

@@ -83,8 +83,10 @@ pub fn register_schema(
     // Require authorization from the caller
     caller.require_auth();
 
-    // Generate schema UID
-    let schema_uid = utils::generate_schema_uid(env, &schema_definition, &caller, &resolver);
+    // Generate schema UID. The `revocable` flag is part of the UID input
+    // (C-CONTRACT-3), so registering otherwise-identical schemas with different
+    // revocability yields different UIDs and is allowed.
+    let schema_uid = utils::generate_schema_uid(env, &schema_definition, &caller, &resolver, revocable);
 
     // Check if schema already exists (collision detection)
     // This prevents accidental overwrites and detects when an identical schema
@@ -103,8 +105,8 @@ pub fn register_schema(
     };
     env.storage().instance().set(&schema_key, &schema);
 
-    // Publish schema registration event
-    events::schema_registered(env, &schema_uid, &schema, &caller);
+    // Publish schema registration event (M-CONTRACT-1: drop redundant trailing authority)
+    events::schema_registered(env, &schema_uid, &schema);
 
     Ok(schema_uid)
 }
