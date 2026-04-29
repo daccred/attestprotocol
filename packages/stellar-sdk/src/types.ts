@@ -96,9 +96,15 @@ export interface SubmitOptions extends TxOptions {
 }
 
 /**
- * Delegated attestation request
+ * Delegated attestation request.
+ *
+ * The literal `type: 'attest'` discriminator is used by submitRawTx and
+ * downstream dispatch logic to route the request to attestByDelegation
+ * rather than relying on structural property sniffing (see H-SDK-2).
  */
 export interface DelegatedAttestationRequest {
+  /** Discriminator distinguishing attestation requests from revocation requests. */
+  type: 'attest'
   /** The address of the original attester (who signed off-chain) */
   attester: string
   /** Expiration timestamp for this signed request */
@@ -118,9 +124,15 @@ export interface DelegatedAttestationRequest {
 }
 
 /**
- * Delegated revocation request
+ * Delegated revocation request.
+ *
+ * The literal `type: 'revoke'` discriminator is used by submitRawTx and
+ * downstream dispatch logic to route the request to revokeByDelegation
+ * rather than relying on structural property sniffing (see H-SDK-2).
  */
 export interface DelegatedRevocationRequest {
+  /** Discriminator distinguishing revocation requests from attestation requests. */
+  type: 'revoke'
   /** The unique identifier of the attestation to revoke */
   attestation_uid: Buffer
   /** Expiration timestamp for this signed request */

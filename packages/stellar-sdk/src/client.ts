@@ -517,8 +517,11 @@ export class StellarAttestationClient {
     options?: TxOptions
   ): Promise<any> {
     try {
-      // Determine if this is attestation or revocation
-      const isAttestation = 'schemaUid' in request && 'value' in request
+      // Dispatch on the literal `type` discriminator. Pre-fix, this used
+      // `'schemaUid' in request && 'value' in request` which always evaluated
+      // false because the runtime field is `schema_uid` (snake_case),
+      // silently routing every attestation through the revocation path.
+      const isAttestation = request.type === 'attest'
 
       // Get the appropriate DST and create message
       let message: WeierstrassPoint<bigint>

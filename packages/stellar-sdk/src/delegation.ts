@@ -213,6 +213,7 @@ export async function createDelegatedAttestationRequest(
   }
 ): Promise<Omit<DelegatedAttestationRequest, 'signature'>> {
   return {
+    type: 'attest',
     schema_uid: params.schemaUid,
     subject: params.subject,
     attester: params.attester,
@@ -241,6 +242,7 @@ export async function createDelegatedRevocationRequest(
   }
 ): Promise<Omit<DelegatedRevocationRequest, 'signature'>> {
   return {
+    type: 'revoke',
     attestation_uid: params.attestation_uid,
     schema_uid: params.schema_uid,
     subject: params.subject,
