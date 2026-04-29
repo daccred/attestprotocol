@@ -4,6 +4,10 @@ use protocol::{
     utils::{create_xdr_string, generate_attestation_uid},
     AttestationContract, AttestationContractClient,
 };
+// Tests below depend on `env.current_contract_address()` for the post-HAL-01
+// UID formula, so we register a throwaway contract and compute UIDs inside
+// `env.as_contract(...)`. Keep this in sync with `generate_attestation_uid`
+// in `contracts/stellar/protocol/src/utils.rs`.
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, Events, Ledger, LedgerInfo, MockAuth, MockAuthInvoke},
@@ -21,29 +25,24 @@ fn return_schema_definition(env: &Env) -> String {
     .to_string();
     format!("XDR:{}", schema)
 }
-/// **Test: Generate Compatible Attestation UID**
+/// **Test: HAL-01 — Determinism check for the post-HAL-01 attestation UID formula**
 ///
-/// This test verifies that the Rust implementation of `generate_attestation_uid` produces
-/// the same UID as the TypeScript implementation in the test utilities. This ensures
-/// cross-platform compatibility and deterministic UID generation across different
-/// language implementations.
+/// The HAL-01 fix changes `generate_attestation_uid` to bind the UID to:
+///   `b"ATTEST_UID_V1" || contract_address_xdr || schema_uid_xdr ||
+///    subject_xdr || attester_xdr || nonce_be8`
+/// hashed with keccak256.
 ///
-/// **Test Data:**
-/// - Schema UID: `a8b158f4f0aadc903cd58111199d8f71e75614e647d3c28c390c904014281f6d`
-/// - Subject: `GD25F6Z56KYTB4I4EU7KHGLM43VRBNENAUQ3GP24FZIO6WNAAJMUA7P5`
-/// - Nonce: 0
-/// - Expected UID: `dc4f7c2bca792fb85288e5928af14e4ebbc76d98fd672f6bb15bd8f52ab5aaa5`
-///
-/// **Key Assertions:**
-/// - Generated UID matches the expected TypeScript implementation output
-/// - Deterministic generation produces consistent results
-/// - Cross-platform compatibility is maintained
-///
-/// **Note:** This test uses hardcoded values that match the TypeScript test suite
-/// to ensure both implementations generate identical UIDs for the same inputs.
+/// Because the formula now depends on `env.current_contract_address()` and the
+/// contract address is randomized per `env.register(...)` call, we cannot pin a
+/// hardcoded UID independent of the deployment. This test instead verifies
+/// determinism (same inputs => same output) and prints the produced bytes so the
+/// W5 SDK port can build the matching off-chain helper. A separate reference-
+/// vector test in `protocol_delegation_test.rs` pins UIDs against fully-qualified
+/// canonical inputs (see `test_hal01_uid_reference_vector_for_w5`).
 #[test]
 fn test_generate_compatible_attestation_uid() {
     let env = Env::default();
+    let contract_id = env.register(AttestationContract {}, ());
 
     let schema_uid = BytesN::from_array(
         &env,
@@ -53,40 +52,21 @@ fn test_generate_compatible_attestation_uid() {
         ],
     );
     let subject = Address::from_str(&env, "GD25F6Z56KYTB4I4EU7KHGLM43VRBNENAUQ3GP24FZIO6WNAAJMUA7P5");
-    let nonce = 0;
+    let attester = Address::generate(&env);
+    let nonce: u64 = 0;
 
-    let expected_uid = BytesN::from_array(
-        &env,
-        &[
-            0xdc, 0x4f, 0x7c, 0x2b, 0xca, 0x79, 0x2f, 0xb8, 0x52, 0x88, 0xe5, 0x92, 0x8a, 0xf1, 0x4e, 0x4e, 0xbb, 0xc7,
-            0x6d, 0x98, 0xfd, 0x67, 0x2f, 0x6b, 0xb1, 0x5b, 0xd8, 0xf5, 0x2a, 0xb5, 0xaa, 0xa5,
-        ],
-    );
+    let (uid_a, uid_b) = env.as_contract(&contract_id, || {
+        let a = generate_attestation_uid(&env, &schema_uid, &subject, &attester, nonce);
+        let b = generate_attestation_uid(&env, &schema_uid, &subject, &attester, nonce);
+        (a, b)
+    });
 
-    let generated_uid = generate_attestation_uid(&env, &schema_uid, &subject, nonce);
+    // Determinism: same inputs => same UID.
+    assert_eq!(uid_a, uid_b);
+
     println!("=============================================================");
-    println!(
-        "      Running test case: {}",
-        "test_generate_compatible_attestation_uid"
-    );
+    println!("      HAL-01 generate_attestation_uid determinism check");
     println!("=============================================================");
-
-    println!(
-        "generated_uid: {}",
-        generated_uid
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<String>>()
-            .join("")
-    );
-    println!(
-        "expected_uid: {}",
-        expected_uid
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<String>>()
-            .join("")
-    );
     println!(
         "schema_uid: {}",
         schema_uid
@@ -95,10 +75,13 @@ fn test_generate_compatible_attestation_uid() {
             .collect::<Vec<String>>()
             .join("")
     );
-    println!("subject: {:?}", subject.to_string());
-    println!("nonce: {}", nonce);
-
-    assert_eq!(generated_uid, expected_uid);
+    println!("subject:    {:?}", subject.to_string());
+    println!("attester:   {:?}", attester.to_string());
+    println!("nonce:      {}", nonce);
+    println!(
+        "produced uid (depends on test contract address): {}",
+        hex::encode(uid_a.to_array())
+    );
 }
 
 /// **Test: Basic Attestation Creation and Retrieval**
@@ -191,7 +174,10 @@ fn create_and_get_attestation() {
     assert_eq!(last.0, contract_id);
     let expected_topics = (symbol_short!("ATTEST"), symbol_short!("CREATE")).into_val(&env);
     assert_eq!(last.1, expected_topics);
-    let (_schema_uid_ev, subject_ev, attester_ev, value_ev, nonce_ev, timestamp_ev): (
+    // Post HAL-09 the ATTEST/CREATE event tuple is:
+    //   (uid, schema_uid, subject, attester, value, nonce, timestamp)
+    let (_uid_ev, schema_uid_ev, subject_ev, attester_ev, value_ev, nonce_ev, timestamp_ev): (
+        BytesN<32>,
         BytesN<32>,
         Address,
         Address,
@@ -199,15 +185,16 @@ fn create_and_get_attestation() {
         u64,
         u64,
     ) = last.2.try_into_val(&env).unwrap();
+    assert_eq!(schema_uid_ev, schema_uid);
 
     dbg!(&subject_ev, &attester_ev, &value_ev, &nonce_ev);
     assert_eq!(subject_ev, attester);
     assert_eq!(attester_ev, attester);
     assert_eq!(value_ev, value);
-    assert_eq!(
-        generate_attestation_uid(&env, &schema_uid, &attester, nonce_ev),
-        attestation_uid
-    );
+    let recomputed_uid = env.as_contract(&contract_id, || {
+        generate_attestation_uid(&env, &schema_uid, &attester, &attester, nonce_ev)
+    });
+    assert_eq!(recomputed_uid, attestation_uid);
     let _ = timestamp_ev; // timestamp may be zero in test env; no assertion
 
     // get attestation and verify
@@ -555,7 +542,10 @@ fn test_multiple_attestations_for_same_subject_and_schema() {
         },
     }]);
     let uid_1: BytesN<32> = client.attest(&attester, &schema_uid, &value2, &expiration_time2);
-    assert_eq!(uid_1, generate_attestation_uid(&env, &schema_uid, &attester, 1));
+    let expected_uid_1 = env.as_contract(&contract_id, || {
+        generate_attestation_uid(&env, &schema_uid, &attester, &attester, 1)
+    });
+    assert_eq!(uid_1, expected_uid_1);
 
     // attest - 3
     let value3 = SorobanString::from_str(&env, "{\"foo\":\"bar3\"}");
@@ -576,7 +566,10 @@ fn test_multiple_attestations_for_same_subject_and_schema() {
         },
     }]);
     let uid_2: BytesN<32> = client.attest(&attester, &schema_uid, &value3, &expiration_time3);
-    assert_eq!(uid_2, generate_attestation_uid(&env, &schema_uid, &attester, 2));
+    let expected_uid_2 = env.as_contract(&contract_id, || {
+        generate_attestation_uid(&env, &schema_uid, &attester, &attester, 2)
+    });
+    assert_eq!(uid_2, expected_uid_2);
 
     // get attestations and verify
     let fetched0 = client.get_attestation(&uid_0);

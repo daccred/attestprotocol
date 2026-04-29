@@ -412,3 +412,108 @@ fn test_resolver_onresolve_hook_called_after_revocation() {
     assert!(stored_attester.is_some());
     assert_eq!(stored_attester.unwrap(), attester);
 }
+
+// =======================================================================================
+// HAL-02 / C-CONTRACT-4 — Delegated paths invoke resolver hooks
+// =======================================================================================
+
+/// **Test: HAL-02 — Delegated attest invokes onattest and respects its decision**
+///
+/// Pre-fix: `attest_by_delegation` ignored the schema's resolver entirely. Any
+/// schema policy enforced by the resolver could be bypassed by submitting via
+/// the delegated route. Post-fix: the protocol invokes `onattest` after the BLS
+/// signature is verified and the nonce is consumed; if the resolver returns
+/// `false`, the attestation is rejected with `ResolverError`.
+#[test]
+fn test_hal02_delegated_attest_calls_resolver_onattest() {
+    use testutils::{create_delegated_attestation_request, TEST_BLS_G2_PUBLIC_KEY};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+    client.initialize(&admin);
+
+    // Schema backed by AlwaysApproveResolver — onattest returns true.
+    let resolver = env.register(always_approve_resolver::AlwaysApproveResolver, ());
+    let schema_uid = client.register(
+        &admin,
+        &SorobanString::from_str(&env, "schema_w_resolver"),
+        &Some(resolver),
+        &true,
+    );
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    let req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
+    // Pre-fix: this would have skipped onattest entirely. Post-fix: onattest fires
+    // after sig verify + nonce + duplicate-UID check, and returns true → success.
+    client.attest_by_delegation(&submitter, &req);
+}
+
+/// **Test: HAL-02 — Delegated revoke invokes onrevoke and a `false` return rejects**
+#[test]
+fn test_hal02_delegated_revoke_rejected_when_resolver_says_no() {
+    use testutils::{create_delegated_attestation_request, TEST_BLS_G2_PUBLIC_KEY};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+    client.initialize(&admin);
+
+    // NoRevokeResolver: onattest=true, onrevoke=false.
+    let resolver = env.register(no_revoke_resolver::NoRevokeResolver, ());
+    let schema_uid = client.register(
+        &admin,
+        &SorobanString::from_str(&env, "no_revoke"),
+        &Some(resolver),
+        &true,
+    );
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    // Create the attestation (onattest returns true → succeeds).
+    let attest_req =
+        create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
+    client.attest_by_delegation(&submitter, &attest_req);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+
+    // Build a properly-signed delegated revocation. Pre-fix: revoke_by_delegation
+    // ignored the resolver and would have succeeded. Post-fix: onrevoke returns
+    // false → the protocol rejects with ResolverError and the attestation stays
+    // in the un-revoked state.
+    use testutils::TEST_BLS_PRIVATE_KEY;
+    use protocol::{instructions::delegation::create_revocation_message, state::DelegatedRevocationRequest};
+    let private_key = blst::min_sig::SecretKey::from_bytes(&TEST_BLS_PRIVATE_KEY).expect("valid key");
+    let mut req = DelegatedRevocationRequest {
+        attestation_uid: attestation_uid.clone(),
+        schema_uid: schema_uid.clone(),
+        subject: subject.clone(),
+        nonce: 0,
+        revoker: attester.clone(),
+        deadline: env.ledger().timestamp() + 1000,
+        signature: BytesN::from_array(&env, &[0; 96]),
+    };
+    let message_hash = env.as_contract(&contract_id, || create_revocation_message(&env, &req));
+    let sig = private_key.sign(
+        &message_hash.to_array(),
+        b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
+        &[],
+    );
+    req.signature = BytesN::from_array(&env, &sig.serialize());
+
+    let result = client.try_revoke_by_delegation(&submitter, &req);
+    assert!(matches!(result, Err(_)), "delegated revoke must be rejected by resolver");
+    assert!(!client.get_attestation(&attestation_uid).revoked);
+}

@@ -29,6 +29,11 @@ pub enum DataKey {
     ///
     /// One-to-one mapping: wallet address -> BLS public key
     AttesterPublicKey(Address),
+    /// Key for storing the current nonce for a revoker (delegated revocation
+    /// replay protection). Independent of AttesterNonce so revoking attestation
+    /// N never requires the attester's current nonce.
+    /// Source: C-CONTRACT-1 (independent audit), extends HAL-03 (Halborn §7.3).
+    RevokerNonce(Address),
 }
 
 /// ╔══════════════════════════════════════════════════════════════════════════╗

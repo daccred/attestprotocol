@@ -327,7 +327,8 @@ fn test_cannot_revoke_from_non_revocable_schema() {
 /// **Test: Double Revocation Prevention**
 /// - Revoke an attestation successfully
 /// - Attempt to revoke the same attestation again
-/// - Should fail with Error::AttestationNotFound (as if it's not found post-revocation)
+/// - Should fail with `Error::AlreadyRevoked` (HAL-08). Pre-fix this returned
+///   `AttestationNotFound`, which conflated terminal records with missing ones.
 #[test]
 fn test_double_revocation_fails() {
     let env = Env::default();
@@ -418,7 +419,7 @@ fn test_double_revocation_fails() {
     }]);
     let result = client.try_revoke(&attester, &attestation_uid);
     dbg!(&result);
-    assert_eq!(result, Err(Ok(Error::AttestationNotFound.into())));
+    assert_eq!(result, Err(Ok(Error::AlreadyRevoked.into())));
 
     // verify no new events were emitted
     assert_eq!(env.events().all().len(), events_after_first_revoke);

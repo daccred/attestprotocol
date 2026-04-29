@@ -178,18 +178,18 @@ fn test_nonce_incrementation() {
     );
     let event_three = env.events().all().clone();
 
-    let first_event_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let first_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_one.last().unwrap().2.try_into_val(&env).unwrap();
-    let second_event_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let second_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_two.last().unwrap().2.try_into_val(&env).unwrap();
-    let third_event_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let third_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_three.last().unwrap().2.try_into_val(&env).unwrap();
 
     dbg!(&first_event_data, &second_event_data, &third_event_data);
-    // let (event_schema_uid, event_attester, event_subject, event_value, event_nonce, event_timestamp): (BytesN<32>, Address, Address, SorobanString, u64, u64) = first_event_data;
-    assert_eq!(first_event_data.4, 0, "First attestation should use nonce 0");
-    assert_eq!(second_event_data.4, 1, "Second attestation should use nonce 1");
-    assert_eq!(third_event_data.4, 2, "Third attestation should use nonce 2");
+    // let (event_schema_uid, event_attester, event_subject, event_value, event_nonce, event_timestamp): (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) = first_event_data;
+    assert_eq!(first_event_data.5, 0, "First attestation should use nonce 0");
+    assert_eq!(second_event_data.5, 1, "Second attestation should use nonce 1");
+    assert_eq!(third_event_data.5, 2, "Third attestation should use nonce 2");
 
     println!("=============================================================");
     println!("      Finished: {}", "test_nonce_incrementation");
@@ -266,11 +266,11 @@ fn test_nonce_is_attester_specific() {
     );
     let event_from_att_three = env.events().all().clone();
 
-    let event_from_att_one_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let event_from_att_one_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_from_att_one.last().unwrap().2.try_into_val(&env).unwrap();
-    let event_from_att_two_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let event_from_att_two_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_from_att_two.last().unwrap().2.try_into_val(&env).unwrap();
-    let event_from_att_three_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let event_from_att_three_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_from_att_three.last().unwrap().2.try_into_val(&env).unwrap();
 
     dbg!(
@@ -280,27 +280,27 @@ fn test_nonce_is_attester_specific() {
     );
 
     assert_eq!(
-        event_from_att_one_data.4, 0,
+        event_from_att_one_data.5, 0,
         "Attester A's first attestation should use nonce 0"
     );
     assert_eq!(
-        event_from_att_two_data.4, 0,
+        event_from_att_two_data.5, 0,
         "Attester B's first attestation should use nonce 0 (independent of A)"
     );
     assert_eq!(
-        event_from_att_three_data.4, 1,
+        event_from_att_three_data.5, 1,
         "Attester A's second attestation should use nonce 1"
     );
     assert_eq!(
-        event_from_att_one_data.2, attester_a,
+        event_from_att_one_data.3, attester_a,
         "First event should be from attester A"
     );
     assert_eq!(
-        event_from_att_two_data.2, attester_b,
+        event_from_att_two_data.3, attester_b,
         "Second event should be from attester B"
     );
     assert_eq!(
-        event_from_att_three_data.2, attester_a,
+        event_from_att_three_data.3, attester_a,
         "Third event should be from attester A"
     );
 
@@ -364,16 +364,16 @@ fn test_nonce_replay_future_nonce_rejection() {
         );
 
         let events = env.events().all();
-        let event_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+        let event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
             events.last().unwrap().2.try_into_val(&env).unwrap();
 
         assert_eq!(
-            event_data.4,
+            event_data.5,
             expected_nonce,
             "Attestation {} should use nonce {}, got {}",
             index + 1,
             expected_nonce,
-            event_data.4
+            event_data.5
         );
 
         if (index + 1) % 200 == 0 {
@@ -402,11 +402,11 @@ fn test_nonce_replay_future_nonce_rejection() {
     );
 
     let final_events = env.events().all();
-    let final_event_data: (BytesN<32>, Address, Address, SorobanString, u64, u64) =
+    let final_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         final_events.last().unwrap().2.try_into_val(&env).unwrap();
 
     assert_eq!(
-        final_event_data.4, expected_nonce,
+        final_event_data.5, expected_nonce,
         "Final attestation should use nonce {}",
         expected_nonce
     );
@@ -516,7 +516,7 @@ fn test_delegated_action_with_unregistered_key() {
     let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
 
     // 1. Create a delegated attestation request.
-    let request = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let request = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
 
     // 3. Attempt to submit the delegated attestation.
     let result = client.try_attest_by_delegation(&submitter, &request);
@@ -553,7 +553,7 @@ fn test_delegated_attestation_with_valid_signature() {
     let bls_key = bls_key_entry.unwrap().unwrap(); // First unwrap for SDK result, second for contract result
     assert_eq!(bls_key.key, public_key, "Stored key should match registered key");
 
-    let delegated_attestation_request = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let delegated_attestation_request = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     client.attest_by_delegation(&attester, &delegated_attestation_request);
 
     let events = env.events().all();
@@ -562,7 +562,9 @@ fn test_delegated_attestation_with_valid_signature() {
     assert!(!events.is_empty(), "Attestation event should be emitted");
 
     let last_attestation_event = events.last().unwrap();
-    let (event_uid, event_subject, event_attester, _event_value, event_nonce, _): (
+    // Post HAL-09: ATTEST/CREATE tuple is (uid, schema_uid, subject, attester, value, nonce, timestamp)
+    let (event_uid, _event_schema_uid, event_subject, event_attester, _event_value, event_nonce, _): (
+        BytesN<32>,
         BytesN<32>,
         Address,
         Address,
@@ -571,8 +573,10 @@ fn test_delegated_attestation_with_valid_signature() {
         u64,
     ) = last_attestation_event.2.try_into_val(&env).unwrap();
 
-    // 4. Verify that the attestation was created.
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    // 4. Verify that the attestation was created (HAL-01 hardened formula).
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
     let fetched = client.get_attestation(&attestation_uid);
 
     assert_eq!(
@@ -644,11 +648,24 @@ fn test_end_to_end_bls_signature_verification() {
         signature: BytesN::from_array(&env, &[0; 96]), // Not used for this test
     };
 
-    let delegated_attestation_message: [u8; 32] = {
+    // Off-chain message construction must mirror the on-chain
+    // `create_attestation_message`, including the post-HAL-06 contract and
+    // network bindings. We compute it under `env.as_contract(&contract_id, ...)`
+    // so `current_contract_address()` returns the protocol contract.
+    let delegated_attestation_message: [u8; 32] = env.as_contract(&contract_id, || {
         let mut message_payload = Bytes::new(&env);
 
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
+
+        // HAL-06: contract ID hash (32 bytes)
+        let contract_id_xdr = env.current_contract_address().clone().to_xdr(&env);
+        let contract_hash = env.crypto().sha256(&contract_id_xdr);
+        message_payload.extend_from_array(&contract_hash.to_array());
+
+        // HAL-06: network ID (32 bytes)
+        let network_id = env.ledger().network_id();
+        message_payload.extend_from_array(&network_id.to_array());
 
         // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
@@ -673,8 +690,9 @@ fn test_end_to_end_bls_signature_verification() {
         let value_hash = env.crypto().sha256(&value_xdr);
         message_payload.extend_from_slice(&value_hash.to_array());
 
-        env.crypto().sha256(&message_payload).into()
-    };
+        let h: BytesN<32> = env.crypto().sha256(&message_payload).into();
+        h.to_array()
+    });
 
     let signature = private_key.sign(
         &delegated_attestation_message,
@@ -698,7 +716,9 @@ fn test_end_to_end_bls_signature_verification() {
 
     let event = env.events().all().last().unwrap();
 
-    let (event_uid, event_subject, event_attester, _event_value, event_nonce, _): (
+    // Post HAL-09: ATTEST/CREATE tuple is (uid, schema_uid, subject, attester, value, nonce, timestamp)
+    let (event_uid, _event_schema_uid, event_subject, event_attester, _event_value, event_nonce, _): (
+        BytesN<32>,
         BytesN<32>,
         Address,
         Address,
@@ -707,7 +727,9 @@ fn test_end_to_end_bls_signature_verification() {
         u64,
     ) = event.2.try_into_val(&env).unwrap();
 
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, attester_nonce);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, attester_nonce)
+    });
     let fetched = client.get_attestation(&attestation_uid);
 
     assert_eq!(fetched.attester, attester);
@@ -719,13 +741,15 @@ fn test_end_to_end_bls_signature_verification() {
 
 /// **Test: Message Hash Consistency Between On-Chain and Off-Chain Logic**
 ///
-/// This test provides very high confidence that the off-chain message construction
-/// (simulated here in Rust) and the on-chain `create_attestation_message` function
-/// produce the exact same hash. This is a critical check to prevent signature
-/// verification failures caused by serialization mismatches.
+/// Provides very high confidence that the off-chain message construction
+/// (simulated here in Rust) and the on-chain `create_attestation_message`
+/// function produce the exact same hash. Updated for HAL-06: both sides now
+/// include the contract ID hash and the network ID immediately after the
+/// domain separator.
 #[test]
 fn test_clean_room_attestation_message_hash() {
     let env = Env::default();
+    let contract_id = env.register(AttestationContract {}, ());
     let attester = Address::generate(&env);
     let subject = Address::generate(&env);
     let schema_uid = BytesN::from_array(&env, &[1; 32]);
@@ -742,14 +766,22 @@ fn test_clean_room_attestation_message_hash() {
         signature: BytesN::from_array(&env, &[0; 96]), // Not used for this test
     };
 
-    // 2. Simulate the OFF-CHAIN message construction.
-    // This logic is a clean-room implementation that MUST perfectly mirror
-    // the production `create_attestation_message` function.
-    let off_chain_hash: [u8; 32] = {
+    // 2. Simulate the OFF-CHAIN message construction inside the contract context
+    //    so `current_contract_address()` and `network_id()` resolve.
+    let (off_chain_hash, on_chain_hash) = env.as_contract(&contract_id, || {
         let mut message_payload = Bytes::new(&env);
 
         let attestation_domain_separator = instructions::delegation::get_attest_dst();
         message_payload.extend_from_slice(attestation_domain_separator);
+
+        // HAL-06: contract ID hash
+        let contract_id_xdr = env.current_contract_address().clone().to_xdr(&env);
+        let contract_hash = env.crypto().sha256(&contract_id_xdr);
+        message_payload.extend_from_array(&contract_hash.to_array());
+
+        // HAL-06: network ID
+        let network_id = env.ledger().network_id();
+        message_payload.extend_from_array(&network_id.to_array());
 
         // Field 1: Schema UID
         message_payload.extend_from_slice(&request.schema_uid.to_array());
@@ -774,56 +806,63 @@ fn test_clean_room_attestation_message_hash() {
         let value_hash = env.crypto().sha256(&value_xdr);
         message_payload.extend_from_slice(&value_hash.to_array());
 
-        env.crypto().sha256(&message_payload).into()
-    };
+        let off: BytesN<32> = env.crypto().sha256(&message_payload).into();
+        let on = create_attestation_message(&env, &request);
+        (off.to_array(), on.to_array())
+    });
 
-    // 3. Call the ON-CHAIN message construction function from the contract.
-    let on_chain_hash_bytesn = create_attestation_message(&env, &request);
-    let on_chain_hash = on_chain_hash_bytesn.to_array();
-
-    // 4. Assert that the two hashes are absolutely identical.
     println!("Off-chain generated hash: {:?}", off_chain_hash);
     println!("On-chain generated hash:  {:?}", on_chain_hash);
     assert_eq!(off_chain_hash, on_chain_hash);
+
+    // Reference vector for W5 (HAL-06 attest message hash).
+    eprintln!(
+        "HAL-06 W5_VECTOR_ATTEST_MSG_HASH (contract={:?}): {}",
+        contract_id.to_string(),
+        hex::encode(on_chain_hash)
+    );
 }
 
 #[test]
 fn test_clean_room_revocation_message_hash() {
     let env = Env::default();
+    let contract_id = env.register(AttestationContract {}, ());
     let attester = Address::generate(&env);
     let subject = Address::generate(&env);
     let schema_uid = BytesN::from_array(&env, &[1; 32]);
 
-    // 1. Create a sample request object with all fields populated.
     let request = DelegatedRevocationRequest {
         schema_uid: schema_uid.clone(),
         subject: subject.clone(),
         nonce: 0,
         deadline: env.ledger().timestamp() + 1000,
-        /* This is not valid because we are only computing for
-        the hash of the message, not the signature
-        */
         attestation_uid: BytesN::from_array(&env, &[0; 32]),
         revoker: attester.clone(),
-        signature: BytesN::from_array(&env, &[0; 96]), // Not used for this test
+        signature: BytesN::from_array(&env, &[0; 96]),
     };
 
-    // 2. Simulate the OFF-CHAIN message construction.
-    // This logic is a clean-room implementation that MUST perfectly mirror
-    // the production `create_revocation_message` function.
-    let off_chain_hash: [u8; 32] = {
+    let (off_chain_hash, on_chain_hash) = env.as_contract(&contract_id, || {
         let mut payload = Bytes::new(&env);
 
         let revocation_domain_separator = instructions::delegation::get_revoke_dst();
         payload.extend_from_slice(revocation_domain_separator);
 
+        // HAL-06: contract ID hash
+        let contract_id_xdr = env.current_contract_address().clone().to_xdr(&env);
+        let contract_hash = env.crypto().sha256(&contract_id_xdr);
+        payload.extend_from_array(&contract_hash.to_array());
+
+        // HAL-06: network ID
+        let network_id = env.ledger().network_id();
+        payload.extend_from_array(&network_id.to_array());
+
         // Field 1: Schema UID
         payload.extend_from_slice(&request.schema_uid.to_array());
 
-        // Field 2: Attestation UID (binds signature to specific attestation)
+        // Field 2: Attestation UID
         payload.extend_from_slice(&request.attestation_uid.to_array());
 
-        // Field 3: Subject Hash (SHA256 of XDR-encoded subject address)
+        // Field 3: Subject Hash
         let subject_xdr = request.subject.clone().to_xdr(&env);
         let subject_hash = env.crypto().sha256(&subject_xdr);
         payload.extend_from_slice(&subject_hash.to_array());
@@ -834,12 +873,18 @@ fn test_clean_room_revocation_message_hash() {
         // Field 5: Deadline
         payload.extend_from_slice(&request.deadline.to_be_bytes());
 
-        env.crypto().sha256(&payload).into()
-    };
+        let off: BytesN<32> = env.crypto().sha256(&payload).into();
+        let on = instructions::create_revocation_message(&env, &request);
+        (off.to_array(), on.to_array())
+    });
+    assert_eq!(off_chain_hash, on_chain_hash);
 
-    // 3. Call the ON-CHAIN message construction function from the contract.
-    let on_chain_hash_bytesn = instructions::create_revocation_message(&env, &request);
-    assert_eq!(off_chain_hash, on_chain_hash_bytesn.to_array());
+    // Reference vector for W5 (HAL-06 revoke message hash).
+    eprintln!(
+        "HAL-06 W5_VECTOR_REVOKE_MSG_HASH (contract={:?}): {}",
+        contract_id.to_string(),
+        hex::encode(on_chain_hash)
+    );
 }
 
 // =======================================================================================
@@ -930,7 +975,9 @@ fn test_hal07_compressed_signature_flag_returns_error_not_trap() {
     );
 
     // Side-effect check: no attestation was written to storage.
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
     let fetched = client.try_get_attestation(&attestation_uid);
     assert!(
         fetched.is_err() || fetched.unwrap().is_err(),
@@ -1122,7 +1169,7 @@ fn test_hal07_valid_signature_passes_structural_check() {
     client.register_bls_key(&attester, &public_key);
 
     // Sanity: the standard test signature's first byte is structurally clean.
-    let request = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let request = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     assert_eq!(
         request.signature.get_unchecked(0) & 0xC0,
         0,
@@ -1134,7 +1181,9 @@ fn test_hal07_valid_signature_passes_structural_check() {
     client.attest_by_delegation(&attester, &request);
 
     // Confirm the attestation was actually written to persistent storage.
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
     let fetched = client.get_attestation(&attestation_uid);
     assert_eq!(
         fetched.attester, attester,

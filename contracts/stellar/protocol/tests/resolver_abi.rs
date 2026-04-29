@@ -168,6 +168,7 @@ fn test_delegated_attest_with_default_resolver_succeeds() {
 
     let request = create_delegated_attestation_request(
         &env,
+        &protocol_id,
         &attester,
         0u64, // nonce
         &schema_uid,

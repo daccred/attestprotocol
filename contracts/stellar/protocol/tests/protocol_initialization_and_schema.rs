@@ -104,7 +104,9 @@ fn initialize_and_register_schema() {
         let expected_topics = (symbol_short!("SCHEMA"), symbol_short!("REGISTER")).into_val(&env);
         dbg!(&expected_topics);
         assert_eq!(last.1, expected_topics);
-        let event_data: (BytesN<32>, Schema, Address) = last.2.try_into_val(&env).unwrap();
+        // Post M-CONTRACT-1: SCHEMA/REGISTER tuple drops the redundant trailing authority
+        // and is now (schema_uid, schema). authority is accessible inside the Schema.
+        let event_data: (BytesN<32>, Schema) = last.2.try_into_val(&env).unwrap();
         println!(
             "Event data: schema_uid={:?}, schema={:?}",
             event_data.0, event_data.1.definition

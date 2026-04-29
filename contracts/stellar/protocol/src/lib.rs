@@ -214,6 +214,21 @@ impl AttestationContract {
         utils::get_next_nonce(&env, &attester)
     }
 
+    /// Returns the next expected nonce for a delegated revoker.
+    ///
+    /// Independent of `get_attester_nonce` because revocation has its own
+    /// nonce dimension (see `DataKey::RevokerNonce`). Off-chain clients
+    /// constructing a `DelegatedRevocationRequest` MUST use this counter,
+    /// not `get_attester_nonce`.
+    ///
+    /// Source: C-CONTRACT-1 (independent audit), extends HAL-03.
+    pub fn get_revoker_nonce(env: Env, revoker: Address) -> u64 {
+        env.storage()
+            .persistent()
+            .get::<state::DataKey, u64>(&state::DataKey::RevokerNonce(revoker))
+            .unwrap_or(0)
+    }
+
     /// Registers a BLS public key for an attester.
     ///
     /// This public key can be used to verify delegated attestations and revocations,

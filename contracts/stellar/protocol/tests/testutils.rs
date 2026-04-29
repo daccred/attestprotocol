@@ -66,8 +66,15 @@ pub fn group_two_generator() -> G2Affine {
     G2Affine::generator()
 }
 
+/// Build and sign a `DelegatedAttestationRequest` using the canonical test BLS keypair.
+///
+/// HAL-06 makes `create_attestation_message` depend on the current contract address
+/// and the network ID, both pulled from the host. Callers must therefore pass the
+/// `contract_id` so the helper can compute the message hash inside
+/// `env.as_contract(&contract_id, ...)`.
 pub fn create_delegated_attestation_request(
     env: &Env,
+    contract_id: &Address,
     attester: &Address,
     nonce: u64,
     schema_uid: &BytesN<32>,
@@ -88,7 +95,7 @@ pub fn create_delegated_attestation_request(
         signature: BytesN::from_array(env, &[0; 96]), // Placeholder
     };
 
-    let message_hash = create_attestation_message(env, &request);
+    let message_hash = env.as_contract(contract_id, || create_attestation_message(env, &request));
 
     let signature_scalar = private_key.sign(
         &message_hash.to_array(),
