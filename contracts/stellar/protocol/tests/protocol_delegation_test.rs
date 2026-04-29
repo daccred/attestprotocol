@@ -598,6 +598,126 @@ fn test_hal05_valid_expiration_time_accepted() {
     assert_eq!(stored.expiration_time, Some(exp));
 }
 
+// =======================================================================================
+//
+//                            H-CONTRACT-4 — Delegated revoke subject match
+//
+// =======================================================================================
+
+/// Build and sign a delegated revocation request with a custom `subject` field.
+/// Used to exercise the H-CONTRACT-4 subject-mismatch guard.
+fn build_signed_delegated_revoke_with_subject(
+    env: &Env,
+    attester: &Address,
+    nonce: u64,
+    schema_uid: &BytesN<32>,
+    attestation_uid: &BytesN<32>,
+    subject: &Address,
+) -> DelegatedRevocationRequest {
+    let private_key = blst::min_sig::SecretKey::from_bytes(&TEST_BLS_PRIVATE_KEY)
+        .expect("valid test private key");
+
+    let mut req = DelegatedRevocationRequest {
+        attestation_uid: attestation_uid.clone(),
+        schema_uid: schema_uid.clone(),
+        subject: subject.clone(),
+        nonce,
+        revoker: attester.clone(),
+        deadline: env.ledger().timestamp() + 1000,
+        signature: BytesN::from_array(env, &[0; 96]),
+    };
+    let message_hash = create_revocation_message(env, &req);
+    let sig = private_key.sign(
+        &message_hash.to_array(),
+        b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
+        &[],
+    );
+    req.signature = BytesN::from_array(env, &sig.serialize());
+    req
+}
+
+/// **Test: H-CONTRACT-4 — Delegated revoke rejects a subject that doesn't match the stored attestation**
+///
+/// Pre-fix: `revoke_by_delegation` validated `attestation.schema_uid == request.schema_uid`
+/// but not `attestation.subject == request.subject`. The signed message hash binds the
+/// subject, so the ultimate failure mode was `InvalidSignature`, but a precise cheap
+/// guard at the head of the function surfaces a more informative error and decouples
+/// from any future drift in message construction.
+#[test]
+fn test_h_contract4_subject_mismatch_in_delegated_revoke_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject_real = Address::generate(&env);
+    let subject_fake = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    // Create a real attestation for `subject_real`.
+    let attest_req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject_real);
+    client.attest_by_delegation(&submitter, &attest_req);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject_real, &attester, 0)
+    });
+
+    // Build a revoke request that lies about the subject.
+    let revoke_req = build_signed_delegated_revoke_with_subject(
+        &env,
+        &attester,
+        client.get_attester_nonce(&attester),
+        &schema_uid,
+        &attestation_uid,
+        &subject_fake,
+    );
+    let result = client.try_revoke_by_delegation(&submitter, &revoke_req);
+    assert_eq!(result, Err(Ok(ProtocolError::InvalidReference.into())));
+
+    // The attestation is untouched.
+    assert!(!client.get_attestation(&attestation_uid).revoked);
+}
+
+/// **Test: H-CONTRACT-4 — Delegated revoke succeeds when subject matches**
+#[test]
+fn test_h_contract4_correct_subject_revoke_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    let attest_req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    client.attest_by_delegation(&submitter, &attest_req);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+
+    let revoke_req = build_signed_delegated_revoke_with_subject(
+        &env,
+        &attester,
+        client.get_attester_nonce(&attester),
+        &schema_uid,
+        &attestation_uid,
+        &subject,
+    );
+    client.revoke_by_delegation(&submitter, &revoke_req);
+    assert!(client.get_attestation(&attestation_uid).revoked);
+}
+
 /// **Reference vector for the W5 SDK port (HAL-01 attestation UID).**
 ///
 /// W5 must mirror the on-chain formula in `packages/stellar-sdk/`. This test prints

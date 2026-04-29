@@ -168,6 +168,15 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         return Err(Error::InvalidReference);
     }
 
+    // Enforce subject match (H-CONTRACT-4). The signed message commits to a
+    // subject hash, so a mismatch would already fail at BLS verify, but
+    // checking here surfaces a precise, cheap error and keeps the invariant
+    // explicit even if the off-chain message construction ever drops the
+    // subject field.
+    if attestation.subject != request.subject {
+        return Err(Error::InvalidReference);
+    }
+
     // Verify schema is revocable
     let schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
     if !schema.revocable {
