@@ -147,41 +147,39 @@ export function createRevokeMessage(request: Omit<DelegatedRevocationRequest, 's
 /**
  * Get the domain separator tag for attestations from the contract.
  *
+ * H-SDK-1: any error simulating the contract call propagates to the caller.
+ * Pre-fix this swallowed every error and returned a hard-coded UTF-8 default,
+ * which masked RPC failures, contract-mismatch deployments, and schema drift.
+ *
  * @param client - The protocol client instance
  * @returns The domain separator tag as a Buffer
  */
 export async function getAttestDST(client: ProtocolClient): Promise<Buffer> {
-  try {
-    const tx = await client.get_dst_for_attestation()
-    const result = await tx.simulate()
+  const tx = await client.get_dst_for_attestation()
+  const result = await tx.simulate()
 
-    // @ts-ignore - Different result structures across contract methods
-    const dst = scValToNative(result.result)
-    return Buffer.from(dst)
-  } catch (error: any) {
-    // Fallback to default DST if contract doesn't have the method
-    return Buffer.from('ATTEST_PROTOCOL_V1_DELEGATED', 'utf8')
-  }
+  // @ts-ignore - Different result structures across contract methods
+  const dst = scValToNative(result.result)
+  return Buffer.from(dst)
 }
 
 /**
  * Get the domain separator tag for revocations from the contract.
  *
+ * H-SDK-1: any error simulating the contract call propagates to the caller.
+ * Pre-fix this swallowed every error and returned a hard-coded UTF-8 default,
+ * which masked RPC failures, contract-mismatch deployments, and schema drift.
+ *
  * @param client - The protocol client instance
  * @returns The domain separator tag as a Buffer
  */
 export async function getRevokeDST(client: ProtocolClient): Promise<Buffer> {
-  try {
-    const tx = await client.get_dst_for_revocation()
-    const result = await tx.simulate()
+  const tx = await client.get_dst_for_revocation()
+  const result = await tx.simulate()
 
-    // @ts-ignore - Different result structures across contract methods
-    const dst = scValToNative(result.result)
-    return Buffer.from(dst)
-  } catch (error: any) {
-    // Fallback to default DST if contract doesn't have the method
-    return Buffer.from('REVOKE_PROTOCOL_V1_DELEGATED', 'utf8')
-  }
+  // @ts-ignore - Different result structures across contract methods
+  const dst = scValToNative(result.result)
+  return Buffer.from(dst)
 }
 
 export async function getAttesterNonce(client: ProtocolClient, attester: string): Promise<bigint> {
