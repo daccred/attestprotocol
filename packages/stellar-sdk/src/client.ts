@@ -37,7 +37,7 @@ import {
 
 import { generateAttestationUid, generateSchemaUid } from './utils/uidGenerator'
 import { encodeSchema, decodeSchema } from './utils/dataCodec'
-import { createAttestMessage, createRevokeMessage, getAttestDST, getRevokeDST } from './delegation'
+import { createAttestMessage, createRevokeMessage } from './delegation'
 import { generateBlsKeys, verifySignature, signHashedMessage } from './utils/bls'
 import {
   fetchAttestationsByLedger,
@@ -65,6 +65,7 @@ export class StellarAttestationClient {
   private networkPassphrase: string
   private callerPublicKey: string
   private options: ClientOptions
+  private resolvedContractId: string
 
   constructor(options: ClientOptions) {
     this.options = options
@@ -117,6 +118,8 @@ export class StellarAttestationClient {
         'contractId'
       )
     }
+
+    this.resolvedContractId = contractId
 
     // Initialize protocol client
     this.attestationProtocol = new ProtocolClient({
@@ -186,16 +189,12 @@ export class StellarAttestationClient {
    */
   async attest(params: AttestParams): Promise<any> {
     try {
-      console.log({params, caller: this.callerPublicKey}, "because we actually got here")
-
       const tx = await this.attestationProtocol.attest({
         attester: this.callerPublicKey,
         schema_uid: params.schemaUid,
         value: params.value,
         expiration_time: params.expirationTime ? BigInt(params.expirationTime) : undefined,
       })
-
-      console.log({tx}, "because we actually got here")
 
       if (params.options?.simulate) {
         const result = await tx.simulate()
@@ -219,63 +218,51 @@ export class StellarAttestationClient {
   }
 
   /**
-   * Generate attestation UID
+   * Generate attestation UID matching the Rust contract Layout A.
    *
-   * Usage Examples:
+   * Requires the deployed protocol contract address and the attester
+   * (in addition to schemaUid, subject, and nonce) so that UIDs cannot
+   * be replayed across deployments. Object-form is the only supported
+   * shape post-HAL-06.
    *
-   * // Object-based approach (recommended)
+   * Usage:
+   *
    * const uid = client.generateAttestationUid({
+   *   contractAddress: 'CCONTRACT...',
    *   schemaUid: Buffer.from('...'),
-   *   subject: 'GSUBJECT123...',
-   *   nonce: BigInt(12345)
+   *   subject: 'GSUBJECT...',
+   *   attester: 'GATTESTER...',
+   *   nonce: BigInt(12345),
    * })
-   *
-   * // Legacy positional arguments
-   * const uid = client.generateAttestationUid(schemaUid, subject, nonce)
    */
-  generateAttestationUid(params: GenerateAttestationUidParams): Buffer
-  generateAttestationUid(schemaUid: Buffer, subject: string, nonce: bigint): Buffer
-  generateAttestationUid(
-    paramsOrSchemaUid: GenerateAttestationUidParams | Buffer,
-    legacySubject?: string,
-    legacyNonce?: bigint
-  ): Buffer {
-    const { schemaUid, subject, nonce } = this.normalizeGenerateAttestationUidArgs(
-      paramsOrSchemaUid,
-      legacySubject,
-      legacyNonce
+  generateAttestationUid(params: GenerateAttestationUidParams): Buffer {
+    return generateAttestationUid(
+      params.contractAddress,
+      params.schemaUid,
+      params.subject,
+      params.attester,
+      params.nonce
     )
-    return generateAttestationUid(schemaUid, subject, nonce)
   }
 
   /**
-   * Generate schema UID
+   * Generate schema UID matching the Rust contract Layout B.
    *
-   * Usage Examples:
+   * `revocable` is now a required field. Two schemas with identical
+   * definition/authority/resolver but different revocability flags
+   * produce different UIDs.
    *
-   * // Object-based approach (recommended)
+   * Usage:
+   *
    * const uid = client.generateSchemaUid({
    *   definition: 'struct Identity { string name; uint age; }',
-   *   authority: 'GAUTHORITY123...',
-   *   resolver: 'GRESOLVER123...'
+   *   authority: 'GAUTHORITY...',
+   *   resolver: 'GRESOLVER...', // optional
+   *   revocable: true,
    * })
-   *
-   * // Legacy positional arguments
-   * const uid = client.generateSchemaUid(definition, authority, resolver)
    */
-  generateSchemaUid(params: GenerateSchemaUidParams): Buffer
-  generateSchemaUid(definition: string, authority: string, resolver?: string): Buffer
-  generateSchemaUid(
-    paramsOrDefinition: GenerateSchemaUidParams | string,
-    legacyAuthority?: string,
-    legacyResolver?: string
-  ): Buffer {
-    const { definition, authority, resolver } = this.normalizeGenerateSchemaUidArgs(
-      paramsOrDefinition,
-      legacyAuthority,
-      legacyResolver
-    )
-    return generateSchemaUid(definition, authority, resolver)
+  generateSchemaUid(params: GenerateSchemaUidParams): Buffer {
+    return generateSchemaUid(params.definition, params.authority, params.resolver, params.revocable)
   }
 
   /**
@@ -357,31 +344,19 @@ export class StellarAttestationClient {
   }
 
   /**
-   * 9. Create revoke message for delegation
+   * 9. Create revoke message for delegation. The contract id and network
+   * passphrase are bound into the message preimage (HAL-06).
    */
-  createRevokeMessage(request: DelegatedRevocationRequest, dst: Buffer): WeierstrassPoint<bigint> {
-    return createRevokeMessage(request, dst)
+  createRevokeMessage(request: DelegatedRevocationRequest): WeierstrassPoint<bigint> {
+    return createRevokeMessage(request, this.resolvedContractId, this.networkPassphrase)
   }
 
   /**
-   * 10. Create attestation message for delegation
+   * 10. Create attestation message for delegation. The contract id and
+   * network passphrase are bound into the message preimage (HAL-06).
    */
-  createAttestMessage(request: DelegatedAttestationRequest, dst: Buffer): WeierstrassPoint<bigint> {
-    return createAttestMessage(request, dst)
-  }
-
-  /**
-   * 11. Get domain separator tag for revocations
-   */
-  async getRevokeDST(): Promise<Buffer> {
-    return getRevokeDST(this.attestationProtocol)
-  }
-
-  /**
-   * 12. Get domain separator tag for attestations
-   */
-  async getAttestDST(): Promise<Buffer> {
-    return getAttestDST(this.attestationProtocol)
+  createAttestMessage(request: DelegatedAttestationRequest): WeierstrassPoint<bigint> {
+    return createAttestMessage(request, this.resolvedContractId, this.networkPassphrase)
   }
 
   /**
@@ -521,17 +496,20 @@ export class StellarAttestationClient {
     options?: TxOptions
   ): Promise<any> {
     try {
-      // Determine if this is attestation or revocation
-      const isAttestation = 'schemaUid' in request && 'value' in request
+      // Dispatch on the literal `type` discriminator. Pre-fix, this used
+      // `'schemaUid' in request && 'value' in request` which always evaluated
+      // false because the runtime field is `schema_uid` (snake_case),
+      // silently routing every attestation through the revocation path.
+      const isAttestation = request.type === 'attest'
 
-      // Get the appropriate DST and create message
+      // The contract id and network passphrase are bound into the BLS message
+      // preimage on both branches (HAL-06). The DST helpers were removed.
       let message: WeierstrassPoint<bigint>
       let signedRequest: any
 
       if (isAttestation) {
         const attestRequest = request as DelegatedAttestationRequest
-        const dst = await this.getAttestDST()
-        message = this.createAttestMessage(attestRequest, dst)
+        message = this.createAttestMessage(attestRequest)
 
         // Sign the message with BLS private key
         const signature = signHashedMessage(message, privateKey)
@@ -546,8 +524,7 @@ export class StellarAttestationClient {
         return await this.attestByDelegation(signedRequest, options)
       } else {
         const revokeRequest = request as DelegatedRevocationRequest
-        const dst = await this.getRevokeDST()
-        message = this.createRevokeMessage(revokeRequest, dst)
+        message = this.createRevokeMessage(revokeRequest)
 
         // Sign the message with BLS private key
         const signature = signHashedMessage(message, privateKey)
@@ -843,44 +820,6 @@ export class StellarAttestationClient {
     return {
       attestationUid: paramsOrUid.attestationUid,
       options: paramsOrUid.options || legacyOptions,
-    }
-  }
-
-  private normalizeGenerateAttestationUidArgs(
-    paramsOrSchemaUid: GenerateAttestationUidParams | Buffer,
-    legacySubject?: string,
-    legacyNonce?: bigint
-  ): { schemaUid: Buffer; subject: string; nonce: bigint } {
-    if (isBuffer(paramsOrSchemaUid)) {
-      return {
-        schemaUid: paramsOrSchemaUid,
-        subject: legacySubject || '',
-        nonce: legacyNonce || BigInt(0),
-      }
-    }
-    return {
-      schemaUid: paramsOrSchemaUid.schemaUid,
-      subject: paramsOrSchemaUid.subject || legacySubject || '',
-      nonce: paramsOrSchemaUid.nonce || legacyNonce || BigInt(0),
-    }
-  }
-
-  private normalizeGenerateSchemaUidArgs(
-    paramsOrDefinition: GenerateSchemaUidParams | string,
-    legacyAuthority?: string,
-    legacyResolver?: string
-  ): { definition: string; authority: string; resolver: string } {
-    if (typeof paramsOrDefinition === 'string') {
-      return {
-        definition: paramsOrDefinition,
-        authority: legacyAuthority || '',
-        resolver: legacyResolver || '',
-      }
-    }
-    return {
-      definition: paramsOrDefinition.definition,
-      authority: paramsOrDefinition.authority || legacyAuthority || '',
-      resolver: paramsOrDefinition.resolver || legacyResolver || '',
     }
   }
 
