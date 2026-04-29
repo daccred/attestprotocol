@@ -10,10 +10,11 @@ pub struct DefaultResolver;
 impl ResolverInterface for DefaultResolver {
     /// Basic validation - always allows valid attestations
     fn onattest(env: Env, attestation: ResolverAttestationData) -> Result<bool, ResolverError> {
-        // Defense-in-depth: require attester authorization even though
-        // the protocol already verifies this before calling the resolver.
-        // This ensures the resolver cannot be exploited if called directly.
-        attestation.attester.require_auth();
+        // H-CONTRACT-2: Auth enforcement is the protocol's responsibility.
+        // The protocol verifies submitter auth (direct path) or BLS signature
+        // (delegated path) before invoking this hook. Calling require_auth on
+        // the attester here would unconditionally break attest_by_delegation,
+        // where the attester never holds an on-chain auth context.
 
         // Basic validation: ensure attester is not self-attesting
         if attestation.attester == attestation.recipient {
@@ -35,10 +36,11 @@ impl ResolverInterface for DefaultResolver {
 
     /// Allow revocations only if attestation is revocable
     fn onrevoke(_env: Env, attestation: ResolverAttestationData) -> Result<bool, ResolverError> {
-        // Defense-in-depth: require attester authorization even though
-        // the protocol already verifies this before calling the resolver.
-        // This ensures the resolver cannot be exploited if called directly.
-        attestation.attester.require_auth();
+        // H-CONTRACT-2: Auth enforcement is the protocol's responsibility.
+        // The protocol verifies submitter auth (direct path) or BLS signature
+        // (delegated path) before invoking this hook. Calling require_auth on
+        // the attester here would unconditionally break attest_by_delegation,
+        // where the attester never holds an on-chain auth context.
 
         // Defense-in-depth: verify attestation is revocable even though
         // the protocol should enforce this. Prevents revocation if called directly.
