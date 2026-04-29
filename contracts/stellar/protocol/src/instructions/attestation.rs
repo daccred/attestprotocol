@@ -273,9 +273,11 @@ pub fn revoke_attestation(env: &Env, revoker: Address, attestation_uid: BytesN<3
         return Err(Error::NotAuthorized);
     }
 
-    // Verify the attestation isn't already revoked
+    // Verify the attestation isn't already revoked (HAL-08).
+    // Returning `AlreadyRevoked` rather than `AttestationNotFound` lets callers
+    // and indexers distinguish a missing record from a terminal one.
     if attestation.revoked {
-        return Err(Error::AttestationNotFound);
+        return Err(Error::AlreadyRevoked);
     }
 
     // Verify schema is revocable

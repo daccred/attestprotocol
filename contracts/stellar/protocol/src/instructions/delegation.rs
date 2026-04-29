@@ -141,6 +141,13 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
         .get::<DataKey, Attestation>(&attest_key)
         .ok_or(Error::AttestationNotFound)?;
 
+    // Already-revoked early-out (HAL-08). Mirrors the direct-path fix and is
+    // positioned before the BLS verification so we don't burn compute on an
+    // already-terminal record.
+    if attestation.revoked {
+        return Err(Error::AlreadyRevoked);
+    }
+
     // Verify the revoker is the original attester
     if attestation.attester != request.revoker {
         return Err(Error::NotAuthorized);

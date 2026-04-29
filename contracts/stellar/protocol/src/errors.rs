@@ -34,4 +34,9 @@ pub enum Error {
     /// A schema with the same definition, authority, and resolver already exists.
     /// This indicates an attempt to register a duplicate schema.
     SchemaAlreadyExists = 28,
+    /// Returned when an attempt is made to revoke an attestation that is already revoked.
+    /// Distinct from `AttestationNotFound` so callers (and indexers) can tell apart a
+    /// missing record from a terminal record.
+    /// Source: HAL-08 (Halborn §7.8)
+    AlreadyRevoked = 29,
 }
