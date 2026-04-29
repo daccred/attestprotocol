@@ -1,52 +1,82 @@
 mod testutils;
 
-use protocol::{interfaces::resolver::ResolverAttestation, AttestationContract, AttestationContractClient};
+use protocol::{
+    interfaces::resolver::{ResolverAttestationData, ResolverError},
+    AttestationContract, AttestationContractClient,
+};
 use soroban_sdk::{
     contract, contractimpl,
     testutils::{Address as _, Ledger},
     Address, BytesN, Env, String as SorobanString,
 };
 
-// Mock resolver contracts for testing
+// HAL-04: Mock resolver contracts updated to the unified ABI. They mirror
+// `resolvers::interface::ResolverInterface` (Result-returning, onresolve
+// taking (uid, attester)) so that calls from the protocol's `ResolverClient`
+// decode correctly on the wire.
 mod no_revoke_resolver {
     use super::*;
 
-    /// A resolver that always approves attestations but rejects revocations
+    /// A resolver that always approves attestations but rejects revocations.
     #[contract]
     pub struct NoRevokeResolver;
 
     #[contractimpl]
     impl NoRevokeResolver {
-        pub fn onattest(_env: Env, _attestation: ResolverAttestation) -> bool {
-            true
+        pub fn onattest(
+            _env: Env,
+            _attestation: ResolverAttestationData,
+        ) -> Result<bool, ResolverError> {
+            Ok(true)
         }
 
-        pub fn onrevoke(_env: Env, _attestation: ResolverAttestation) -> bool {
-            false // Always reject revocations
+        pub fn onrevoke(
+            _env: Env,
+            _attestation: ResolverAttestationData,
+        ) -> Result<bool, ResolverError> {
+            Ok(false) // Always reject revocations
         }
 
-        pub fn onresolve(_env: Env, _attestation: ResolverAttestation) {}
+        pub fn onresolve(
+            _env: Env,
+            _attestation_uid: BytesN<32>,
+            _attester: Address,
+        ) -> Result<(), ResolverError> {
+            Ok(())
+        }
     }
 }
 
 mod always_approve_resolver {
     use super::*;
 
-    /// A resolver that always approves everything
+    /// A resolver that always approves everything.
     #[contract]
     pub struct AlwaysApproveResolver;
 
     #[contractimpl]
     impl AlwaysApproveResolver {
-        pub fn onattest(_env: Env, _attestation: ResolverAttestation) -> bool {
-            true
+        pub fn onattest(
+            _env: Env,
+            _attestation: ResolverAttestationData,
+        ) -> Result<bool, ResolverError> {
+            Ok(true)
         }
 
-        pub fn onrevoke(_env: Env, _attestation: ResolverAttestation) -> bool {
-            true
+        pub fn onrevoke(
+            _env: Env,
+            _attestation: ResolverAttestationData,
+        ) -> Result<bool, ResolverError> {
+            Ok(true)
         }
 
-        pub fn onresolve(_env: Env, _attestation: ResolverAttestation) {}
+        pub fn onresolve(
+            _env: Env,
+            _attestation_uid: BytesN<32>,
+            _attester: Address,
+        ) -> Result<(), ResolverError> {
+            Ok(())
+        }
     }
 }
 
