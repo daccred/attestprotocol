@@ -16,6 +16,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
     "prettier": "^3.8.2",
     "rimraf": "^6.1.3",
     "ts-node": "^10.9.2",
@@ -59,7 +62,9 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\"",
     "lint:ts": "tsc --noEmit --pretty",
+    "typecheck": "tsc --noEmit --pretty",
     "test": "vitest",
     "test:coverage": "vitest --coverage"
   },

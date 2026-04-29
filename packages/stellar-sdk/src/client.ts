@@ -186,16 +186,12 @@ export class StellarAttestationClient {
    */
   async attest(params: AttestParams): Promise<any> {
     try {
-      console.log({params, caller: this.callerPublicKey}, "because we actually got here")
-
       const tx = await this.attestationProtocol.attest({
         attester: this.callerPublicKey,
         schema_uid: params.schemaUid,
         value: params.value,
         expiration_time: params.expirationTime ? BigInt(params.expirationTime) : undefined,
       })
-
-      console.log({tx}, "because we actually got here")
 
       if (params.options?.simulate) {
         const result = await tx.simulate()
