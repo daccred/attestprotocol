@@ -64,7 +64,27 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     // Only increment nonce AFTER signature is verified to prevent DoS attacks
     verify_and_increment_nonce(env, &request.attester, request.nonce)?;
 
-    let attestation_uid = generate_attestation_uid(env, &request.schema_uid, &request.subject, request.nonce);
+    // Generate the attestation UID using the HAL-01 hardened formula:
+    // domain prefix || contract address || schema_uid || subject || attester || nonce.
+    let attestation_uid = generate_attestation_uid(
+        env,
+        &request.schema_uid,
+        &request.subject,
+        &request.attester,
+        request.nonce,
+    );
+
+    // Duplicate-UID guard (HAL-01). Even though the per-attester nonce check above
+    // makes a true collision unreachable on the happy path, this is a defence-in-
+    // depth invariant that any future code path producing an existing UID is
+    // refused rather than silently overwriting a stored attestation.
+    if env
+        .storage()
+        .persistent()
+        .has(&DataKey::AttestationUID(attestation_uid.clone()))
+    {
+        return Err(Error::AttestationExists);
+    }
 
     // Create attestation record
     let attestation = Attestation {

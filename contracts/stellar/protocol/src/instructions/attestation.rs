@@ -61,14 +61,22 @@ fn call_resolver_onresolve(env: &Env, resolver_address: &Address, attestation: &
 
 /// Creates a ResolverAttestation from protocol Attestation data
 /// This converts between the protocol's internal format and the resolver interface format
+// TODO(W3-merge): switch to ResolverAttestationData and the new resolver interface.
 fn create_resolver_attestation(
     env: &Env,
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
     revocable: bool,
 ) -> ResolverAttestation {
-    // Generate a UID for this attestation (protocol doesn't store UIDs currently)
-    let uid = generate_attestation_uid(env, schema_uid, &attestation.subject, attestation.nonce);
+    // Generate a UID for this attestation using the HAL-01 hardened formula
+    // (includes attester to prevent same-subject/nonce collisions across attesters).
+    let uid = generate_attestation_uid(
+        env,
+        schema_uid,
+        &attestation.subject,
+        &attestation.attester,
+        attestation.nonce,
+    );
 
     // Convert attestation value (String) to Bytes for the resolver interface
     // We use XDR serialization to ensure consistent encoding across platforms
@@ -132,7 +140,10 @@ pub fn attest(
         }
     }
     let subject = attester.clone();
-    let attestation_uid = generate_attestation_uid(env, &schema_uid, &subject, nonce);
+    // Direct-path UID derivation (HAL-01). subject == attester here, but we
+    // pass &attester explicitly so the formula matches the delegated path
+    // and any future divergence between subject and attester is handled.
+    let attestation_uid = generate_attestation_uid(env, &schema_uid, &subject, &attester, nonce);
 
     let attestation = Attestation {
         uid: attestation_uid.clone(),

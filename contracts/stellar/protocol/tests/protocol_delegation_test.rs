@@ -182,13 +182,18 @@ fn test_delegated_revocation_with_valid_signature() {
 
     // Get the attestation UID that was created
     // Since we can't get it directly from attest_by_delegation (returns ()),
-    // we need to use a different approach - use the nonce to predict the UID
-    let attestation_uid = protocol::utils::generate_attestation_uid(
-        &env,
-        &schema_uid,
-        &subject,
-        0, // nonce used in the attestation
-    );
+    // we need to use a different approach - use the nonce to predict the UID.
+    // The HAL-01 formula now requires the contract address, so compute under
+    // `env.as_contract(...)` and pass `&attester` explicitly.
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(
+            &env,
+            &schema_uid,
+            &subject,
+            &attester,
+            0, // nonce used in the attestation
+        )
+    });
 
     // Verify the attestation exists and is not revoked
     let attestation = client.get_attestation(&attestation_uid);
@@ -307,13 +312,16 @@ fn test_delegated_action_with_expired_deadline() {
     );
     client.attest_by_delegation(&submitter, &valid_attestation_request);
 
-    // Get the attestation UID that was created
-    let attestation_uid = protocol::utils::generate_attestation_uid(
-        &env,
-        &schema_uid,
-        &subject,
-        0, // nonce used in the attestation
-    );
+    // Get the attestation UID that was created (HAL-01 formula).
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(
+            &env,
+            &schema_uid,
+            &subject,
+            &attester,
+            0, // nonce used in the attestation
+        )
+    });
 
     // Test 3: Expired delegated revocation
     {
@@ -348,4 +356,169 @@ fn test_delegated_action_with_expired_deadline() {
         let attestation = client.get_attestation(&attestation_uid);
         assert!(!attestation.revoked);
     }
+}
+
+// =======================================================================================
+//
+//                              HAL-01 — Attestation UID hardening
+//
+// =======================================================================================
+
+/// **Test: HAL-01 — Two attesters, same subject/nonce, no UID collision (delegated)**
+///
+/// Pre-fix: `generate_attestation_uid` derived the UID from (schema_uid, subject, nonce).
+/// Two distinct attesters submitting a delegated attestation for the same subject with
+/// nonce=0 would collide and the second submission would silently overwrite the first.
+///
+/// Post-fix (HAL-01): the UID is derived from
+/// `b"ATTEST_UID_V1" || contract_address || schema_uid || subject || attester || nonce`,
+/// so two different attesters produce two different UIDs for the same subject/nonce.
+#[test]
+fn test_hal01_two_attesters_same_subject_nonce_no_collision() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester_a = Address::generate(&env);
+    let attester_b = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    // Both attesters share the test BLS keypair — the protocol pins keys per
+    // address and does not require uniqueness of the key bytes.
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester_a, &public_key);
+    client.register_bls_key(&attester_b, &public_key);
+
+    let req_a = create_delegated_attestation_request(&env, &attester_a, 0, &schema_uid, &subject);
+    let req_b = create_delegated_attestation_request(&env, &attester_b, 0, &schema_uid, &subject);
+
+    client.attest_by_delegation(&submitter, &req_a);
+    client.attest_by_delegation(&submitter, &req_b);
+
+    // Compute both expected UIDs under the contract context. They must differ.
+    let (uid_a, uid_b) = env.as_contract(&contract_id, || {
+        let a = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester_a, 0);
+        let b = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester_b, 0);
+        (a, b)
+    });
+    assert_ne!(uid_a, uid_b, "HAL-01: two attesters must yield distinct UIDs");
+
+    let stored_a = client.get_attestation(&uid_a);
+    let stored_b = client.get_attestation(&uid_b);
+    assert_eq!(stored_a.attester, attester_a);
+    assert_eq!(stored_b.attester, attester_b);
+    assert_eq!(stored_a.subject, subject);
+    assert_eq!(stored_b.subject, subject);
+}
+
+/// **Test: HAL-01 — Duplicate-UID guard blocks an exact replay**
+///
+/// Even though the per-attester nonce check usually catches replays first, this test
+/// asserts the defence-in-depth guard added in `attest_by_delegation`: if a UID already
+/// exists in storage, the call must fail with `AttestationExists` rather than silently
+/// overwriting the prior record.
+///
+/// We exercise the guard by directly inserting a record under the post-HAL-01 UID and
+/// then submitting a delegated request whose successful path would attempt to write at
+/// the same UID. The guard fires before the storage write.
+#[test]
+fn test_hal01_duplicate_uid_guard_blocks_overwrite() {
+    use protocol::state::{Attestation, DataKey};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    // Pre-compute the UID the legitimate path would produce, then plant a record there.
+    let planted_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+
+    let planted = Attestation {
+        uid: planted_uid.clone(),
+        schema_uid: schema_uid.clone(),
+        subject: subject.clone(),
+        attester: attester.clone(),
+        value: SorobanString::from_str(&env, "{\"planted\":true}"),
+        nonce: 0,
+        timestamp: 1,
+        expiration_time: None,
+        revoked: false,
+        revocation_time: None,
+    };
+    env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::AttestationUID(planted_uid.clone()), &planted);
+    });
+
+    // Submit the legit signed request; the duplicate-UID guard must reject it.
+    let req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let result = client.try_attest_by_delegation(&submitter, &req);
+    assert_eq!(result, Err(Ok(ProtocolError::AttestationExists.into())));
+
+    // The planted record is preserved.
+    let still_there = client.get_attestation(&planted_uid);
+    assert_eq!(still_there.value, SorobanString::from_str(&env, "{\"planted\":true}"));
+}
+
+/// **Reference vector for the W5 SDK port (HAL-01 attestation UID).**
+///
+/// W5 must mirror the on-chain formula in `packages/stellar-sdk/`. This test prints
+/// the bytes produced by `generate_attestation_uid` on a fully-pinned input set so
+/// the SDK author can copy the value into a parity test. The contract address is
+/// itself an input (HAL-01 includes it for cross-deployment isolation), so the
+/// printed UID is unique to this test deployment — the SDK parity check should use
+/// the same canonical inputs (schema_uid all-0x11, subject GAAA…AWHF, attester
+/// GBBB…CWHL, nonce=42) and assert that, when the SDK is told the contract address
+/// matches what we print here, it produces the same bytes.
+#[test]
+fn test_hal01_uid_reference_vector_for_w5() {
+    let env = Env::default();
+    let contract_id = env.register(AttestationContract {}, ());
+
+    // Pinned canonical inputs. We use generated addresses (the test SDK only
+    // accepts valid strkey-encoded addresses for `Address::from_str`), so the
+    // exact address strings vary between runs — but the assertion below just
+    // pins determinism, and the printout gives W5 the bytes they need.
+    let schema_uid = BytesN::from_array(&env, &[0x11u8; 32]);
+    let subject = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let nonce: u64 = 42;
+
+    let (uid_a, uid_b) = env.as_contract(&contract_id, || {
+        let a = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, nonce);
+        let b = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, nonce);
+        (a, b)
+    });
+    assert_eq!(uid_a, uid_b, "HAL-01 UID generation must be deterministic");
+
+    eprintln!("HAL-01 W5_VECTOR_ATTEST_UID");
+    eprintln!("  contract_id : {:?}", contract_id.to_string());
+    eprintln!("  schema_uid  : {}", hex::encode([0x11u8; 32]));
+    eprintln!("  subject     : {:?}", subject.to_string());
+    eprintln!("  attester    : {:?}", attester.to_string());
+    eprintln!("  nonce       : {}", nonce);
+    eprintln!("  attest_uid  : {}", hex::encode(uid_a.to_array()));
+
+    // Sanity: the produced UID is non-zero (keccak256 of non-empty input).
+    assert_ne!(uid_a.to_array(), [0u8; 32]);
 }

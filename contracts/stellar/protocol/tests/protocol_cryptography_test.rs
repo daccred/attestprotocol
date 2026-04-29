@@ -571,8 +571,10 @@ fn test_delegated_attestation_with_valid_signature() {
         u64,
     ) = last_attestation_event.2.try_into_val(&env).unwrap();
 
-    // 4. Verify that the attestation was created.
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    // 4. Verify that the attestation was created (HAL-01 hardened formula).
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
     let fetched = client.get_attestation(&attestation_uid);
 
     assert_eq!(
@@ -707,7 +709,9 @@ fn test_end_to_end_bls_signature_verification() {
         u64,
     ) = event.2.try_into_val(&env).unwrap();
 
-    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, attester_nonce);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, attester_nonce)
+    });
     let fetched = client.get_attestation(&attestation_uid);
 
     assert_eq!(fetched.attester, attester);
