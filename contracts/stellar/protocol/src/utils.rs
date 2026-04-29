@@ -6,13 +6,32 @@ use soroban_sdk::{Address, Bytes, BytesN, Env, String};
 /// Generates a unique identifier (SHA256 hash) for a schema.
 ////////////////////////////////////////////////////////////////////////////////////
 /// The UID is derived from the schema definition, the registering authority,
-/// and the optional resolver address.
+/// the optional resolver address, and the `revocable` flag.
+///
+/// Including `revocable` in the hash input is required (C-CONTRACT-3): without
+/// it, two registrations with the same `(definition, authority, resolver)` but
+/// different `revocable` settings collide on the same UID. The second
+/// registration would then be rejected by the `SchemaAlreadyExists` guard,
+/// preventing an authority from publishing parallel revocable / non-revocable
+/// variants of the same schema.
+///
+/// Wire layout (concatenated, then sha256-hashed):
+/// 1. XDR-encoded schema_definition string
+/// 2. XDR-encoded authority address
+/// 3. XDR-encoded resolver address (only if `Some`)
+/// 4. `revocable` as a single byte: `0x01` if true, `0x00` otherwise
+///
+/// # Off-chain parity (W5)
+/// `packages/stellar-sdk/src/utils/uidGenerator.ts:generateSchemaUid` must
+/// append the `revocable` byte after the resolver bytes, before hashing. Until
+/// that helper is updated, off-chain UIDs will diverge from on-chain UIDs.
 ///
 /// # Arguments
 /// * `env` - The Soroban environment providing access to cryptographic functions.
 /// * `schema_definition` - The schema definition string (supports multiple formats).
 /// * `authority` - The address of the authority registering the schema.
 /// * `resolver` - An optional address of a resolver contract associated with the schema.
+/// * `revocable` - Whether attestations under this schema may be revoked.
 ///
 /// # Returns
 /// * `BytesN<32>` - The unique 32-byte identifier (UID) for the schema.
@@ -22,6 +41,7 @@ pub fn generate_schema_uid(
     schema_definition: &String,
     authority: &Address,
     resolver: &Option<Address>,
+    revocable: bool,
 ) -> BytesN<32> {
     let mut schema_data_to_hash = Bytes::new(env);
     schema_data_to_hash.append(&schema_definition.clone().to_xdr(env));
@@ -29,6 +49,8 @@ pub fn generate_schema_uid(
     if let Some(resolver_addr) = resolver {
         schema_data_to_hash.append(&resolver_addr.clone().to_xdr(env));
     }
+    // C-CONTRACT-3: revocable participates in identity. 0x01 if true, else 0x00.
+    schema_data_to_hash.append(&Bytes::from_array(env, &[revocable as u8]));
     env.crypto().sha256(&schema_data_to_hash).into()
 }
 ////////////////////////////////////////////////////////////////////////////////////
