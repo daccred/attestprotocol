@@ -1,5 +1,9 @@
 use crate::errors::Error;
 use crate::events;
+use crate::instructions::attestation::{
+    call_resolver_onattest, call_resolver_onresolve, call_resolver_onrevoke,
+    create_resolver_attestation,
+};
 use crate::instructions::verify_bls_signature;
 use crate::state::{Attestation, DataKey, DelegatedAttestationRequest, DelegatedRevocationRequest};
 use crate::utils::{self, generate_attestation_uid};
@@ -59,7 +63,7 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
     }
 
     // Verify schema exists
-    let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
+    let schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
     // Create message for signature verification
     let message = create_attestation_message(env, &request);
@@ -108,9 +112,45 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
         revocation_time: None,
     };
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER PRE-HOOK: onattest (HAL-02 / C-CONTRACT-4)
+    // The hook fires AFTER signature verification, nonce increment, and the
+    // duplicate-UID guard. Firing earlier (as the prior code did NOT, since
+    // the delegated path called no hook at all) would let an unauthenticated
+    // submitter spam the resolver's onattest endpoint and grief its state.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        let allowed = call_resolver_onattest(env, resolver_address, &resolver_attestation)?;
+        if !allowed {
+            return Err(Error::ResolverError);
+        }
+    }
+
     // Store attestation
     let attest_key = DataKey::AttestationUID(attestation_uid);
     env.storage().persistent().set(&attest_key, &attestation);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER POST-HOOK: onresolve (C-CONTRACT-2 invariant)
+    // SECURITY: onresolve failures MUST NOT revert. The helper uses the
+    // try_onresolve client variant and discards the result; a malicious or
+    // buggy resolver cannot block a successfully-validated attestation.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        call_resolver_onresolve(env, resolver_address, &resolver_attestation);
+    }
 
     // Emit event
     events::publish_attestation_event(env, &attestation);
@@ -196,12 +236,50 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // Source: C-CONTRACT-1 (independent audit) / HAL-03 (Halborn §7.3).
     verify_and_increment_revoker_nonce(env, &request.revoker, request.nonce)?;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER PRE-HOOK: onrevoke (HAL-02 / C-CONTRACT-4)
+    // Fires AFTER signature verification, schema/subject checks, and nonce
+    // increment. The pre-fix delegated path called no resolver hook, so a
+    // schema's revocation policy (e.g. permission, time-window) was simply
+    // ignored when revocation was submitted via the delegated route.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        // Build the resolver-facing struct from the *current* (pre-mutation)
+        // attestation so the resolver sees revoked=false.
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        let allowed = call_resolver_onrevoke(env, resolver_address, &resolver_attestation)?;
+        if !allowed {
+            return Err(Error::ResolverError);
+        }
+    }
+
     // Update attestation
     attestation.revoked = true;
     attestation.revocation_time = Some(current_time);
 
     // Store updated attestation
     env.storage().persistent().set(&attest_key, &attestation);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ► RESOLVER POST-HOOK: onresolve (C-CONTRACT-2 invariant)
+    // SECURITY: onresolve failures MUST NOT revert. The helper uses the
+    // try_onresolve client variant; a panicking resolver cannot block a
+    // successfully-validated revocation from committing.
+    // ═══════════════════════════════════════════════════════════════════════
+    if let Some(resolver_address) = &schema.resolver {
+        let resolver_attestation = create_resolver_attestation(
+            env,
+            &attestation,
+            &request.schema_uid,
+            schema.revocable,
+        );
+        call_resolver_onresolve(env, resolver_address, &resolver_attestation);
+    }
 
     // Emit revocation event
     events::publish_revocation_event(env, &attestation);

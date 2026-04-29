@@ -12,7 +12,7 @@ use crate::utils::{self, generate_attestation_uid};
 
 /// Calls onattest on a resolver contract
 /// Returns true if the attestation should be allowed, false otherwise
-fn call_resolver_onattest(
+pub(crate) fn call_resolver_onattest(
     env: &Env,
     resolver_address: &Address,
     attestation: &ResolverAttestation,
@@ -30,7 +30,7 @@ fn call_resolver_onattest(
 
 /// Calls onrevoke on a resolver contract
 /// Returns true if the revocation should be allowed, false otherwise
-fn call_resolver_onrevoke(
+pub(crate) fn call_resolver_onrevoke(
     env: &Env,
     resolver_address: &Address,
     attestation: &ResolverAttestation,
@@ -48,7 +48,7 @@ fn call_resolver_onrevoke(
 
 /// Calls onresolve on a resolver contract
 /// Failures are logged but don't revert the attestation or revocation
-fn call_resolver_onresolve(env: &Env, resolver_address: &Address, attestation: &ResolverAttestation) {
+pub(crate) fn call_resolver_onresolve(env: &Env, resolver_address: &Address, attestation: &ResolverAttestation) {
     let resolver_client = ResolverClient::new(env, resolver_address);
 
     // Ignore failures in onresolve - they're non-critical side effects
@@ -62,7 +62,7 @@ fn call_resolver_onresolve(env: &Env, resolver_address: &Address, attestation: &
 /// Creates a ResolverAttestation from protocol Attestation data
 /// This converts between the protocol's internal format and the resolver interface format
 // TODO(W3-merge): switch to ResolverAttestationData and the new resolver interface.
-fn create_resolver_attestation(
+pub(crate) fn create_resolver_attestation(
     env: &Env,
     attestation: &Attestation,
     schema_uid: &BytesN<32>,
