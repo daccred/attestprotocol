@@ -52,6 +52,7 @@ fn test_nonce_is_scoped_to_attester_not_subject() {
     // 1. Attester signs a request for Subject X with nonce 0.
     let request_for_x = create_delegated_attestation_request(
         &env,
+        &contract_id,
         &attester,
         0, // nonce
         &schema_uid,
@@ -65,6 +66,7 @@ fn test_nonce_is_scoped_to_attester_not_subject() {
     // 3. Attester signs a request for Subject Y with nonce 1.
     let request_for_y = create_delegated_attestation_request(
         &env,
+        &contract_id,
         &attester,
         1, // next nonce
         &schema_uid,
@@ -114,6 +116,7 @@ fn test_nonce_is_scoped_to_attester_not_submitter() {
     // We use the helper from testutils.rs.
     let signed_request = create_delegated_attestation_request(
         &env,
+        &contract_id,
         &attester,
         0, // Nonce
         &schema_uid,
@@ -173,6 +176,7 @@ fn test_delegated_revocation_with_valid_signature() {
     // Create a delegated attestation first using the helper
     let attestation_request = create_delegated_attestation_request(
         &env,
+        &contract_id,
         &attester,
         0, // nonce
         &schema_uid,
@@ -214,7 +218,7 @@ fn test_delegated_revocation_with_valid_signature() {
     };
 
     // Sign the revocation request using blst (matching testutils pattern)
-    let message_hash = create_revocation_message(&env, &revocation_request);
+    let message_hash = env.as_contract(&contract_id, || create_revocation_message(&env, &revocation_request));
     let signature_scalar = private_key.sign(
         &message_hash.to_array(),
         b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
@@ -285,7 +289,7 @@ fn test_delegated_action_with_expired_deadline() {
         };
 
         // Sign the request using blst
-        let message_hash = create_attestation_message(&env, &attestation_request);
+        let message_hash = env.as_contract(&contract_id, || create_attestation_message(&env, &attestation_request));
         let signature_scalar = private_key.sign(
             &message_hash.to_array(),
             b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
@@ -305,6 +309,7 @@ fn test_delegated_action_with_expired_deadline() {
     // Test 2: First create a valid delegated attestation to revoke
     let valid_attestation_request = create_delegated_attestation_request(
         &env,
+        &contract_id,
         &attester,
         0, // nonce
         &schema_uid,
@@ -339,7 +344,7 @@ fn test_delegated_action_with_expired_deadline() {
         };
 
         // Sign the revocation request using blst
-        let message_hash = create_revocation_message(&env, &revocation_request);
+        let message_hash = env.as_contract(&contract_id, || create_revocation_message(&env, &revocation_request));
         let signature_scalar = private_key.sign(
             &message_hash.to_array(),
             b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
@@ -395,8 +400,8 @@ fn test_hal01_two_attesters_same_subject_nonce_no_collision() {
     client.register_bls_key(&attester_a, &public_key);
     client.register_bls_key(&attester_b, &public_key);
 
-    let req_a = create_delegated_attestation_request(&env, &attester_a, 0, &schema_uid, &subject);
-    let req_b = create_delegated_attestation_request(&env, &attester_b, 0, &schema_uid, &subject);
+    let req_a = create_delegated_attestation_request(&env, &contract_id, &attester_a, 0, &schema_uid, &subject);
+    let req_b = create_delegated_attestation_request(&env, &contract_id, &attester_b, 0, &schema_uid, &subject);
 
     client.attest_by_delegation(&submitter, &req_a);
     client.attest_by_delegation(&submitter, &req_b);
@@ -471,7 +476,7 @@ fn test_hal01_duplicate_uid_guard_blocks_overwrite() {
     });
 
     // Submit the legit signed request; the duplicate-UID guard must reject it.
-    let req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     let result = client.try_attest_by_delegation(&submitter, &req);
     assert_eq!(result, Err(Ok(ProtocolError::AttestationExists.into())));
 
@@ -491,6 +496,7 @@ fn test_hal01_duplicate_uid_guard_blocks_overwrite() {
 /// `testutils.rs` because it's only consumed by HAL-05 tests.
 fn build_signed_delegated_request_with_expiration(
     env: &Env,
+    contract_id: &Address,
     attester: &Address,
     nonce: u64,
     schema_uid: &BytesN<32>,
@@ -511,7 +517,7 @@ fn build_signed_delegated_request_with_expiration(
         signature: BytesN::from_array(env, &[0; 96]),
     };
 
-    let message_hash = create_attestation_message(env, &request);
+    let message_hash = env.as_contract(contract_id, || create_attestation_message(env, &request));
     let sig = private_key.sign(
         &message_hash.to_array(),
         b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
@@ -548,6 +554,7 @@ fn test_hal05_expired_expiration_time_rejected() {
     // expiration_time = current_time - 1 → already expired.
     let req = build_signed_delegated_request_with_expiration(
         &env,
+        &contract_id,
         &attester,
         0,
         &schema_uid,
@@ -583,6 +590,7 @@ fn test_hal05_valid_expiration_time_accepted() {
     let exp = 1000 + 3600;
     let req = build_signed_delegated_request_with_expiration(
         &env,
+        &contract_id,
         &attester,
         0,
         &schema_uid,
@@ -608,6 +616,7 @@ fn test_hal05_valid_expiration_time_accepted() {
 /// Used to exercise the H-CONTRACT-4 subject-mismatch guard.
 fn build_signed_delegated_revoke_with_subject(
     env: &Env,
+    contract_id: &Address,
     attester: &Address,
     nonce: u64,
     schema_uid: &BytesN<32>,
@@ -626,7 +635,7 @@ fn build_signed_delegated_revoke_with_subject(
         deadline: env.ledger().timestamp() + 1000,
         signature: BytesN::from_array(env, &[0; 96]),
     };
-    let message_hash = create_revocation_message(env, &req);
+    let message_hash = env.as_contract(contract_id, || create_revocation_message(env, &req));
     let sig = private_key.sign(
         &message_hash.to_array(),
         b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
@@ -661,7 +670,7 @@ fn test_h_contract4_subject_mismatch_in_delegated_revoke_rejected() {
     client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
 
     // Create a real attestation for `subject_real`.
-    let attest_req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject_real);
+    let attest_req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject_real);
     client.attest_by_delegation(&submitter, &attest_req);
     let attestation_uid = env.as_contract(&contract_id, || {
         protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject_real, &attester, 0)
@@ -670,6 +679,7 @@ fn test_h_contract4_subject_mismatch_in_delegated_revoke_rejected() {
     // Build a revoke request that lies about the subject.
     let revoke_req = build_signed_delegated_revoke_with_subject(
         &env,
+        &contract_id,
         &attester,
         client.get_attester_nonce(&attester),
         &schema_uid,
@@ -700,7 +710,7 @@ fn test_h_contract4_correct_subject_revoke_succeeds() {
     let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
     client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
 
-    let attest_req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let attest_req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     client.attest_by_delegation(&submitter, &attest_req);
     let attestation_uid = env.as_contract(&contract_id, || {
         protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
@@ -708,6 +718,7 @@ fn test_h_contract4_correct_subject_revoke_succeeds() {
 
     let revoke_req = build_signed_delegated_revoke_with_subject(
         &env,
+        &contract_id,
         &attester,
         client.get_attester_nonce(&attester),
         &schema_uid,

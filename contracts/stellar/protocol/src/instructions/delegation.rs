@@ -294,9 +294,11 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
 /// - **Field Ordering**: Fixed order prevents signature malleability
 /// - **Type Safety**: Big-endian encoding ensures cross-platform consistency
 ///
-/// # Message Structure
+/// # Message Structure (post-HAL-06)
 /// ```rust,ignore
 /// Domain Separator: "ATTEST_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Contract ID hash: 32 bytes (SHA256 of XDR-encoded current contract address)
+/// Network ID:       32 bytes (env.ledger().network_id())
 /// Schema UID:       32 bytes
 /// Subject Hash:     32 bytes (SHA256 of XDR-encoded subject address)
 /// Nonce:            8 bytes (big-endian u64)
@@ -344,6 +346,18 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 
     // DOMAIN SEPARATION: Use the defined constant for clarity and safety.
     message.extend_from_slice(ATTEST_DOMAIN_SEPARATOR);
+
+    // CONTRACT BINDING (HAL-06): bind the signature to this specific contract
+    // deployment. Without this, a signature minted against a staging or fork
+    // deployment is replayable on mainnet (and vice versa).
+    let contract_id_xdr = env.current_contract_address().clone().to_xdr(env);
+    message.extend_from_array(&env.crypto().sha256(&contract_id_xdr).to_array());
+
+    // NETWORK BINDING (HAL-06): bind to the Stellar network passphrase. This
+    // closes the cross-network replay path independently of the contract
+    // address (different deployments on the same network are also possible).
+    let network_id = env.ledger().network_id();
+    message.extend_from_array(&network_id.to_array());
 
     // FIELD 1: Schema UID (32 bytes, deterministic order)
     message.extend_from_slice(&request.schema_uid.to_array());
@@ -393,9 +407,11 @@ pub fn create_attestation_message(env: &Env, request: &DelegatedAttestationReque
 /// # Returns
 /// * `BytesN<32>` - The hash of the message to be signed
 ///
-/// # Message Structure
+/// # Message Structure (post-HAL-06)
 /// ```rust,ignore
 /// Domain Separator:  "REVOKE_PROTOCOL_V1_DELEGATED" (28 bytes)
+/// Contract ID hash:  32 bytes (SHA256 of XDR-encoded current contract address)
+/// Network ID:        32 bytes (env.ledger().network_id())
 /// Schema UID:        32 bytes
 /// Attestation UID:   32 bytes (binds signature to specific attestation)
 /// Subject Hash:      32 bytes (SHA256 of XDR-encoded subject address)
@@ -407,6 +423,14 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
 
     // DOMAIN SEPARATION: Use the defined constant.
     message.extend_from_slice(REVOKE_DOMAIN_SEPARATOR);
+
+    // CONTRACT BINDING (HAL-06): bind to this specific contract deployment.
+    let contract_id_xdr = env.current_contract_address().clone().to_xdr(env);
+    message.extend_from_array(&env.crypto().sha256(&contract_id_xdr).to_array());
+
+    // NETWORK BINDING (HAL-06): bind to the Stellar network passphrase.
+    let network_id = env.ledger().network_id();
+    message.extend_from_array(&network_id.to_array());
 
     // FIELD 1: Schema UID (32 bytes)
     message.extend_from_slice(&request.schema_uid.to_array());
@@ -442,6 +466,14 @@ pub fn create_revocation_message(env: &Env, request: &DelegatedRevocationRequest
 /// This is a public utility function for clients to ensure they are using the exact,
 /// correct domain separator when constructing messages for off-chain signing.
 ///
+/// # Important (post-HAL-06)
+/// The DST is no longer sufficient on its own to construct the message hash.
+/// Off-chain callers must follow the wire layout documented on
+/// `create_attestation_message`, which now also includes the contract ID hash
+/// and the network ID immediately after the DST. The W5 SDK port must take
+/// these inputs from the deployed contract address and the network passphrase
+/// rather than relying on the simulation fallback removed in H-SDK-1.
+///
 /// # Returns
 /// * `&[u8]` - The byte slice for the attestation domain separator.
 pub fn get_attest_dst() -> &'static [u8] {
@@ -452,6 +484,12 @@ pub fn get_attest_dst() -> &'static [u8] {
 ///
 /// This is a public utility function for clients to ensure they are using the exact,
 /// correct domain separator when constructing messages for off-chain signing.
+///
+/// # Important (post-HAL-06)
+/// The DST is no longer sufficient on its own to construct the message hash.
+/// Off-chain callers must follow the wire layout documented on
+/// `create_revocation_message`, which now also includes the contract ID hash
+/// and the network ID immediately after the DST.
 ///
 /// # Returns
 /// * `&[u8]` - The byte slice for the revocation domain separator.

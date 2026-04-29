@@ -69,7 +69,7 @@ fn test_hal08_delegated_already_revoked_returns_correct_error() {
     client.register_bls_key(&attester, &public_key);
 
     // Create a delegated attestation.
-    let attest_req = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    let attest_req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     client.attest_by_delegation(&submitter, &attest_req);
 
     let attestation_uid = env.as_contract(&contract_id, || {
@@ -89,7 +89,7 @@ fn test_hal08_delegated_already_revoked_returns_correct_error() {
         deadline: env.ledger().timestamp() + 1000,
         signature: BytesN::from_array(&env, &[0; 96]),
     };
-    let message_hash = create_revocation_message(&env, &revoke_req);
+    let message_hash = env.as_contract(&contract_id, || create_revocation_message(&env, &revoke_req));
     let sig = private_key.sign(
         &message_hash.to_array(),
         b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
