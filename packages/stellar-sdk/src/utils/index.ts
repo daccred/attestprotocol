@@ -25,6 +25,7 @@ export {
   generateBlsKeys,
   signHashedMessage,
   verifySignature,
+  validateG1PointFormat,
   aggregateSignatures,
   aggregatePublicKeys,
   verifyAggregateSignature,

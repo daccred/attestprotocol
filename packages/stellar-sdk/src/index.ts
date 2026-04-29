@@ -52,6 +52,7 @@ export {
   getAttestationByTxHash,
   signHashedMessage,
   verifySignature,
+  validateG1PointFormat,
   aggregateSignatures,
   aggregatePublicKeys,
   verifyAggregateSignature,
