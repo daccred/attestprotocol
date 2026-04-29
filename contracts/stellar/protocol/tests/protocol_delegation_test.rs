@@ -480,6 +480,124 @@ fn test_hal01_duplicate_uid_guard_blocks_overwrite() {
     assert_eq!(still_there.value, SorobanString::from_str(&env, "{\"planted\":true}"));
 }
 
+// =======================================================================================
+//
+//                              HAL-05 — Delegated expiration_time check
+//
+// =======================================================================================
+
+/// Build a delegated attestation request with a custom `expiration_time` and a
+/// valid BLS signature against the test key. Lives here rather than in
+/// `testutils.rs` because it's only consumed by HAL-05 tests.
+fn build_signed_delegated_request_with_expiration(
+    env: &Env,
+    attester: &Address,
+    nonce: u64,
+    schema_uid: &BytesN<32>,
+    subject: &Address,
+    expiration_time: Option<u64>,
+) -> DelegatedAttestationRequest {
+    let private_key = blst::min_sig::SecretKey::from_bytes(&TEST_BLS_PRIVATE_KEY)
+        .expect("valid test private key");
+
+    let mut request = DelegatedAttestationRequest {
+        schema_uid: schema_uid.clone(),
+        subject: subject.clone(),
+        value: SorobanString::from_str(env, "{\"key\":\"value\"}"),
+        nonce,
+        attester: attester.clone(),
+        expiration_time,
+        deadline: env.ledger().timestamp() + 1000,
+        signature: BytesN::from_array(env, &[0; 96]),
+    };
+
+    let message_hash = create_attestation_message(env, &request);
+    let sig = private_key.sign(
+        &message_hash.to_array(),
+        b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
+        &[],
+    );
+    request.signature = BytesN::from_array(env, &sig.serialize());
+    request
+}
+
+/// **Test: HAL-05 — Delegated attestation rejects an already-expired `expiration_time`**
+///
+/// Pre-fix: `attest_by_delegation` did not validate `expiration_time` against the
+/// current ledger timestamp, so a request signed with `expiration_time` already
+/// in the past would land and be stored as a born-expired record.
+/// Post-fix: the same guard the direct `attest` path uses now applies, returning
+/// `Error::InvalidDeadline`.
+#[test]
+fn test_hal05_expired_expiration_time_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().with_mut(|li| li.timestamp = 1000);
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    // expiration_time = current_time - 1 → already expired.
+    let req = build_signed_delegated_request_with_expiration(
+        &env,
+        &attester,
+        0,
+        &schema_uid,
+        &subject,
+        Some(999),
+    );
+
+    let result = client.try_attest_by_delegation(&submitter, &req);
+    assert_eq!(result, Err(Ok(ProtocolError::InvalidDeadline.into())));
+
+    // Nonce was not consumed.
+    assert_eq!(client.get_attester_nonce(&attester), 0);
+}
+
+/// **Test: HAL-05 — Delegated attestation accepts a valid future `expiration_time`**
+#[test]
+fn test_hal05_valid_expiration_time_accepted() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().with_mut(|li| li.timestamp = 1000);
+
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    let exp = 1000 + 3600;
+    let req = build_signed_delegated_request_with_expiration(
+        &env,
+        &attester,
+        0,
+        &schema_uid,
+        &subject,
+        Some(exp),
+    );
+    client.attest_by_delegation(&submitter, &req);
+
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+    let stored = client.get_attestation(&attestation_uid);
+    assert_eq!(stored.expiration_time, Some(exp));
+}
+
 /// **Reference vector for the W5 SDK port (HAL-01 attestation UID).**
 ///
 /// W5 must mirror the on-chain formula in `packages/stellar-sdk/`. This test prints

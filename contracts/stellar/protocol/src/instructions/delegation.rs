@@ -50,6 +50,14 @@ pub fn attest_by_delegation(env: &Env, submitter: Address, request: DelegatedAtt
         return Err(Error::ExpiredSignature);
     }
 
+    // Validate expiration_time is in the future if provided (HAL-05).
+    // Mirrors the equivalent guard already present in the direct `attest` path.
+    if let Some(exp_time) = request.expiration_time {
+        if exp_time <= current_time {
+            return Err(Error::InvalidDeadline);
+        }
+    }
+
     // Verify schema exists
     let _schema = utils::get_schema(env, &request.schema_uid).ok_or(Error::SchemaNotFound)?;
 
