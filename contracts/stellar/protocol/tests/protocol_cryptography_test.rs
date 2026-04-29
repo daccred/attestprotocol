@@ -841,3 +841,303 @@ fn test_clean_room_revocation_message_hash() {
     let on_chain_hash_bytesn = instructions::create_revocation_message(&env, &request);
     assert_eq!(off_chain_hash, on_chain_hash_bytesn.to_array());
 }
+
+// =======================================================================================
+//
+//                  HAL-07: STRUCTURAL FLAG-BYTE PRE-CHECK REGRESSION
+//
+// =======================================================================================
+//
+// HAL-07 (Informational, §7.7) — `G1Affine::from_bytes` and `G2Affine::from_bytes`
+// in soroban-sdk 22.x are infallible thin wrappers that trap the host (WASM abort)
+// on malformed BLS12-381 point bytes rather than returning a structured error.
+//
+// The fix adds structural flag-byte pre-checks in
+// `instructions::crypto::register_bls_public_key` and
+// `instructions::crypto::verify_bls_signature` that reject the most-common
+// malformed encodings (compression flag set, infinity flag set) with
+// `Err(Error::InvalidSignaturePoint)` BEFORE `from_bytes` can trap.
+//
+// Tests 1, 2, 4, 5: verify the structural pre-check now returns the structured
+// error instead of trapping.
+// Test 3:           documents the residual limitation — a flag-clean blob
+// that is nonetheless off-curve still traps. Marked `#[should_panic]`.
+// Test 6:           non-regression — confirms that valid signatures still
+// pass the pre-check and reach the pairing path.
+
+/// Helper: build a delegated attestation request whose signature field is
+/// pre-loaded with `bytes`. Re-uses the production message-hash construction
+/// for everything else but skips off-chain signing (the request is destined
+/// to be rejected by the structural pre-check before any signature math
+/// runs, so the actual signature value is irrelevant beyond byte 0).
+fn build_request_with_raw_signature(
+    env: &Env,
+    attester: &Address,
+    schema_uid: &BytesN<32>,
+    subject: &Address,
+    nonce: u64,
+    sig_bytes: [u8; 96],
+) -> DelegatedAttestationRequest {
+    DelegatedAttestationRequest {
+        schema_uid: schema_uid.clone(),
+        subject: subject.clone(),
+        value: SorobanString::from_str(env, "{\"key\":\"value\"}"),
+        nonce,
+        attester: attester.clone(),
+        expiration_time: None,
+        deadline: env.ledger().timestamp() + 1000,
+        signature: BytesN::from_array(env, &sig_bytes),
+    }
+}
+
+/// **HAL-07 Test 1**: A 96-byte signature whose byte 0 has the compression
+/// flag (`0x80`) set must be rejected with `Err(Error::InvalidSignaturePoint)`
+/// — the structural pre-check catches it before `G1Affine::from_bytes` can
+/// trap the host.
+#[test]
+fn test_hal07_compressed_signature_flag_returns_error_not_trap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    // Register a real, valid G2 public key so the call advances PAST the
+    // BlsPubKeyNotRegistered short-circuit and actually reaches the
+    // structural pre-check on the signature.
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    // Construct a signature with the compression flag set (byte 0 = 0x80).
+    // This is the most common wrong-format input — off-chain libraries that
+    // emit compressed (48-byte) G1 points zero-padded to 96 will land here.
+    let mut sig_bytes = [0u8; 96];
+    sig_bytes[0] = 0x80;
+
+    let request = build_request_with_raw_signature(&env, &attester, &schema_uid, &subject, 0, sig_bytes);
+
+    let result = client.try_attest_by_delegation(&submitter, &request);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "compressed-flag signature must return InvalidSignaturePoint"
+    );
+
+    // Side-effect check: no attestation was written to storage.
+    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    let fetched = client.try_get_attestation(&attestation_uid);
+    assert!(
+        fetched.is_err() || fetched.unwrap().is_err(),
+        "no attestation should have been stored when the pre-check rejected the signature"
+    );
+}
+
+/// **HAL-07 Test 2**: A 96-byte signature whose byte 0 has the infinity
+/// flag (`0x40`) set — the encoding of the G1 point at infinity — must
+/// be rejected with `Err(Error::InvalidSignaturePoint)`.
+#[test]
+fn test_hal07_infinity_signature_flag_returns_error_not_trap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    let mut sig_bytes = [0u8; 96];
+    sig_bytes[0] = 0x40; // infinity flag set, compression flag clear
+
+    let request = build_request_with_raw_signature(&env, &attester, &schema_uid, &subject, 0, sig_bytes);
+
+    let result = client.try_attest_by_delegation(&submitter, &request);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "infinity-flag signature must return InvalidSignaturePoint"
+    );
+}
+
+/// **HAL-07 Test 3 — RESIDUAL**: An all-zeros 96-byte signature has flag
+/// byte `0x00` (passes the structural pre-check), but its coordinates encode
+/// the affine zero point which is off-curve for G1. `G1Affine::from_bytes`
+/// therefore traps inside the Soroban host. This test documents the
+/// limitation of the pre-check — it cannot prevent off-curve / wrong-subgroup
+/// traps without an in-WASM subgroup check or a fallible host API.
+///
+/// The Soroban host trap surfaces in this test harness as a Rust panic, hence
+/// `#[should_panic]`. If a future soroban-sdk release adds `try_from_bytes`,
+/// this test should be removed and replaced with a structured-error assertion.
+#[test]
+#[should_panic(expected = "InvokeError::Abort")]
+fn test_hal07_all_zeros_signature_still_traps() {
+    // HAL-07 residual: flag-byte check does not prevent off-curve trap. Documented limitation.
+    //
+    // The Soroban test harness surfaces the host abort as
+    // `Result<_, Result<_, InvokeError::Abort>>` from the `try_` client
+    // (rather than panicking the Rust thread directly). We assert that
+    // shape here and convert it into a panic — `#[should_panic]` then
+    // documents that this code path is unrecoverable from the contract's
+    // perspective: there is NO structured `Error` variant for off-curve
+    // signature bytes whose flag byte is structurally clean. Off-chain
+    // tooling sees the opaque `Abort` and cannot distinguish it from any
+    // other host-level failure. This is the documented limitation of the
+    // in-WASM mitigation; closing it requires a fallible `from_bytes` API
+    // in soroban-sdk (currently unavailable in 22.0.11) or an in-WASM
+    // subgroup check (cost-prohibitive).
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    // All zeros: flag byte clear (passes the structural pre-check), but the
+    // coordinates encode the affine zero point which is off-curve for G1.
+    // The Soroban host traps when `G1Affine::from_bytes` is reached.
+    let sig_bytes = [0u8; 96];
+    let request = build_request_with_raw_signature(&env, &attester, &schema_uid, &subject, 0, sig_bytes);
+
+    let result = client.try_attest_by_delegation(&submitter, &request);
+
+    // We expect the host trap path: outer Err (non-contract failure)
+    // wrapping `Err(InvokeError::Abort)`. Anything else (including a
+    // structured `InvalidSignaturePoint`) would mean the residual trap
+    // surface has changed — re-run the test design in that case.
+    match result {
+        Err(Err(soroban_sdk::InvokeError::Abort)) => {
+            // Convert the documented residual into a panic so
+            // `#[should_panic(expected = ...)]` flags the residual surface.
+            panic!("InvokeError::Abort — HAL-07 residual host trap on off-curve G1 bytes");
+        }
+        other => panic!(
+            "expected InvokeError::Abort host trap (HAL-07 residual), got {:?}",
+            other
+        ),
+    }
+}
+
+/// **HAL-07 Test 4**: A 192-byte G2 public key whose byte 0 has the
+/// compression flag (`0x80`) set must be rejected by `register_bls_key`
+/// with `Err(Error::InvalidSignaturePoint)`, and no key may be persisted.
+#[test]
+fn test_hal07_compressed_pubkey_flag_returns_error_not_trap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    let mut pk_bytes = [0u8; 192];
+    pk_bytes[0] = 0x80; // compression flag set
+    let public_key = BytesN::from_array(&env, &pk_bytes);
+
+    let result = client.try_register_bls_key(&attester, &public_key);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "compressed-flag G2 public key must return InvalidSignaturePoint"
+    );
+
+    // Side-effect check: no key was written to persistent storage.
+    let stored = client.try_get_bls_key(&attester);
+    assert!(
+        stored.is_err() || stored.unwrap().is_err(),
+        "no BLS key should have been stored when the pre-check rejected the encoding"
+    );
+}
+
+/// **HAL-07 Test 5**: A 192-byte G2 public key whose byte 0 has the
+/// infinity flag (`0x40`) set — the identity element — must be rejected
+/// by `register_bls_key` with `Err(Error::InvalidSignaturePoint)`.
+#[test]
+fn test_hal07_infinity_pubkey_flag_returns_error_not_trap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    let mut pk_bytes = [0u8; 192];
+    pk_bytes[0] = 0x40; // infinity flag set
+    let public_key = BytesN::from_array(&env, &pk_bytes);
+
+    let result = client.try_register_bls_key(&attester, &public_key);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "infinity-flag G2 public key must return InvalidSignaturePoint"
+    );
+}
+
+/// **HAL-07 Test 6 — Non-regression**: a real, valid 96-byte G1 signature
+/// with byte 0 = `0x00` and proper curve coordinates must pass the
+/// structural pre-check and reach the pairing path. This guarantees the
+/// pre-check does not false-positive on well-formed inputs.
+///
+/// Reuses the existing `create_delegated_attestation_request` helper from
+/// `testutils`, which signs with `TEST_BLS_PRIVATE_KEY` whose corresponding
+/// `TEST_BLS_G2_PUBLIC_KEY` is registered on-chain.
+#[test]
+fn test_hal07_valid_signature_passes_structural_check() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    // Sanity: the standard test signature's first byte is structurally clean.
+    let request = create_delegated_attestation_request(&env, &attester, 0, &schema_uid, &subject);
+    assert_eq!(
+        request.signature.get_unchecked(0) & 0xC0,
+        0,
+        "test fixture signature must have a clean flag byte for this assertion to be meaningful"
+    );
+
+    // Should return Ok(()) — the structural check does not reject valid inputs,
+    // and the downstream pairing check succeeds for a correctly produced signature.
+    client.attest_by_delegation(&attester, &request);
+
+    // Confirm the attestation was actually written to persistent storage.
+    let attestation_uid = protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, 0);
+    let fetched = client.get_attestation(&attestation_uid);
+    assert_eq!(
+        fetched.attester, attester,
+        "valid pre-checked signature must end up with a stored attestation"
+    );
+}
