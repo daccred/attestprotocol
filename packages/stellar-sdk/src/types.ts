@@ -271,17 +271,21 @@ export interface FetchByLedgerParams {
   limit?: number
 }
 
-/** Arguments for generating attestation UID */
+/** Arguments for generating attestation UID (HAL-06 / C-SDK-1 layout) */
 export interface GenerateAttestationUidParams {
+  /** Deployed protocol contract address */
+  contractAddress: string
   /** Schema UID */
   schemaUid: Buffer
   /** Subject address */
   subject: string
+  /** Attester address */
+  attester: string
   /** Unique nonce */
   nonce: bigint
 }
 
-/** Arguments for generating schema UID */
+/** Arguments for generating schema UID (C-CONTRACT-3 mirror) */
 export interface GenerateSchemaUidParams {
   /** Schema definition */
   definition: string
@@ -289,4 +293,6 @@ export interface GenerateSchemaUidParams {
   authority: string
   /** Optional resolver address */
   resolver?: string
+  /** Whether attestations against this schema may be revoked */
+  revocable: boolean
 }

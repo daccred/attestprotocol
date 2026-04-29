@@ -1,185 +1,151 @@
 /**
  * Delegation Utilities
  *
- * Functions for creating and managing delegated attestations and revocations,
- * including message creation and domain separator tag retrieval.
+ * Functions for creating delegated attestation/revocation requests and the
+ * BLS message points they sign over. Layouts C and D below mirror the Rust
+ * `delegation::create_attestation_message` / `create_revocation_message`
+ * functions byte-for-byte. Reference vectors live in __tests__/parity.test.ts.
+ *
+ * HAL-06 / C-SDK-1 / C-CONTRACT-3:
+ *   - The contract address and the network identifier are now part of the
+ *     signed preimage so a request signed for one chain or one deployed
+ *     contract cannot be replayed against a different one.
+ *   - The DST is no longer a separate buffer fetched from the contract;
+ *     a fixed UTF-8 domain separator is concatenated inline.
  */
 
 import { Client as ProtocolClient } from '@attestprotocol/stellar-contracts/protocol'
-import { Address, nativeToScVal, scValToNative } from '@stellar/stellar-sdk'
+import { Address, nativeToScVal } from '@stellar/stellar-sdk'
 import { bls12_381 } from '@noble/curves/bls12-381.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { DelegatedAttestationRequest, DelegatedRevocationRequest } from './types'
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js'
 
+const ATTEST_DOMAIN_SEPARATOR = Buffer.from('ATTEST_PROTOCOL_V1_DELEGATED', 'utf8')
+const REVOKE_DOMAIN_SEPARATOR = Buffer.from('REVOKE_PROTOCOL_V1_DELEGATED', 'utf8')
+
+/**
+ * Encode a Stellar address as `Address::to_xdr(env)` (raw ScAddress XDR).
+ */
+function encodeAddressXdr(address: string): Buffer {
+  return new Address(address).toScVal().toXDR()
+}
+
+/**
+ * Compute the 32-byte network id matching `env.ledger().network_id().to_array()`.
+ *
+ * Soroban derives the network id as `sha256(network_passphrase)` and emits the
+ * raw 32 bytes (not the XDR `BytesN<32>` wrapper) when the contract appends it
+ * via `extend_from_slice(&network_id.to_array())`.
+ */
+function networkIdBytes(networkPassphrase: string): Buffer {
+  return Buffer.from(sha256(Buffer.from(networkPassphrase, 'utf8')))
+}
+
 /**
  * Hash an address to match the contract's subject hash computation.
  * The contract uses: sha256(address.to_xdr(env))
- *
- * @param address - Stellar address string (G... format)
- * @returns 32-byte hash of the XDR-encoded address
  */
 function hashAddress(address: string): Buffer {
-  const addr = new Address(address)
-  const scVal = addr.toScVal()
-  const xdrBytes = scVal.toXDR()
-  return Buffer.from(sha256(xdrBytes))
+  return Buffer.from(sha256(encodeAddressXdr(address)))
 }
 
 /**
  * Hash a string value to match the contract's value hash computation.
  * The contract uses: sha256(value.to_xdr(env))
- *
- * @param value - String value to hash
- * @returns 32-byte hash of the XDR-encoded string
  */
 function hashValue(value: string): Buffer {
-  const scVal = nativeToScVal(value, { type: 'string' })
-  const xdrBytes = scVal.toXDR()
+  const xdrBytes = nativeToScVal(value, { type: 'string' }).toXDR()
   return Buffer.from(sha256(xdrBytes))
 }
 
+function be8(value: bigint): Buffer {
+  const buf = Buffer.alloc(8)
+  buf.writeBigUInt64BE(value, 0)
+  return buf
+}
+
 /**
- * Create a message for signing delegated attestations.
- * Must match the exact format from `delegation.rs::create_attestation_message`.
+ * Create the BLS G1 point a delegated attestation request must be signed over.
  *
- * Message Structure:
- * - Domain Separator: 28 bytes ("ATTEST_PROTOCOL_V1_DELEGATED")
- * - Schema UID: 32 bytes
- * - Subject Hash: 32 bytes (SHA256 of XDR-encoded subject address)
- * - Nonce: 8 bytes (big-endian u64)
- * - Deadline: 8 bytes (big-endian u64)
- * - Expiration Time: 8 bytes (optional, big-endian u64)
- * - Value Hash: 32 bytes (SHA256 of XDR-encoded value)
+ * Layout C (sha256 preimage, then mapped to G1):
+ *   "ATTEST_PROTOCOL_V1_DELEGATED" || contract_xdr || network_id_32 ||
+ *   schema_uid_raw_32             || subject_hash || nonce_be8     ||
+ *   deadline_be8                  || [expiration_be8]?            || value_hash
  *
- * @param request - The delegated attestation request
- * @param dst - The domain separation tag for attestations
- * @returns A hash of the message, ready to be signed
+ * Note: `schema_uid` is the RAW 32 bytes (matching Rust `request.schema_uid.to_array()`),
+ * not the BytesN<32> XDR form used in Layout A.
+ *
+ * @param request - The delegated attestation request (signature field unused)
+ * @param contractId - The deployed protocol contract address
+ * @param networkPassphrase - The network passphrase (e.g. Networks.TESTNET)
  */
-export function createAttestMessage(request: Omit<DelegatedAttestationRequest, 'signature'>, dst: Buffer): WeierstrassPoint<bigint> {
-  const components: Buffer[] = []
-
-  // Domain separation tag (28 bytes)
-  components.push(dst)
-
-  // Schema UID (32 bytes)
-  components.push(request.schema_uid)
-
-  // Subject Hash (32 bytes) - SHA256 of XDR-encoded subject address
-  // CRITICAL: Binds the signature to the specific subject being attested
-  components.push(hashAddress(request.subject))
-
-  // Nonce (8 bytes, big-endian u64)
-  const nonceBuffer = Buffer.allocUnsafe(8)
-  nonceBuffer.writeBigUInt64BE(request.nonce, 0)
-  components.push(nonceBuffer)
-
-  // Deadline (8 bytes, big-endian u64)
-  const deadlineBuffer = Buffer.allocUnsafe(8)
-  deadlineBuffer.writeBigUInt64BE(request.deadline, 0)
-  components.push(deadlineBuffer)
-
-  // Optional expiration time (8 bytes if present)
-  if (request.expiration_time !== undefined) {
-    const expirationBuffer = Buffer.allocUnsafe(8)
-    expirationBuffer.writeBigUInt64BE(BigInt(request.expiration_time), 0)
-    components.push(expirationBuffer)
+export function createAttestMessage(
+  request: Omit<DelegatedAttestationRequest, 'signature'>,
+  contractId: string,
+  networkPassphrase: string
+): WeierstrassPoint<bigint> {
+  if (!(request.schema_uid instanceof Buffer) || request.schema_uid.length !== 32) {
+    throw new Error('request.schema_uid must be a 32-byte Buffer')
   }
 
-  // Value Hash (32 bytes) - SHA256 of XDR-encoded value
-  // CRITICAL: Binds the exact value content to the signature
+  const components: Buffer[] = [
+    ATTEST_DOMAIN_SEPARATOR,
+    encodeAddressXdr(contractId),
+    networkIdBytes(networkPassphrase),
+    request.schema_uid,
+    hashAddress(request.subject),
+    be8(request.nonce),
+    be8(request.deadline),
+  ]
+
+  if (request.expiration_time !== undefined) {
+    components.push(be8(BigInt(request.expiration_time)))
+  }
+
   components.push(hashValue(request.value))
 
-  // Concatenate and hash
   const message = Buffer.concat(components)
   return bls12_381.shortSignatures.hash(sha256(message))
 }
 
 /**
- * Create a message for signing delegated revocations.
- * Must match the exact format from `delegation.rs::create_revocation_message`.
+ * Create the BLS G1 point a delegated revocation request must be signed over.
  *
- * Message Structure:
- * - Domain Separator: 28 bytes ("REVOKE_PROTOCOL_V1_DELEGATED")
- * - Schema UID: 32 bytes
- * - Attestation UID: 32 bytes
- * - Subject Hash: 32 bytes (SHA256 of XDR-encoded subject address)
- * - Nonce: 8 bytes (big-endian u64)
- * - Deadline: 8 bytes (big-endian u64)
+ * Layout D (sha256 preimage, then mapped to G1):
+ *   "REVOKE_PROTOCOL_V1_DELEGATED" || contract_xdr     || network_id_32 ||
+ *   schema_uid_raw_32             || attestation_uid_32 || subject_hash ||
+ *   nonce_be8                     || deadline_be8
  *
- * @param request - The delegated revocation request
- * @param dst - The domain separation tag for revocations
- * @returns A hash of the message, ready to be signed
+ * @param request - The delegated revocation request (signature field unused)
+ * @param contractId - The deployed protocol contract address
+ * @param networkPassphrase - The network passphrase (e.g. Networks.TESTNET)
  */
-export function createRevokeMessage(request: Omit<DelegatedRevocationRequest, 'signature'>, dst: Buffer): WeierstrassPoint<bigint> {
-  const components: Buffer[] = []
+export function createRevokeMessage(
+  request: Omit<DelegatedRevocationRequest, 'signature'>,
+  contractId: string,
+  networkPassphrase: string
+): WeierstrassPoint<bigint> {
+  if (!(request.schema_uid instanceof Buffer) || request.schema_uid.length !== 32) {
+    throw new Error('request.schema_uid must be a 32-byte Buffer')
+  }
+  if (!(request.attestation_uid instanceof Buffer) || request.attestation_uid.length !== 32) {
+    throw new Error('request.attestation_uid must be a 32-byte Buffer')
+  }
 
-  // Domain separation tag (28 bytes)
-  components.push(dst)
+  const components: Buffer[] = [
+    REVOKE_DOMAIN_SEPARATOR,
+    encodeAddressXdr(contractId),
+    networkIdBytes(networkPassphrase),
+    request.schema_uid,
+    request.attestation_uid,
+    hashAddress(request.subject),
+    be8(request.nonce),
+    be8(request.deadline),
+  ]
 
-  // Schema UID (32 bytes)
-  // CRITICAL: Binds the signature to the specific schema
-  components.push(request.schema_uid)
-
-  // Attestation UID (32 bytes)
-  // CRITICAL: Binds the signature to the specific attestation being revoked
-  components.push(request.attestation_uid)
-
-  // Subject Hash (32 bytes) - SHA256 of XDR-encoded subject address
-  // Defense in depth - explicitly binds signature to the attestation subject
-  components.push(hashAddress(request.subject))
-
-  // Nonce (8 bytes, big-endian u64)
-  const nonceBuffer = Buffer.allocUnsafe(8)
-  nonceBuffer.writeBigUInt64BE(request.nonce, 0)
-  components.push(nonceBuffer)
-
-  // Deadline (8 bytes, big-endian u64)
-  const deadlineBuffer = Buffer.allocUnsafe(8)
-  deadlineBuffer.writeBigUInt64BE(request.deadline, 0)
-  components.push(deadlineBuffer)
-
-  // Concatenate and hash
   const message = Buffer.concat(components)
   return bls12_381.shortSignatures.hash(sha256(message))
-}
-
-/**
- * Get the domain separator tag for attestations from the contract.
- *
- * H-SDK-1: any error simulating the contract call propagates to the caller.
- * Pre-fix this swallowed every error and returned a hard-coded UTF-8 default,
- * which masked RPC failures, contract-mismatch deployments, and schema drift.
- *
- * @param client - The protocol client instance
- * @returns The domain separator tag as a Buffer
- */
-export async function getAttestDST(client: ProtocolClient): Promise<Buffer> {
-  const tx = await client.get_dst_for_attestation()
-  const result = await tx.simulate()
-
-  // @ts-ignore - Different result structures across contract methods
-  const dst = scValToNative(result.result)
-  return Buffer.from(dst)
-}
-
-/**
- * Get the domain separator tag for revocations from the contract.
- *
- * H-SDK-1: any error simulating the contract call propagates to the caller.
- * Pre-fix this swallowed every error and returned a hard-coded UTF-8 default,
- * which masked RPC failures, contract-mismatch deployments, and schema drift.
- *
- * @param client - The protocol client instance
- * @returns The domain separator tag as a Buffer
- */
-export async function getRevokeDST(client: ProtocolClient): Promise<Buffer> {
-  const tx = await client.get_dst_for_revocation()
-  const result = await tx.simulate()
-
-  // @ts-ignore - Different result structures across contract methods
-  const dst = scValToNative(result.result)
-  return Buffer.from(dst)
 }
 
 export async function getAttesterNonce(client: ProtocolClient, attester: string): Promise<bigint> {

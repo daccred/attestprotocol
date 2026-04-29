@@ -42,8 +42,6 @@ export {
   generateSchemaUid,
   formatUid,
   parseFormattedUid,
-  getAttestDST,
-  getRevokeDST,
   createDelegatedAttestationRequest,
   createDelegatedRevocationRequest,
   createSimpleSchema,

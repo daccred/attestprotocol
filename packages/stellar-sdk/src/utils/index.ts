@@ -14,8 +14,6 @@ export { encodeSchema, decodeSchema, validateSchema, createSimpleSchema } from '
 export {
   createAttestMessage,
   createRevokeMessage,
-  getAttestDST,
-  getRevokeDST,
   createDelegatedAttestationRequest,
   createDelegatedRevocationRequest,
 } from '../delegation'
