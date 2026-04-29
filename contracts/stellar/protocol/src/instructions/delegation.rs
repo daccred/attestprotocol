@@ -189,6 +189,13 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
     // Verify BLS12-381 signature
     verify_bls_signature(env, &message, &request.signature, &request.revoker)?;
 
+    // Verify and increment per-revoker nonce to prevent replay attacks.
+    // The DelegatedRevocationRequest's nonce is dimensioned against a
+    // per-revoker counter independent from AttesterNonce so that revoking
+    // attestation N never requires the attester's current nonce.
+    // Source: C-CONTRACT-1 (independent audit) / HAL-03 (Halborn §7.3).
+    verify_and_increment_revoker_nonce(env, &request.revoker, request.nonce)?;
+
     // Update attestation
     attestation.revoked = true;
     attestation.revocation_time = Some(current_time);
@@ -277,6 +284,35 @@ fn verify_and_increment_nonce(env: &Env, attester: &Address, expected_nonce: u64
     let new_nonce = current_nonce.checked_add(1).ok_or(Error::IntegerOverflow)?;
     env.storage().persistent().set(&nonce_key, &new_nonce);
 
+    Ok(())
+}
+
+/// **CRITICAL SECURITY FUNCTION**: Verifies and increments the nonce for a
+/// delegated revoker.
+///
+/// Mirrors `verify_and_increment_nonce` but uses `DataKey::RevokerNonce` so
+/// the revocation nonce sequence is independent from the attestation nonce
+/// sequence. Without this, a delegated revocation request signed with an
+/// arbitrary nonce dimension could be replayed, since `revoke_by_delegation`
+/// previously had no on-chain nonce check at all.
+///
+/// Source: C-CONTRACT-1 (independent audit), extends HAL-03 (Halborn §7.3).
+fn verify_and_increment_revoker_nonce(
+    env: &Env,
+    revoker: &Address,
+    expected_nonce: u64,
+) -> Result<(), Error> {
+    let nonce_key = DataKey::RevokerNonce(revoker.clone());
+    let current_nonce = env
+        .storage()
+        .persistent()
+        .get::<DataKey, u64>(&nonce_key)
+        .unwrap_or(0);
+    if current_nonce != expected_nonce {
+        return Err(Error::InvalidNonce);
+    }
+    let new_nonce = current_nonce.checked_add(1).ok_or(Error::IntegerOverflow)?;
+    env.storage().persistent().set(&nonce_key, &new_nonce);
     Ok(())
 }
 

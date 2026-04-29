@@ -84,7 +84,7 @@ fn test_hal08_delegated_already_revoked_returns_correct_error() {
         attestation_uid: attestation_uid.clone(),
         schema_uid: schema_uid.clone(),
         subject: subject.clone(),
-        nonce: client.get_attester_nonce(&attester),
+        nonce: client.get_revoker_nonce(&attester),
         revoker: attester.clone(),
         deadline: env.ledger().timestamp() + 1000,
         signature: BytesN::from_array(&env, &[0; 96]),

@@ -211,7 +211,7 @@ fn test_delegated_revocation_with_valid_signature() {
         attestation_uid: attestation_uid.clone(),
         schema_uid: schema_uid.clone(),
         subject: subject.clone(),
-        nonce: client.get_attester_nonce(&attester), // should be 1 after attestation
+        nonce: client.get_revoker_nonce(&attester), // RevokerNonce is independent (C-CONTRACT-1)
         revoker: attester.clone(),
         deadline: env.ledger().timestamp() + 1000,
         signature: BytesN::from_array(&env, &[0; 96]), // Placeholder
@@ -337,7 +337,7 @@ fn test_delegated_action_with_expired_deadline() {
             attestation_uid: attestation_uid.clone(),
             schema_uid: schema_uid.clone(),
             subject: subject.clone(),
-            nonce: client.get_attester_nonce(&attester), // should be 1 after attestation
+            nonce: client.get_revoker_nonce(&attester), // RevokerNonce is independent (C-CONTRACT-1)
             revoker: attester.clone(),
             deadline: 500, // Expired deadline (timestamp 0 is always in the past)
             signature: BytesN::from_array(&env, &[0; 96]),
@@ -681,7 +681,7 @@ fn test_h_contract4_subject_mismatch_in_delegated_revoke_rejected() {
         &env,
         &contract_id,
         &attester,
-        client.get_attester_nonce(&attester),
+        client.get_revoker_nonce(&attester),
         &schema_uid,
         &attestation_uid,
         &subject_fake,
@@ -720,7 +720,7 @@ fn test_h_contract4_correct_subject_revoke_succeeds() {
         &env,
         &contract_id,
         &attester,
-        client.get_attester_nonce(&attester),
+        client.get_revoker_nonce(&attester),
         &schema_uid,
         &attestation_uid,
         &subject,
@@ -770,4 +770,127 @@ fn test_hal01_uid_reference_vector_for_w5() {
 
     // Sanity: the produced UID is non-zero (keccak256 of non-empty input).
     assert_ne!(uid_a.to_array(), [0u8; 32]);
+}
+
+// =======================================================================================
+// C-CONTRACT-1 + HAL-03: per-revoker nonce prevents delegated revocation replay
+// =======================================================================================
+
+/// **Test: HAL-03 / C-CONTRACT-1 — Same signed delegated revocation cannot be replayed**
+///
+/// Pre-fix: `revoke_by_delegation` had no on-chain nonce check, so the same signed
+/// `DelegatedRevocationRequest` could be replayed within the deadline window.
+/// Post-fix: a `RevokerNonce` is verified and incremented after BLS signature
+/// verification; the second submission of the same request fails (the second
+/// failure mode is `AlreadyRevoked` from the early guard, but if that guard were
+/// bypassed the nonce check would still reject).
+#[test]
+fn test_hal03_delegated_revoke_replay_blocked_by_nonce() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    let attest_req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
+    client.attest_by_delegation(&submitter, &attest_req);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+
+    // First revocation succeeds with revoker_nonce = 0.
+    let revoke_req = build_signed_delegated_revoke_with_subject(
+        &env, &contract_id, &attester, 0, &schema_uid, &attestation_uid, &subject,
+    );
+    client.revoke_by_delegation(&submitter, &revoke_req);
+    assert!(client.get_attestation(&attestation_uid).revoked);
+    assert_eq!(client.get_revoker_nonce(&attester), 1);
+
+    // Replay of the same signed request: blocked by AlreadyRevoked early guard.
+    let result = client.try_revoke_by_delegation(&submitter, &revoke_req);
+    assert_eq!(result, Err(Ok(ProtocolError::AlreadyRevoked.into())));
+}
+
+/// **Test: C-CONTRACT-1 — RevokerNonce increments per successful revocation**
+#[test]
+fn test_c_contract1_revoker_nonce_increments_after_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject_a = Address::generate(&env);
+    let subject_b = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    // Two distinct attestations.
+    let req_a = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject_a);
+    let req_b = create_delegated_attestation_request(&env, &contract_id, &attester, 1, &schema_uid, &subject_b);
+    client.attest_by_delegation(&submitter, &req_a);
+    client.attest_by_delegation(&submitter, &req_b);
+
+    let uid_a = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject_a, &attester, 0)
+    });
+    let uid_b = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject_b, &attester, 1)
+    });
+
+    assert_eq!(client.get_revoker_nonce(&attester), 0);
+    let revoke_a = build_signed_delegated_revoke_with_subject(
+        &env, &contract_id, &attester, 0, &schema_uid, &uid_a, &subject_a,
+    );
+    client.revoke_by_delegation(&submitter, &revoke_a);
+    assert_eq!(client.get_revoker_nonce(&attester), 1);
+
+    let revoke_b = build_signed_delegated_revoke_with_subject(
+        &env, &contract_id, &attester, 1, &schema_uid, &uid_b, &subject_b,
+    );
+    client.revoke_by_delegation(&submitter, &revoke_b);
+    assert_eq!(client.get_revoker_nonce(&attester), 2);
+}
+
+/// **Test: C-CONTRACT-1 — Out-of-order revoker nonce is rejected**
+#[test]
+fn test_c_contract1_out_of_order_revoker_nonce_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&admin, &SorobanString::from_str(&env, "schema"), &None, &true);
+    client.register_bls_key(&attester, &BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY));
+
+    let attest_req = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
+    client.attest_by_delegation(&submitter, &attest_req);
+    let attestation_uid = env.as_contract(&contract_id, || {
+        protocol::utils::generate_attestation_uid(&env, &schema_uid, &subject, &attester, 0)
+    });
+
+    // Skip nonce 0; sign with revoker_nonce = 1. RevokerNonce is at 0 → reject.
+    let revoke_req = build_signed_delegated_revoke_with_subject(
+        &env, &contract_id, &attester, 1, &schema_uid, &attestation_uid, &subject,
+    );
+    let result = client.try_revoke_by_delegation(&submitter, &revoke_req);
+    assert_eq!(result, Err(Ok(ProtocolError::InvalidNonce.into())));
 }
