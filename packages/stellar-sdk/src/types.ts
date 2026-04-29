@@ -96,9 +96,15 @@ export interface SubmitOptions extends TxOptions {
 }
 
 /**
- * Delegated attestation request
+ * Delegated attestation request.
+ *
+ * The literal `type: 'attest'` discriminator is used by submitRawTx and
+ * downstream dispatch logic to route the request to attestByDelegation
+ * rather than relying on structural property sniffing (see H-SDK-2).
  */
 export interface DelegatedAttestationRequest {
+  /** Discriminator distinguishing attestation requests from revocation requests. */
+  type: 'attest'
   /** The address of the original attester (who signed off-chain) */
   attester: string
   /** Expiration timestamp for this signed request */
@@ -118,9 +124,15 @@ export interface DelegatedAttestationRequest {
 }
 
 /**
- * Delegated revocation request
+ * Delegated revocation request.
+ *
+ * The literal `type: 'revoke'` discriminator is used by submitRawTx and
+ * downstream dispatch logic to route the request to revokeByDelegation
+ * rather than relying on structural property sniffing (see H-SDK-2).
  */
 export interface DelegatedRevocationRequest {
+  /** Discriminator distinguishing revocation requests from attestation requests. */
+  type: 'revoke'
   /** The unique identifier of the attestation to revoke */
   attestation_uid: Buffer
   /** Expiration timestamp for this signed request */
@@ -259,17 +271,21 @@ export interface FetchByLedgerParams {
   limit?: number
 }
 
-/** Arguments for generating attestation UID */
+/** Arguments for generating attestation UID (HAL-06 / C-SDK-1 layout) */
 export interface GenerateAttestationUidParams {
+  /** Deployed protocol contract address */
+  contractAddress: string
   /** Schema UID */
   schemaUid: Buffer
   /** Subject address */
   subject: string
+  /** Attester address */
+  attester: string
   /** Unique nonce */
   nonce: bigint
 }
 
-/** Arguments for generating schema UID */
+/** Arguments for generating schema UID (C-CONTRACT-3 mirror) */
 export interface GenerateSchemaUidParams {
   /** Schema definition */
   definition: string
@@ -277,4 +293,6 @@ export interface GenerateSchemaUidParams {
   authority: string
   /** Optional resolver address */
   resolver?: string
+  /** Whether attestations against this schema may be revoked */
+  revocable: boolean
 }

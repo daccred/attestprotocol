@@ -73,26 +73,42 @@ export function signHashedMessage(message: WeierstrassPoint<bigint>, privateKey:
 }
 
 /**
+ * Validate that a buffer is a syntactically valid BLS12-381 G1 point.
+ *
+ * This is a pure format check — it does NOT prove a signature was produced
+ * by any specific key over any specific message. Callers must use
+ * {@link verifySignature} (with an expectedMessage) for authenticity.
+ *
+ * @param {Buffer} signature - Candidate signature bytes.
+ * @returns {boolean} `true` if the bytes parse as a G1 point, otherwise `false`.
+ */
+export function validateG1PointFormat(signature: Buffer): boolean {
+  try {
+    bls12_381.G1.Point.fromHex(signature.toString('hex'))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Verify a BLS signature against a given message and public key.
  *
- * This function performs a full signature verification. If `expectedMessage` is not provided,
- * it performs a basic format check on the signature, but this does not guarantee authenticity.
- * For full security, always provide the `expectedMessage`.
+ * `expectedMessage` is REQUIRED. Calling this without an expected message
+ * point cannot establish authenticity, so the function returns
+ * `{ isValid: false }` rather than silently succeeding on a format check.
+ * For a pure format check, use {@link validateG1PointFormat}.
  *
  * @param {Buffer} signature - The signature to verify.
  * @param {WeierstrassPoint<bigint>} expectedMessage - The hashed message that is to be verified.
  * @param {Buffer} publicKey - The BLS public key (192 bytes uncompressed).
  * @returns {VerificationResult} An object containing the validity status and optional metadata.
- * @example
- * ```typescript
- * const { privateKey, publicKey } = generateBlsKeys();
- * // Assuming `messagePoint` is created from a message.
- * const signature = signHashedMessage(messagePoint, privateKey);
- *
- * const result = verifySignature(signature, messagePoint, Buffer.from(publicKey));
- * console.log('Is signature valid?', result.isValid); // true
- * ```
  */
+export function verifySignature(params: {
+  signature: Buffer
+  expectedMessage: WeierstrassPoint<bigint>
+  publicKey: Buffer
+}): VerificationResult
 export function verifySignature({
   signature,
   expectedMessage,
@@ -102,43 +118,24 @@ export function verifySignature({
   expectedMessage: WeierstrassPoint<bigint>
   publicKey: Buffer
 }): VerificationResult {
+  if (!expectedMessage) {
+    return { isValid: false }
+  }
+
   try {
-    if (expectedMessage) {
-      const isValid = curve.verify(signature, expectedMessage, publicKey)
+    const isValid = curve.verify(signature, expectedMessage, publicKey)
 
-      return {
-        isValid,
-        metadata: isValid
-          ? {
-              originalMessage: Buffer.from(expectedMessage.toBytes(false)),
-              inputs: {},
-            }
-          : undefined,
-      }
-    }
-
-    try {
-      bls12_381.G1.Point.fromHex(signature.toString('hex'))
-
-      return {
-        isValid: true,
-        metadata: {
-          originalMessage: Buffer.from([]),
-          inputs: {
-            signatureLength: signature.length,
-            publicKeyLength: publicKey.length,
-          },
-        },
-      }
-    } catch {
-      return {
-        isValid: false,
-      }
-    }
-  } catch (error: any) {
     return {
-      isValid: false,
+      isValid,
+      metadata: isValid
+        ? {
+            originalMessage: Buffer.from(expectedMessage.toBytes(false)),
+            inputs: {},
+          }
+        : undefined,
     }
+  } catch {
+    return { isValid: false }
   }
 }
 

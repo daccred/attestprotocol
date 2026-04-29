@@ -6,6 +6,7 @@
 import { Address, xdr } from '@stellar/stellar-sdk'
 import Ajv from 'ajv'
 import addFormats from 'ajv-formats'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 /**
  * Supported Stellar attestation data types
@@ -105,19 +106,23 @@ export class SorobanSchemaEncoder {
   }
 
   /**
-   * Generate a unique hash for this schema
+   * Generate a unique hash for this schema.
+   *
+   * Returns the lowercase hex SHA-256 digest of the canonical JSON form
+   * (name + ordered fields). Pre-fix this method returned a hex
+   * encoding of the first 32 raw UTF-8 bytes of the JSON string, which
+   * is not a hash at all: identical prefixes produced identical "hashes"
+   * and the value did not depend on later bytes of the schema (H-SDK-6).
+   *
+   * Output: 64 lowercase hex characters.
    */
   getSchemaHash(): string {
     const schemaString = JSON.stringify({
       name: this.schema.name,
       fields: this.schema.fields.map((f) => ({ name: f.name, type: f.type, optional: f.optional })),
     })
-
-    const encoder = new TextEncoder()
-    const data = encoder.encode(schemaString)
-    return Array.from(new Uint8Array(data.slice(0, 32)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
+    const digest = sha256(Buffer.from(schemaString, 'utf8'))
+    return Buffer.from(digest).toString('hex')
   }
 
   /**

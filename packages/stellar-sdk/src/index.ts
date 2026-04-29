@@ -42,8 +42,6 @@ export {
   generateSchemaUid,
   formatUid,
   parseFormattedUid,
-  getAttestDST,
-  getRevokeDST,
   createDelegatedAttestationRequest,
   createDelegatedRevocationRequest,
   createSimpleSchema,
@@ -52,6 +50,7 @@ export {
   getAttestationByTxHash,
   signHashedMessage,
   verifySignature,
+  validateG1PointFormat,
   aggregateSignatures,
   aggregatePublicKeys,
   verifyAggregateSignature,
@@ -91,10 +90,3 @@ export {
 
 // Internal utilities (for advanced usage and testing)
 export * as common from './common'
-
-/** TODO: Remove this after testing with sandbox */
-console.log('Stellar SDK loaded')
-console.log({
-  StellarAttestationClient: "StellarAttestationClient",
-  StellarSchemaRegistry: "StellarSchemaRegistry",
-})

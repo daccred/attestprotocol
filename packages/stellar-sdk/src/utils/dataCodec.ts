@@ -19,32 +19,46 @@ export function encodeSchema(schema: StellarSchemaDefinition): string {
 }
 
 /**
+ * Maximum permitted size of an `XDR:`-prefixed schema payload.
+ *
+ * The previous implementation routed any string containing the substring
+ * "AAAA" through the XDR decoder and additionally retried any non-JSON
+ * payload as XDR, which let an attacker feed arbitrary input into a
+ * deserializer reachable from public APIs (H-SDK-5). The cap below
+ * bounds the work the XDR decoder may do on a single call.
+ */
+const MAX_XDR_PAYLOAD_LENGTH = 4096
+
+/**
  * Decode a schema from XDR or JSON format.
+ *
+ * Routing rules (H-SDK-5):
+ *  - Inputs that begin with the literal `XDR:` prefix go through the XDR decoder
+ *    after being length-checked.
+ *  - Anything else is parsed as JSON.
+ *  - There is no longer a fallback that retries arbitrary text as XDR; this
+ *    eliminates the "AAAA"/no-prefix gadget that previously fed untrusted
+ *    bytes into the deserializer.
  *
  * @param encoded - The encoded schema string (XDR or JSON)
  * @returns The decoded schema definition
  */
 export function decodeSchema(encoded: string): StellarSchemaDefinition {
-  // Check if it's XDR format
-  if (encoded.startsWith('XDR:') || encoded.includes('AAAA')) {
+  if (encoded.startsWith('XDR:')) {
+    const payload = encoded.slice(4)
+    if (payload.length > MAX_XDR_PAYLOAD_LENGTH) {
+      throw new Error('XDR-encoded schema exceeds maximum permitted length')
+    }
     const decodedEncoder = SorobanSchemaEncoder.fromXDR(encoded)
     return decodedEncoder.getSchema()
   }
 
-  // Try to parse as JSON
-  try {
-    const parsed = JSON.parse(encoded)
-    // If it's a valid schema object, return it
-    if (parsed.name && parsed.version && parsed.fields) {
-      return parsed as StellarSchemaDefinition
-    }
-    throw new Error('Invalid JSON schema format')
-  } catch {
-    // If not JSON, try as raw XDR without prefix
-    const withPrefix = encoded.startsWith('XDR:') ? encoded : `XDR:${encoded}`
-    const decodedEncoder = SorobanSchemaEncoder.fromXDR(withPrefix)
-    return decodedEncoder.getSchema()
+  // Anything without the explicit XDR: prefix MUST parse as JSON.
+  const parsed = JSON.parse(encoded)
+  if (parsed.name && parsed.version && parsed.fields) {
+    return parsed as StellarSchemaDefinition
   }
+  throw new Error('Invalid JSON schema format')
 }
 
 /**
