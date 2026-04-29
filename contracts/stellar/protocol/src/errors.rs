@@ -13,6 +13,14 @@ pub enum Error {
     NotAuthorized = 6,
     StorageFailed = 7,
     InvalidUid = 9,
+    /// Returned by the protocol's resolver-dispatch path when a resolver
+    /// rejects an attestation or revocation by returning `Ok(false)` from
+    /// `onattest` / `onrevoke`. This is the protocol-side rejection signal
+    /// and is **distinct** from the resolvers-crate `ResolverError` enum,
+    /// which is the typed error type returned *by* resolver implementations
+    /// (NotAuthorized, InvalidAttestation, ValidationFailed, etc.). When a
+    /// resolver returns `Err(ResolverError::*)` rather than `Ok(false)`, the
+    /// protocol surfaces it as `ResolverCallFailed` (variant 24).
     ResolverError = 10,
     SchemaHasNoResolver = 11,
     AdminNotSet = 12,
