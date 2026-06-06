@@ -7,26 +7,28 @@ dotenv.config();
 // Make sure to set TEST_DATABASE_URL in your test environment
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/horizon_test';
 
-// Mock the Stellar SDK's rpc.Server only for unit tests, not integration tests
-// This ensures that unit tests get mocked versions while integration tests use real RPC calls
-if (process.env.VITEST_MODE !== 'integration') {
-  vi.mock('@stellar/stellar-sdk', async () => {
-    const originalModule = await vi.importActual('@stellar/stellar-sdk') as any;
-    return {
-      ...originalModule,
-      rpc: {
-        ...originalModule.rpc,
-        // This mock will be a factory for the Server instances
-        // Individual methods (getLatestLedger, getEvents, getHealth) will be mocked per test
-        Server: vi.fn().mockImplementation(() => ({
+// Mock the Stellar SDK's rpc.Server for unit tests. Integration tests use real
+// RPC calls — vitest.config.ts only loads this setup file when VITEST_MODE !== 'integration',
+// and vi.mock is hoisted to the top of the module regardless, so no conditional here.
+vi.mock('@stellar/stellar-sdk', async () => {
+  const originalModule = await vi.importActual('@stellar/stellar-sdk') as any;
+  return {
+    ...originalModule,
+    rpc: {
+      ...originalModule.rpc,
+      // This mock will be a factory for the Server instances
+      // Individual methods (getLatestLedger, getEvents, getHealth) will be mocked per test
+      // Note: must be a `function` (not arrow) so `new rpc.Server()` works under vitest 4
+      Server: vi.fn().mockImplementation(function () {
+        return {
           getLatestLedger: vi.fn(),
           getEvents: vi.fn(),
           getHealth: vi.fn(),
-        })),
-      },
-    };
-  });
-}
+        };
+      }),
+    },
+  };
+});
 
 
 beforeAll(async () => {
