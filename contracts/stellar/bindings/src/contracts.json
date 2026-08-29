@@ -8,7 +8,15 @@
       "txHash": "5f91a35f4629473c814c2e949a530f4d3dfe6b44a6426f0d26e69523d83f287d",
       "wasmHash": null
     },
-    "current": "v1"
+    "current": "v1",
+    "v2": {
+      "id": "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD",
+      "sdk": "27.0.6",
+      "deployedAt": "2026-08-29T23:24:12Z",
+      "deployedLedger": 4404453,
+      "txHash": "214ce4240e0f57d84a4fd827d3fb743d50f1584f6838ebadb27eb9a12d46de90",
+      "wasmHash": "2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8"
+    }
   },
   "mainnet": {
     "v1": {

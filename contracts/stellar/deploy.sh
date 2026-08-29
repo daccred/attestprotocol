@@ -313,8 +313,9 @@ update_contracts_json() {
         exit 1
     }
 
-    # Ensure cleanup of temp file on function exit (success or failure)
-    trap 'rm -f "$tmp_json_file"' RETURN
+    # Every exit path below either moves the temp file into place or removes it.
+    # A RETURN trap is not scoped to this function and would fire again in the
+    # caller's frame, where $tmp_json_file no longer exists (fatal under `set -u`).
 
     echo "Updating ${CONTRACTS_JSON_FILE}: ${network}.${version} -> ${contract_id}"
 
@@ -694,7 +695,7 @@ extract_wasm_hash() {
     local wasm_path="$2"
 
     local wasm_hash
-    wasm_hash=$(echo "$deploy_output" | grep -oE '[0-9a-f]{64}' | head -n 1)
+    wasm_hash=$(echo "$deploy_output" | grep -E 'wasm hash' | grep -oE '[0-9a-f]{64}' | head -n 1)
 
     if [[ -z "$wasm_hash" && -f "$wasm_path" ]]; then
         wasm_hash=$(sha256sum "$wasm_path" | awk '{print $1}')
@@ -751,11 +752,20 @@ deploy_contract() {
 
   # Extract transaction hash using grep and awk.
   # Assumes specific output format from `stellar contract deploy`.
-  local tx_hash=$(echo "$deploy_output" | grep "Transaction hash is" | awk '{print $NF}')
+  # stellar-cli 27 prints "Signing transaction: <hash>" (once for the wasm upload,
+  # once for the deploy); older versions printed "Transaction hash is <hash>".
+  # The deploy transaction is the last one either way.
+  local tx_hash=$(echo "$deploy_output" | grep -E "Transaction hash is|Signing transaction:" | tail -n 1 | awk '{print $NF}')
 
   # Extract contract ID using grep and sed with a regex.
   # Assumes specific output format from `stellar contract deploy`.
-  local contract_id=$(echo "$deploy_output" | grep "stellar.expert/explorer/.*/contract/" | sed -E 's|.*contract/([A-Z0-9]+).*|\1|')
+  # stellar-cli 27 links contracts on lab.stellar.org and prints the bare ID on
+  # the final line; older versions linked stellar.expert. Accept either, and fall
+  # back to the bare ID line.
+  local contract_id=$(echo "$deploy_output" | grep -Eo '/contract/C[A-Z0-9]{55}' | tail -n 1 | sed -E 's|.*/contract/||')
+  if [[ -z "$contract_id" ]]; then
+      contract_id=$(echo "$deploy_output" | grep -Eo '^C[A-Z0-9]{55}$' | tail -n 1)
+  fi
 
   # Get current UTC timestamp.
   local deploy_timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
