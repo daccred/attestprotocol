@@ -1,9 +1,9 @@
 {
   "testnet": {
     "protocol": {
-      "id": "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP",
-      "hash": "5f91a35f4629473c814c2e949a530f4d3dfe6b44a6426f0d26e69523d83f287d",
-      "timestamp": "2025-11-07T12:44:26Z"
+      "id": "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD",
+      "hash": "214ce4240e0f57d84a4fd827d3fb743d50f1584f6838ebadb27eb9a12d46de90",
+      "timestamp": "2026-08-29T23:24:12Z"
     }
   },
   "mainnet": {

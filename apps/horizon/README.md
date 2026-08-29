@@ -211,7 +211,14 @@ curl "$HORIZON/api/registry/attestations?version=v2&limit=50"
      -d '{"startLedger": <deployedLedger>}'
    ```
 
-   `deployedLedger` is the field on the registry entry.
+   `deployedLedger` is the field on the registry entry. For the current testnet
+   deployment that is ledger `4404453`:
+
+   ```bash
+   curl -X POST $HORIZON/api/ingest/backfill \
+     -H 'content-type: application/json' \
+     -d '{"startLedger": 4404453}'
+   ```
 
 ### Railway variables
 
@@ -221,8 +228,8 @@ dashboard; deploys never set them automatically. After each contract deployment,
 | Key | Testnet | Mainnet |
 | --- | --- | --- |
 | `STELLAR_NETWORK` | `testnet` | `mainnet` |
-| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,<testnet v2 id>` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,<mainnet v2 id>` |
-| `PROTOCOL_CONTRACT_ID` | `<testnet v2 id>` | `<mainnet v2 id>` |
+| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,<mainnet v2 id>` |
+| `PROTOCOL_CONTRACT_ID` | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `<mainnet v2 id>` |
 
 Leaving `INDEX_CONTRACT_IDS` unset achieves the same result once the registry contains both
 versions; set it explicitly only to index a subset. After applying the variables and

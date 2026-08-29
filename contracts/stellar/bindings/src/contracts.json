@@ -8,7 +8,7 @@
       "txHash": "5f91a35f4629473c814c2e949a530f4d3dfe6b44a6426f0d26e69523d83f287d",
       "wasmHash": null
     },
-    "current": "v1",
+    "current": "v2",
     "v2": {
       "id": "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD",
       "sdk": "27.0.6",

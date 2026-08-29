@@ -233,7 +233,7 @@ describe('Delegated Attestation Integration Tests', () => {
     const dst = Buffer.from(dstTx.result)
 
     // Create the message to sign
-    const messageToSign = createAttestationMessage(delegatedRequest, dst)
+    const messageToSign = createAttestationMessage(delegatedRequest, dst, config.protocolContractId, ProtocolContract.networks.testnet.networkPassphrase)
     
     // Sign with BLS private key (minimal signature scheme)
     const signature = bls12_381.shortSignatures.sign(messageToSign, attesterBlsPrivateKey)
@@ -293,14 +293,14 @@ describe('Delegated Attestation Integration Tests', () => {
     })
  
 
-    // Get current nonce
-    const nonceTx = await delegatedRevokeClient.get_attester_nonce({
-      attester: attesterKp.publicKey()
+    // Revocations count on their own nonce sequence, not the attestation one.
+    const nonceTx = await delegatedRevokeClient.get_revoker_nonce({
+      revoker: attesterKp.publicKey()
     })
     await nonceTx.simulate()
     const nonce = nonceTx.result
 
-    const attestationUid = generateAttestationUid(schemaUid, subjectKp.publicKey(), BigInt(0))
+    const attestationUid = generateAttestationUid(config.protocolContractId, schemaUid, subjectKp.publicKey(), attesterKp.publicKey(), BigInt(0))
 
     const attestationTx = await protocolClient.get_attestation({
       attestation_uid: attestationUid
@@ -334,7 +334,7 @@ describe('Delegated Attestation Integration Tests', () => {
 
 
     // Create the message to sign
-    const messageToSign = createRevocationMessage(delegatedRequest, dst)
+    const messageToSign = createRevocationMessage(delegatedRequest, dst, config.protocolContractId, ProtocolContract.networks.testnet.networkPassphrase)
     
     // Sign with BLS privatshould retrieve the registered BLS public key key (minimal signature scheme)
     const signature = bls12_381.shortSignatures.sign(messageToSign, attesterBlsPrivateKey)

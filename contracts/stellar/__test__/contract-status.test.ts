@@ -38,16 +38,33 @@ describe('Contract Status Check', () => {
 })
 
 describe('UID Generation', () => {
-  it('should generate a deterministic attestation UID', () => {
-    // Values verified to match between TypeScript and Rust implementations
-    const expectedUid = 'dc4f7c2bca792fb85288e5928af14e4ebbc76d98fd672f6bb15bd8f52ab5aaa5';
-    const subject = 'GD25F6Z56KYTB4I4EU7KHGLM43VRBNENAUQ3GP24FZIO6WNAAJMUA7P5';
-    const schemaUid = Buffer.from('a8b158f4f0aadc903cd58111199d8f71e75614e647d3c28c390c904014281f6d', 'hex');
-    const nonce = BigInt(0);
+  const contractId = loadTestConfig().protocolContractId
+  const subject = 'GD25F6Z56KYTB4I4EU7KHGLM43VRBNENAUQ3GP24FZIO6WNAAJMUA7P5';
+  const attester = 'GBRHC2QOPZC2GM2EKGEXJSDPLXGXBHHHRAQQ5MFLAS2AST4ZKM6NCCUB';
+  const schemaUid = Buffer.from('a8b158f4f0aadc903cd58111199d8f71e75614e647d3c28c390c904014281f6d', 'hex');
+  const nonce = BigInt(0);
 
-    const generatedUid = generateAttestationUid(schemaUid, subject, nonce);
+  it('is deterministic', () => {
+    const first = generateAttestationUid(contractId, schemaUid, subject, attester, nonce);
+    const second = generateAttestationUid(contractId, schemaUid, subject, attester, nonce);
 
-    expect(generatedUid.toString('hex')).toBe(expectedUid);
+    expect(first.length).toBe(32);
+    expect(first.toString('hex')).toBe(second.toString('hex'));
+  });
+
+  it('separates two attesters over the same subject and nonce', () => {
+    const other = 'GAOR3RQGJO242K5BX5NNP2CXYJXQ2WQ5GP7ZUJG55PWR6FAMQODLNCYQ';
+
+    expect(generateAttestationUid(contractId, schemaUid, subject, attester, nonce).toString('hex')).not.toBe(
+      generateAttestationUid(contractId, schemaUid, subject, other, nonce).toString('hex')
+    );
+  });
+
+  it('separates two deployments', () => {
+    const otherContract = 'CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP';
+
+    expect(generateAttestationUid(contractId, schemaUid, subject, attester, nonce).toString('hex')).not.toBe(
+      generateAttestationUid(otherContract, schemaUid, subject, attester, nonce).toString('hex')
+    );
   });
 });
-

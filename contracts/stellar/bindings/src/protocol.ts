@@ -32,7 +32,7 @@ if (typeof window !== "undefined") {
 
 
 export const networks = {
-  testnet: { networkPassphrase: "Test SDF Network ; September 2015", contractId: "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP" },
+  testnet: { networkPassphrase: "Test SDF Network ; September 2015", contractId: "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD" },
   local: { networkPassphrase: "Test SDF Network ; September 2015", contractId: undefined },
   mainnet: { networkPassphrase: "Public Global Stellar Network ; September 2015", contractId: "CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI" },
 } as const

@@ -244,138 +244,150 @@ function parseFieldsFromXdr(fieldsXdr: ProtocolContract.xdr.ScVal[]): Array<{nam
 
 
 /**
- * Generates an attestation UID in JavaScript, replicating the logic from the Soroban smart contract.
+ * Generates an attestation UID exactly as `utils.rs::generate_attestation_uid` does.
  *
- * This function takes the same inputs as the Rust `generate_attestation_uid` function,
- * serializes them in the specific way Soroban expects, concatenates them, and then
- * computes the Keccak-256 hash to produce a unique 32-byte identifier.
+ * Wire layout (concatenated, then keccak256-hashed):
+ *   "ATTEST_UID_V1" || contract_xdr || schema_uid_xdr_36 ||
+ *   subject_xdr     || attester_xdr || nonce_be8
  *
- * @param {Buffer} schemaUid - A 32-byte buffer representing the schema UID.
- * @param {string} subject - The public key string of the subject (e.g., "G...").
- * @param {bigint} nonce - The nonce as a BigInt, which corresponds to a Rust `u64`.
- * @returns {Buffer} A 32-byte buffer representing the calculated attestation UID.
+ * The contract address keeps UIDs distinct across deployments and the attester
+ * keeps two attesters from colliding on the same subject and nonce.
+ *
+ * @param contractAddress - The protocol contract the attestation lives in.
+ * @param schemaUid - A 32-byte buffer representing the schema UID.
+ * @param subject - The public key of the attestation subject.
+ * @param attester - The public key of the attester.
+ * @param nonce - The attester nonce, as a BigInt (Rust `u64`).
+ * @returns A 32-byte buffer holding the attestation UID.
  */
-export function generateAttestationUid(schemaUid: Buffer, subject: string, nonce: bigint): Buffer {
+export function generateAttestationUid(
+  contractAddress: string,
+  schemaUid: Buffer,
+  subject: string,
+  attester: string,
+  nonce: bigint
+): Buffer {
   if (!(schemaUid instanceof Buffer) || schemaUid.length !== 32) {
     throw new Error('schemaUid must be a 32-byte Buffer.');
   }
   if (typeof subject !== 'string' || !subject.startsWith('G')) {
     throw new Error('subject must be a valid Stellar public key string.');
   }
+  if (typeof attester !== 'string' || !attester.startsWith('G')) {
+    throw new Error('attester must be a valid Stellar public key string.');
+  }
   if (typeof nonce !== 'bigint') {
     throw new Error('nonce must be a BigInt.');
   }
 
-  // 1. Convert schema_uid (BytesN<32>) to its XDR representation.
-  // In Rust: hash_input.append(&schema_uid.to_xdr(env));
-  const schemaUidScVal = nativeToScVal(schemaUid);
-  const schemaUidXdr = schemaUidScVal.toXDR();
+  const addressXdr = (address: string) => new Address(address).toScVal().toXDR()
 
-  // 2. Convert subject address (Address) to its XDR representation.
-  // In Rust: hash_input.append(&subject.clone().to_xdr(env));
-  const subjectAddress = new Address(subject);
-  const subjectScVal = subjectAddress.toScVal();
-  const subjectXdr = subjectScVal.toXDR();
+  // `to_xdr` on the Rust side serializes the value as an ScVal, so a BytesN<32>
+  // is ScVal::Bytes: discriminant, length, then the 32 raw bytes.
+  const schemaUidXdr = nativeToScVal(schemaUid).toXDR()
 
-  // 3. Convert nonce (u64) to an 8-byte big-endian buffer.
-  // In Rust: let nonce_bytes = nonce.to_be_bytes();
   const nonceBuffer = Buffer.alloc(8);
   nonceBuffer.writeBigUInt64BE(nonce, 0);
 
-  // 4. Concatenate all parts in the correct order.
-  // The Rust code appends the XDR of schema_uid, the XDR of the subject,
-  // and finally the raw bytes of the nonce.
   const hashInput = Buffer.concat([
+    Buffer.from('ATTEST_UID_V1', 'utf8'),
+    addressXdr(contractAddress),
     schemaUidXdr,
-    subjectXdr,
+    addressXdr(subject),
+    addressXdr(attester),
     nonceBuffer,
   ]);
 
-  // 5. Compute the Keccak-256 hash of the concatenated buffer.
-  // In Rust: env.crypto().keccak256(&hash_input).into()
-  const hash = keccak256(hashInput);
-
-  console.log(`========Hash=======:`, {uid: hash, uidBytes: Buffer.from(hash, 'hex'), schemaUid: schemaUid.toString('hex'), subject: subject, nonce: nonce})
-
-  // 6. Return the resulting hash as a Buffer.
-  return Buffer.from(hash, 'hex');
+  return Buffer.from(keccak256(hashInput), 'hex');
 }
- 
 
 
 /**
+ * SHA256 of an address in the XDR form the contract hashes
+ * (`address.to_xdr(env)` over the ScVal wrapper).
+ */
+function hashAddress(address: string): Buffer {
+  return Buffer.from(sha256(new Address(address).toScVal().toXDR()))
+}
+
+/** Big-endian u64, the encoding the contract uses for every numeric field. */
+function be8(value: bigint): Buffer {
+  const buf = Buffer.alloc(8)
+  buf.writeBigUInt64BE(value, 0)
+  return buf
+}
+
+/**
  * Creates the message to sign for delegated attestations.
- * Must match the exact format from `delegation.rs::create_attestation_message`.
- * The message is a concatenation of domain separator, schema UID, nonce, deadline,
- * and value length, which is then hashed.
+ * Must match `delegation.rs::create_attestation_message` byte for byte:
+ *
+ *   DST || sha256(contract_xdr) || network_id || schema_uid ||
+ *   sha256(subject_xdr) || nonce_be8 || deadline_be8 ||
+ *   [expiration_be8] || sha256(value_xdr)
+ *
+ * The contract address and the network id are part of the preimage so a
+ * signature minted against one deployment cannot be replayed on another.
  *
  * @param request - The delegated attestation request object from the contract bindings.
  * @param attestationDST - The domain separation tag for attestations.
- * @returns A hash of the message, ready to be signed.
+ * @param contractId - The protocol contract the request will be submitted to.
+ * @param networkPassphrase - The network passphrase that contract runs on.
+ * @returns The G1 point to sign.
  */
-export function createAttestationMessage(request: ProtocolContract.DelegatedAttestationRequest, attestationDST: Buffer) {
-  // Match exact format from Rust contract: 
-  // Domain Separator + Schema UID + Nonce + Deadline + [Expiration Time] + Value Length
-  const components: Buffer[] = []
-  
-  // Domain separation (ATTEST_PROTOCOL_V1_DELEGATED)
-  components.push(attestationDST)
-  
-  // Schema UID (32 bytes)
-  components.push(Buffer.from(request.schema_uid))
-  
-  // Nonce (8 bytes, big-endian u64)
-  const nonceBuffer = Buffer.allocUnsafe(8)
-  nonceBuffer.writeBigUInt64BE(request.nonce, 0)
-  components.push(nonceBuffer)
-  
-  // Deadline (8 bytes, big-endian u64) 
-  const deadlineBuffer = Buffer.allocUnsafe(8)
-  deadlineBuffer.writeBigUInt64BE(request.deadline, 0)
-  components.push(deadlineBuffer)
-  
-  // Optional expiration time - skip since request doesn't have it
-  
-  // Value length (8 bytes, big-endian u64)
-  const valueLenBuffer = Buffer.allocUnsafe(8)
-  valueLenBuffer.writeBigUInt64BE(BigInt(request.value.length), 0)
-  components.push(valueLenBuffer)
-  
-  const message = Buffer.concat(components)
-  return bls12_381.shortSignatures.hash(sha256(message))
+export function createAttestationMessage(
+  request: ProtocolContract.DelegatedAttestationRequest,
+  attestationDST: Buffer,
+  contractId: string,
+  networkPassphrase: string
+) {
+  const components: Buffer[] = [
+    attestationDST,
+    hashAddress(contractId),
+    Buffer.from(sha256(Buffer.from(networkPassphrase, 'utf8'))),
+    Buffer.from(request.schema_uid),
+    hashAddress(request.subject),
+    be8(request.nonce),
+    be8(request.deadline),
+  ]
+
+  if (request.expiration_time !== undefined) {
+    components.push(be8(BigInt(request.expiration_time)))
+  }
+
+  components.push(Buffer.from(sha256(nativeToScVal(request.value, { type: 'string' }).toXDR())))
+
+  return bls12_381.shortSignatures.hash(sha256(Buffer.concat(components)))
 }
 
 /**
  * Creates the message to sign for delegated revocations.
- * Must match the exact format from `delegation.rs::create_revocation_message`.
- * The message is a concatenation of domain separator, schema UID, nonce, and deadline,
- * which is then hashed.
+ * Must match `delegation.rs::create_revocation_message` byte for byte:
+ *
+ *   DST || sha256(contract_xdr) || network_id || schema_uid ||
+ *   attestation_uid || sha256(subject_xdr) || nonce_be8 || deadline_be8
  *
  * @param request - The delegated revocation request object from the contract bindings.
  * @param revocationDST - The domain separation tag for revocations.
- * @returns A hash of the message, ready to be signed.
+ * @param contractId - The protocol contract the request will be submitted to.
+ * @param networkPassphrase - The network passphrase that contract runs on.
+ * @returns The G1 point to sign.
  */
-export function createRevocationMessage(request: ProtocolContract.DelegatedRevocationRequest, revocationDST: Buffer) {
-  const components: Buffer[] = []
-  
-  // Domain separation (REVOKE_PROTOCOL_V1_DELEGATED)
-  components.push(revocationDST)
-  
-  // Schema UID (32 bytes)
-  components.push(Buffer.from(request.schema_uid))
-  
-  // Nonce (8 bytes, big-endian u64)
-  const nonceBuffer = Buffer.allocUnsafe(8)
-  nonceBuffer.writeBigUInt64BE(request.nonce, 0)
-  components.push(nonceBuffer)
-  
-  // Deadline (8 bytes, big-endian u64)
-  const deadlineBuffer = Buffer.allocUnsafe(8)
-  deadlineBuffer.writeBigUInt64BE(request.deadline, 0)
-  components.push(deadlineBuffer)
-  
-  const message = Buffer.concat(components)
-  return bls12_381.shortSignatures.hash(sha256(message))
+export function createRevocationMessage(
+  request: ProtocolContract.DelegatedRevocationRequest,
+  revocationDST: Buffer,
+  contractId: string,
+  networkPassphrase: string
+) {
+  const components: Buffer[] = [
+    revocationDST,
+    hashAddress(contractId),
+    Buffer.from(sha256(Buffer.from(networkPassphrase, 'utf8'))),
+    Buffer.from(request.schema_uid),
+    Buffer.from(request.attestation_uid),
+    hashAddress(request.subject),
+    be8(request.nonce),
+    be8(request.deadline),
+  ]
+
+  return bls12_381.shortSignatures.hash(sha256(Buffer.concat(components)))
 }
-
-
