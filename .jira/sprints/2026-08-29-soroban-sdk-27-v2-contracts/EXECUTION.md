@@ -157,3 +157,45 @@ Nyquist criteria for Plan II:
   - `.cargo/config.toml` deleted, and with it the now-empty `contracts/stellar/.cargo/` directory: its only content was a `[target.wasm32-unknown-unknown]` rustflags block, and every build path targets `wasm32v1-none`.
   - `soroban-release.yml`: `release-authority` deleted (`contracts/stellar/authority` no longer exists), `release-protocol` pinned to `stellar-expert/soroban-build-workflow/.github/workflows/release.yml@v27.0.0` (D-16). Header and Usage Notes rewritten for a single `<tag>-protocol` release; `on.push.tags: ['v*']` untouched.
   - `make build` exits 0 in both `protocol/` and `resolvers/`.
+
+### Plan IV task I: contracts.json + registry export
+
+- **Commit:** `e811efe`
+- **Result:** deviated (one seeded field differs from the plan's literal)
+- **Notes:**
+  - `mainnet.v1.deployedLedger` = `59706525` (from Horizon `/transactions/6eeaf669…`).
+  - **Deviation:** `testnet.v1.deployedLedger` is `null`, not a number. The testnet deploy tx `5f91a35f…` returns 404 from `horizon-testnet.stellar.org` — testnet was reset since the Nov 2025 deploy, so the ledger is not recoverable. `null` is a valid `ContractEntry.deployedLedger`; the practical effect is that a backfill of testnet v1 has no start ledger, which does not matter because Plan VI deploys testnet v2 and that entry will carry a real ledger.
+  - `tsconfig.json` was **not** changed: `module: "ESNext"` + `moduleResolution: "bundler"` accepts `with { type: 'json' }` and tsc copies `contracts.json` into `dist/`. No `NodeNext` switch needed.
+  - No CommonJS emit needed either. Node 20 check from `apps/horizon` (`nvm exec 20`, v20.20.2): `require('@attestprotocol/stellar-contracts/registry').getContractId('mainnet')` prints `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` — `require(esm)` plus the import attribute works, so the `tsconfig.cjs.json` fallback in the plan was not taken. Residual risk stands if Railway pins Node < 20.19.
+  - ESM check and the `src/__probe.ts` `npx tsc --noEmit` in `apps/horizon` both pass (probe deleted).
+  - `testutils.ts`: `loadTestConfig()` now calls `getContractId('testnet', process.env.CONTRACT_VERSION)`; the now-unused `fs`/`path` imports were dropped with it.
+  - **Repo-wide hazard found (not fixed here):** pnpm 11.5.0 ignores the `pnpm.overrides` field in the root `package.json` ("The 'pnpm' field in package.json is no longer read by pnpm"), so *any* install — including the implicit one `pnpm build` / `pnpm --filter …` performs — rewrites `pnpm-lock.yaml` and strips ~20 security overrides (axios, express, tar, ws, …). It happened twice during this plan and was reverted with `git checkout -- pnpm-lock.yaml` both times; `pnpm-lock.yaml` is unchanged on the branch. The overrides need to move to `pnpm-workspace.yaml` in a follow-up, otherwise the next person to run `pnpm install` silently drops them.
+
+### Plan IV task II: deploy.sh versioned writer, generated deployments.json and networks const
+
+- **Commit:** `fb28f41`
+- **Result:** deviated (removed one dead function)
+- **Notes:**
+  - `CONTRACTS_JSON_FILE="bindings/src/contracts.json"`; `SDK_VERSION` read from `Cargo.toml` (currently `27.0.6`); `--version <vN>` added to usage, the flag parser (validated `^v[0-9]+$`) and the pre-flight validation (required with `--protocol`), and echoed in the confirmation block.
+  - `update_contracts_json` signature is now `(network, version, contract_id, tx_hash, timestamp, ledger, wasm_hash)`; merge filter `.[$net] |= (if . == null then {current: $ver} else . end) | .[$net][$ver] = $data` — never overwrites another version, never moves `current`. mktemp/verify/`mv -f` structure untouched. It calls `bash scripts/sync-deployments.sh` on success.
+  - **Deviation:** deleted `extract_deployment_details` (was `deploy.sh:378-411`). It is dead code — defined, never called anywhere in the script — and its 5-argument call to `update_contracts_json` would have silently written garbage under the new signature. Removing it was safer than maintaining a broken caller.
+  - Two new helpers in `deploy_contract`: `fetch_tx_ledger` (`stellar tx fetch --hash … --output json | jq -r .ledger`, falling back to Horizon per network, warning and storing `null` if both fail) and `extract_wasm_hash` (first 64-hex token in the deploy output, falling back to `sha256sum` of the wasm).
+  - Bindings generation now passes `--overwrite` and runs `node scripts/sync-networks.mjs` right after moving `index.ts` → `bindings/src/protocol.ts`.
+  - Idempotency confirmed: `sync-networks.mjs` run twice — first run reformatted the `networks` block to the one-line-per-network form the plan specifies (whitespace only; all three contract IDs byte-identical), second run reported "already matches". `sync-deployments.sh` leaves `deployments.json` **byte-identical** to the committed file (`git diff` empty), so the alias round-trips exactly.
+  - `bash -n deploy.sh` exits 0. `grep -ci authority bindings/README.md` = 0.
+  - `scripts/sync-deployments.sh` is `chmod +x`; `sync-deployments` and `sync-networks` added to `contracts/stellar/package.json` scripts.
+
+### Plan IV task III: SDK resolves contract IDs through the registry
+
+- **Commit:** `32ffbba`
+- **Result:** deviated (one extra file: the new test)
+- **Notes:**
+  - `client.ts` drops the `ProtocolNetworks.<net>.contractId` switch and the now-unused `networks` import; `futurenet`/`local` still fall through to testnet. The `ConfigurationError` guard is kept (now unreachable in practice, since `getContractId` throws first with a more specific message).
+  - `types.ts`: `contractVersion?: 'v1' | 'v2'` added. `contractAddresses?` removed — `grep -rn contractAddresses packages apps examples` (excluding `node_modules`/`dist`) showed only `packages/core/src/interfaces.ts:157`, an unrelated `Record<string,string>` on a different interface, and the declaration itself.
+  - `index.ts` re-exports `contracts as ProtocolContracts`, `getContractId`, `getContractEntry`, `listContracts` and the three types; `ProtocolNetworks` re-export kept.
+  - **Deviation:** the required unit test went into a new file `packages/stellar-sdk/__tests__/registry.test.ts` (4 cases: current resolution testnet/mainnet, explicit `contractId` wins, `contractVersion: 'v2'` throws `No v2 contract registered for testnet`), which is outside the plan's `files_modified`. Adding to `client.test.ts` would have coupled the assertions to that file's Friendbot-funded `beforeAll`.
+  - `pnpm exec tsc --noEmit`, `pnpm exec eslint "src/**/*.ts"` and `pnpm exec tsup` all exit 0. `pnpm exec vitest run`: 117 passed, 12 failed — **all 12 failures are in `__tests__/indexer.test.ts`**, which makes live HTTP calls to `http://testnet-graph.attest.so/api/registry/*` and gets 404s. Pre-existing and unrelated to this plan (no indexer code was touched). `registry.test.ts` alone: 4/4 pass.
+
+### Plan IV finished
+
+2026-08-29T23:20:00Z — three tasks committed (`e811efe`, `fb28f41`, `32ffbba`).
