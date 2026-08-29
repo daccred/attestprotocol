@@ -33,9 +33,10 @@ flowchart LR
 ```mermaid
 flowchart TD
     subgraph W2["WITH RESOLVER (Access Control)"]
+        direction TB
         R1["1. Attestation Request"] --> R2["2. Resolver.onattest()"]
-        R2 -->|Validation — if rejected| RE["❌ Error"]
-        R2 -->|if approved| R3["3. Store Attestation"]
+        R2 -->|Validation: rejected| RE["❌ Error"]
+        R2 -->|Validation: approved| R3["3. Store Attestation"]
         R3 --> R4["4. Resolver.onresolve()"]
         R4 -->|Post-processing| R5["✅ Attestation Created"]
     end
