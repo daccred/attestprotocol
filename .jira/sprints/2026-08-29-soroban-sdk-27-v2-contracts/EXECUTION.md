@@ -77,6 +77,38 @@ Append-only log of what happened during `/jira:execute`. The executor writes her
 
 2026-08-29T23:10:00Z — all three tasks committed (`a0cb327`, `8074038`, `6ac9427`).
 
+### Plan II task III: Visual QA in light and dark
+
+- **Commit:** `307ce6d`
+- **Result:** done
+- **Notes:**
+  - Colour scheme driven by `agent-browser set media light|dark`; Mintlify follows the emulated preference, so no theme-toggle clicking was needed. Viewport 1440x1200, each diagram scrolled into view before capture. 12 screenshots in the scratchpad (`<page>-light.png` / `<page>-dark.png`), plus `delegates-batch-<scheme>.png` for the second fence on that page and the pre-change `baseline-how-it-works.png`.
+  - Verdicts:
+
+    | Diagram | Light | Dark | Verdict |
+    |---|---|---|---|
+    | how-it-works — four actors | pass | pass | pass |
+    | attestations — lifecycle | pass | pass | pass |
+    | authorities — permissionless model | pass | pass | pass |
+    | delegates — authority → delegate → contract | pass | pass | pass |
+    | delegates — batch fan-out | pass | pass | pass |
+    | resolvers — without resolver | pass | pass | pass |
+    | resolvers — with resolver | fail (illegible) → pass | fail (illegible) → pass | fixed by layout, no theme directive |
+    | schemas — schema → attestation | pass | pass | pass |
+
+  - The one failure was a **layout**, not a theming, problem: the "with resolver" subgraph inherited a horizontal layout, so the SVG was scaled down to the content column width and node text shrank to a few pixels. `direction TB` inside the subgraph plus shorter branch labels fixed it in both schemes (commit `307ce6d`).
+  - Mermaid's default theme handles Mintlify's dark mode on its own: node fills invert, label text stays high-contrast. No `%%{init: ...}%%` directive was needed anywhere.
+  - No screenshot fallback was needed — `apps/docs/images/diagrams/` was never created.
+
+### Plan II finished
+
+2026-08-29T23:15:00Z — all three tasks complete. Commits: `4d2c876`, `307ce6d`.
+
+Nyquist criteria for Plan II:
+- [x] 8 ```mermaid fences replace all 7 box-drawing blocks (resolvers split in two); `grep -n '┌\|└\|──▶\|▼' apps/docs/concepts/*.mdx` returns nothing.
+- [x] All six pages return 200 from `mintlify dev` with no MDX error in the server log.
+- [x] Light and dark screenshots reviewed for all six pages; verdicts recorded above.
+
 ## Nyquist results
 
 - [x] {{criterion}} — verified by `{{test_or_check}}`
