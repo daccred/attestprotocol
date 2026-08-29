@@ -49,6 +49,8 @@
   "scripts": {
     "build": "tsc",
     "clean": "echo 'Use make clean in individual contract directories'",
+    "sync-deployments": "bash scripts/sync-deployments.sh",
+    "sync-networks": "node scripts/sync-networks.mjs",
     "test": "vitest"
   },
   "type": "module",

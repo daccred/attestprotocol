@@ -7,7 +7,7 @@
 # Features: Multi-contract support, deployment history tracking, network selection,
 # clean build mode, automatic initialization, and robust error handling.
 #
-# Usage: ./deploy.sh [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--mode <default|clean>] [--initialize] [--bindings] [-h|--help]
+# Usage: ./deploy.sh [--protocol] [--version <vN>] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--mode <default|clean>] [--initialize] [--bindings] [-h|--help]
 # Configuration can be set via command-line flags or by creating an env.sh file
 # in the parent directory (flags override env.sh).
 # Required env.sh variables if not using flags:
@@ -32,7 +32,8 @@ set -o pipefail  # Catch pipe failures (important for cmd | tee log.txt)
 
 # === Configuration ===
 DEFAULT_NETWORK="testnet"      # Options: testnet, futurenet, mainnet
-CONTRACTS_JSON_FILE="deployments.json"  # JSON: {network: {contract: {id, hash, timestamp}}}
+CONTRACTS_JSON_FILE="bindings/src/contracts.json"  # Versioned registry: {network: {vN: {id, sdk, deployedAt, deployedLedger, txHash, wasmHash}, current}}
+DEPLOYMENTS_ALIAS_SCRIPT="scripts/sync-deployments.sh"  # Regenerates the legacy deployments.json alias from the registry
 
 # Debug mode - set to true to enable verbose logging including sensitive values
 # Can be overridden by setting DEBUG=true in env.sh or environment
@@ -68,8 +69,12 @@ fee_stroops="${STELLAR_FEE:-10000000}" # Default 10M stroops (1 XLM) for mainnet
 PROTOCOL_CONTRACT_NAME="protocol"      # Implements core business logic
 PROTOCOL_WASM_PATH="target/wasm32v1-none/release/${PROTOCOL_CONTRACT_NAME}.wasm"
 
+# soroban-sdk version the contracts are built against, recorded in the registry
+SDK_VERSION=$(grep -oP 'soroban-sdk = \{ version = "\K[^"]+' Cargo.toml || echo "unknown")
+
 # === Runtime Variables ===
 deploy_protocol=false    # Deploy protocol contract flag
+contract_version=""      # Registry version key for this deployment (--version), e.g. v2
 # network_name, source_identity now initialized above from env or empty
 mode="default"           # Mode: 'default' (build+deploy) or 'clean' (clean+test+build+deploy)
 initialize_contracts=false # Initialize contracts after deployment flag
@@ -236,13 +241,14 @@ verify_network_configuration() {
 
 # Display usage info (exit: 1 = help displayed)
 usage() {
-  echo "Usage: $0 [--protocol] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--fee <stroops>] [--mode <default|clean>] [--initialize] [--bindings] [--yes] [-h|--help]"
+  echo "Usage: $0 [--protocol] [--version <vN>] [--network <network_name>] [--rpc-url <url>] [--network-passphrase <passphrase>] [--source <identity_name>] [--fee <stroops>] [--mode <default|clean>] [--initialize] [--bindings] [--yes] [-h|--help]"
   echo ""
   echo "Builds, tests (optional), deploys, and optionally initializes Soroban contracts, storing details in ${CONTRACTS_JSON_FILE}."
   echo "Configuration defaults can be set in '${ENV_FILE_PATH}'. Command-line flags override environment settings."
   echo ""
   echo "Options:"
   echo "  --protocol                 Deploy the protocol contract."
+  echo "  --version <vN>             Registry version key to record the deployment under (e.g. v2). Required with --protocol."
   echo "  --network <name>           Specify the network (e.g., testnet, mainnet). Default: ${DEFAULT_NETWORK} (or from SOROBAN_NETWORK in env.sh)"
   echo "  --rpc-url <url>            RPC URL for the network. If provided with --network-passphrase, will configure/update the network."
   echo "                             (Can be set via RPC_URL in env.sh)"
@@ -285,15 +291,20 @@ check_jq() {
   fi
 }
 
-# Update deployment history in JSON
-# Args: network, contract_name, contract_id(C...), tx_hash(64-hex), timestamp(ISO-8601)
+# Record a deployment in the versioned contract registry.
+# Writes .[network][version] only: an existing version and the network's
+# `current` pointer are never touched (flipping `current` is a separate,
+# deliberate step once the deployment has been verified).
+# Args: network, version(vN), contract_id(C...), tx_hash(64-hex), timestamp(ISO-8601), ledger(number|empty), wasm_hash(64-hex|empty)
 # Exit: 0=success, 1=JSON error
 update_contracts_json() {
     local network=$1
-    local contract_name=$2
+    local version=$2
     local contract_id=$3
     local tx_hash=$4
     local deploy_timestamp=$5
+    local deploy_ledger=${6:-}
+    local wasm_hash=${7:-}
 
     # Use mktemp for secure temporary file creation (prevents symlink attacks)
     local tmp_json_file
@@ -305,7 +316,7 @@ update_contracts_json() {
     # Ensure cleanup of temp file on function exit (success or failure)
     trap 'rm -f "$tmp_json_file"' RETURN
 
-    echo "Updating ${CONTRACTS_JSON_FILE} for network '${network}' with ${contract_name} details..."
+    echo "Updating ${CONTRACTS_JSON_FILE}: ${network}.${version} -> ${contract_id}"
 
     # Read existing JSON or initialize.
     # This ensures we don't overwrite unrelated data if the file already exists.
@@ -321,9 +332,12 @@ update_contracts_json() {
     local contract_data
     contract_data=$(jq -n \
       --arg id "$contract_id" \
+      --arg sdk "$SDK_VERSION" \
       --arg hash "$tx_hash" \
       --arg ts "$deploy_timestamp" \
-      '{id: $id, hash: $hash, timestamp: $ts}')
+      --arg ledger "$deploy_ledger" \
+      --arg wasm "$wasm_hash" \
+      '{id: $id, sdk: $sdk, deployedAt: $ts, deployedLedger: (if $ledger == "" then null else ($ledger|tonumber) end), txHash: $hash, wasmHash: (if $wasm == "" then null else $wasm end)}')
 
     # Use jq to merge the new contract data into the existing JSON.
     # This is safer and more robust than string manipulation.
@@ -332,9 +346,9 @@ update_contracts_json() {
     # stderr is captured to provide better error messages if jq fails.
     jq_stderr=$(echo "$current_json" | jq \
         --arg net "$network" \
-        --arg name "$contract_name" \
+        --arg ver "$version" \
         --argjson data "$contract_data" \
-        '.[$net] |= (if . == null then {} else . end) | .[$net][$name] = $data' \
+        '.[$net] |= (if . == null then {current: $ver} else . end) | .[$net][$ver] = $data' \
         > "$tmp_json_file" 2>&1)
     local jq_exit_code=$?
 
@@ -370,44 +384,9 @@ update_contracts_json() {
     fi
 
     echo "${CONTRACTS_JSON_FILE} updated successfully."
-}
 
-# Extract deployment info from CLI output
-# Args: raw_output, network, contract_name
-# Sets deployment in JSON, Exit: 0=success, 1=invalid ID
-extract_deployment_details() {
-    local deploy_output="$1"
-    local network="$2"
-    local contract_name="$3"
-
-    # Extract transaction hash from output
-    local tx_hash=$(echo "$deploy_output" | grep "Transaction hash is" | awk '{print $NF}')
-
-    # Extract contract ID from URL
-    local contract_id=$(echo "$deploy_output" | grep "stellar.expert/explorer/.*/contract/" | sed -E 's|.*contract/([A-Z0-9]+).*|\1|')
-
-    # Create timestamp
-    local deploy_timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-
-    # Validate contract ID format (should start with C and have 55 more characters)
-    if [[ ! "$contract_id" =~ ^C[A-Z0-9]{55}$ ]]; then
-        echo "Error: Could not extract valid contract ID from output."
-        echo "Raw output contained: $deploy_output"
-        return 1
-    fi
-
-    # Validate transaction hash (should be 64 hex characters)
-    if [[ -z "$tx_hash" || ${#tx_hash} -ne 64 ]]; then
-        echo "Warning: Could not reliably extract transaction hash. Using empty value."
-        tx_hash=""
-    fi
-
-    echo "Extracted contract ID: $contract_id"
-    echo "Extracted tx hash: $tx_hash"
-    echo "Timestamp: $deploy_timestamp"
-
-    # Update JSON with extracted details
-    update_contracts_json "$network" "$contract_name" "$contract_id" "$tx_hash" "$deploy_timestamp"
+    # Keep the generated deployments.json alias in step with the registry.
+    bash "$DEPLOYMENTS_ALIAS_SCRIPT"
 }
 
 # === Bindings Generation Functions ===
@@ -435,6 +414,7 @@ generate_single_contract_bindings() {
     stellar contract bindings typescript \
         --network "$network_name" \
         --contract-id "$contract_id" \
+        --overwrite \
         --output-dir "$contract_temp_dir"
     
     local bindings_exit_code=$?
@@ -456,6 +436,9 @@ generate_single_contract_bindings() {
     if [[ -f "$src_index" ]]; then
         echo "Moving TypeScript bindings: ${src_index} -> ${target_ts}"
         mv "$src_index" "$target_ts"
+        # Regenerated bindings carry only the contract they were generated from;
+        # rewrite the networks const from the registry so no network is lost.
+        node scripts/sync-networks.mjs
     else
         echo "Warning: Expected TypeScript file not found at ${src_index}"
     fi
@@ -491,6 +474,15 @@ while [[ $# -gt 0 ]]; do
     --protocol)
       deploy_protocol=true
       shift # past argument
+      ;;
+    --version)
+      contract_version="$2"
+      if [[ ! "$contract_version" =~ ^v[0-9]+$ ]]; then
+        echo "Error: Invalid --version '$contract_version'. Expected a registry key like 'v2'."
+        usage
+      fi
+      shift # past argument
+      shift # past value
       ;;
     --network)
       network_name="$2" # Override value from env if flag is used
@@ -582,6 +574,12 @@ if [[ "$deploy_protocol" = false ]]; then
   usage
 fi
 
+# The registry is keyed by version; a deployment without one cannot be recorded.
+if [[ "$deploy_protocol" = true && -z "$contract_version" ]]; then
+  echo "Error: --version <vN> is required when deploying (e.g. --version v2)."
+  usage
+fi
+
 # Confirm deployment settings to prevent accidents
 echo "Selected Network: ${network_name}"
 # [SECURITY] Debug logging of sensitive credentials disabled
@@ -593,6 +591,8 @@ echo "Selected Network: ${network_name}"
 echo "Deployment Identity: ${source_identity}"
 echo "Mode: ${mode}"
 echo "Deploy Protocol: ${deploy_protocol}"
+echo "Registry Version: ${contract_version}"
+echo "soroban-sdk Version: ${SDK_VERSION}"
 echo "Initialize Contracts: ${initialize_contracts}"
 echo "Generate Bindings: ${generate_bindings}"
 echo "Contracts JSON: ${CONTRACTS_JSON_FILE}"
@@ -655,6 +655,53 @@ fi
 log_step "Building Contracts"
 stellar contract build
 echo "Build completed."
+
+# Look up the ledger a transaction landed in, so a newly registered contract
+# can be backfilled from its own start. Prefers the RPC the CLI is configured
+# with and falls back to Horizon.
+# Args: tx_hash, network
+# Echoes: ledger sequence, or nothing when it cannot be determined
+fetch_tx_ledger() {
+    local tx_hash="$1"
+    local network="$2"
+    local ledger=""
+
+    ledger=$(stellar tx fetch --hash "$tx_hash" --network "$network" --output json 2>/dev/null | jq -r '.ledger // empty' 2>/dev/null) || ledger=""
+
+    if [[ -z "$ledger" || "$ledger" == "null" ]]; then
+        local horizon=""
+        case "$network" in
+            mainnet|public) horizon="https://horizon.stellar.org" ;;
+            testnet) horizon="https://horizon-testnet.stellar.org" ;;
+        esac
+        if [[ -n "$horizon" ]]; then
+            ledger=$(curl -s "${horizon}/transactions/${tx_hash}" | jq -r '.ledger // empty' 2>/dev/null) || ledger=""
+        fi
+    fi
+
+    if [[ -z "$ledger" || "$ledger" == "null" ]]; then
+        echo "Warning: Could not determine deploy ledger for ${tx_hash}; storing null." >&2
+        return 0
+    fi
+
+    echo "$ledger"
+}
+
+# Hash of the installed wasm, used for source validation.
+# Args: deploy_output, wasm_path
+extract_wasm_hash() {
+    local deploy_output="$1"
+    local wasm_path="$2"
+
+    local wasm_hash
+    wasm_hash=$(echo "$deploy_output" | grep -oE '[0-9a-f]{64}' | head -n 1)
+
+    if [[ -z "$wasm_hash" && -f "$wasm_path" ]]; then
+        wasm_hash=$(sha256sum "$wasm_path" | awk '{print $1}')
+    fi
+
+    echo "$wasm_hash"
+}
 
 # === Contract Deployment Function ===
 # Deploy contract and process deployment info
@@ -728,13 +775,23 @@ deploy_contract() {
       tx_hash=""
   fi
 
+  # Resolve the ledger the deploy landed in and the installed wasm hash.
+  local deploy_ledger=""
+  if [[ -n "$tx_hash" ]]; then
+      deploy_ledger=$(fetch_tx_ledger "$tx_hash" "$network_name")
+  fi
+  local wasm_hash
+  wasm_hash=$(extract_wasm_hash "$deploy_output" "$wasm_path")
+
   # Display extracted details
   echo "${contract_name} Contract ID: ${contract_id}"
   echo "${contract_name} Tx Hash: ${tx_hash:-Not Found}"
   echo "${contract_name} Timestamp: ${deploy_timestamp}"
+  echo "${contract_name} Ledger: ${deploy_ledger:-Unknown}"
+  echo "${contract_name} Wasm Hash: ${wasm_hash:-Unknown}"
 
-  # Call the internal function to update the JSON file
-  update_contracts_json "$network_name" "$contract_name" "$contract_id" "$tx_hash" "$deploy_timestamp"
+  # Record the deployment under its registry version
+  update_contracts_json "$network_name" "$contract_version" "$contract_id" "$tx_hash" "$deploy_timestamp" "$deploy_ledger" "$wasm_hash"
   local update_exit_code=$?
   if [[ $update_exit_code -ne 0 ]]; then
       echo "Error: update_contracts_json failed for ${contract_name} (Exit Code: $update_exit_code)."
