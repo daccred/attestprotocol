@@ -1,0 +1,10 @@
+# .jira/.gitignore
+# Sprint files (BRIEF, RESEARCH, PLAN, EXECUTION, RETRO) ARE meant to be committed.
+# Only ephemera should be ignored here.
+
+*.tmp
+*.swp
+*.log
+*.bak
+.DS_Store
+scratch/
