@@ -53,6 +53,8 @@ Status legend: `researching`, `planned`, `executing`, `verifying`, `done`, `bloc
 
 <!-- Active blockers across all sprints. Resolved blockers move to the Decisions log. -->
 
+- [2026-08-29-soroban-sdk-27-v2-contracts] Plan VII blocked at the mainnet checkpoint: user must run `deploy.sh --protocol --version v2 --network mainnet …` with their own identity, then paste back the `mainnet.v2` block and approve the `current` flip. Waves I–IV-b complete; Plan VIII (docs IDs) also waits on the mainnet ID.
+
 ## Notes
 
 <!-- Free-form workflow notes, accumulated lessons, links to recurring patterns. -->
