@@ -335,7 +335,7 @@ Nyquist criteria for Plan VI:
 
 ### Plan IX task III: Live round-trip against testnet v2 and changelog entry
 
-- **Commit:** `<task-III-sha>`
+- **Commit:** `066a0a5`
 - **Result:** done
 - **Notes:**
   - Throwaway script under `$CLAUDE_JOB_DIR/tmp` (not committed), importing **the SDK sources** `packages/stellar-sdk/src/utils/uidGenerator.ts` and `src/delegation.ts` directly — not the contract test helpers. `ADMIN_SECRET_KEY` came from `stellar keys show attest-v2-testnet` in the shell; never printed, never written to a file. `contracts/stellar/env.sh` still does not exist on this machine (same as Plan VI).
@@ -347,7 +347,7 @@ Nyquist criteria for Plan VI:
 
 ### Plan IX finished
 
-2026-08-30 — three tasks committed (`d36d8e6`, `2b38951`, `<task-III-sha>`).
+2026-08-30 — three tasks committed (`d36d8e6`, `2b38951`, `066a0a5`).
 
 Nyquist criteria for Plan IX:
 - [x] SDK `generateAttestationUid` equals the reference helper for every fixture.
