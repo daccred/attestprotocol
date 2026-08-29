@@ -15,7 +15,7 @@ Project-wide state for the `jira` workflow. The orchestrator commands keep this 
 
 | Slug | Status | Goal | Outcome |
 |------|--------|------|---------|
-| 2026-08-29-soroban-sdk-27-v2-contracts | planned | Upgrade Stellar contracts to soroban-sdk 27, deploy versioned v2 contracts, registry-driven addresses in SDK/horizon/docs | — |
+| 2026-08-29-soroban-sdk-27-v2-contracts | executing | Upgrade Stellar contracts to soroban-sdk 27, deploy versioned v2 contracts, registry-driven addresses in SDK/horizon/docs | — |
 
 Status legend: `researching`, `planned`, `executing`, `verifying`, `done`, `blocked`, `abandoned`.
 
