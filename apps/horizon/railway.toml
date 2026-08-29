@@ -1,7 +1,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "apps/horizon/Dockerfile"
-watchPatterns = ["apps/horizon/**"]
+watchPatterns = ["apps/horizon/**", "contracts/stellar/**", "packages/stellar-sdk/**", "packages/core/**"]
 
 [deploy]
 startCommand = "pnpm start"

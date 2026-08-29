@@ -133,7 +133,7 @@ curl "https://horizon.attest.so/api/health"
    ```bash
    DATABASE_URL=postgresql://username:password@host:port/database
    STELLAR_NETWORK=testnet  # or 'mainnet'
-   # Note: Contract IDs are now configured in src/common/constants.ts as CONTRACT_IDS_TO_INDEX array
+   # Contract addresses come from the registry; see "Tracked Contracts" below
    ```
 3. Run database migrations:
    ```bash
@@ -142,11 +142,91 @@ curl "https://horizon.attest.so/api/health"
 
 ## Tracked Contracts
 
-The indexer is configured to track specific contracts from `deployments.json`:
+Contract addresses live in one versioned registry, `contracts/stellar/bindings/src/contracts.json`,
+published as the `@attestprotocol/stellar-contracts/registry` export. Nothing in this app
+hardcodes an address.
 
-### Testnet Contracts:
-- **Protocol Contract**: `CADB73DZ7QP5BG5ZG6MRRL3J3X4WWHBCJ7PMCVZXYG7ZGCPIO2XCDBOM`
-- **Authority Contract**: `CAD6YMZCO4Q3L5XZT2FD3MDHP3ZHFMYL24RZYG4YQAL4XQKVGVXYPSQQ`
+Two variables control what gets indexed:
+
+- `INDEX_CONTRACT_IDS` — comma-separated allowlist of contract addresses. Leave it empty
+  to index every contract registered for `STELLAR_NETWORK`, which is the normal setup:
+  a new deployment is picked up as soon as the registry ships.
+- `PROTOCOL_CONTRACT_ID` — the attribution target used where ingest needs to name a single
+  contract. Defaults to the registry's `current` version for the network. It must be one of
+  the indexed addresses; the process refuses to start otherwise.
+
+### GET /api/contracts
+
+Returns the registry for the configured network. This is the documented contract the
+attest.so frontend reads instead of carrying its own `NEXT_PUBLIC_*_CONTRACT_ID` values.
+
+```json
+{
+  "success": true,
+  "data": {
+    "network": "testnet",
+    "current": "v1",
+    "contracts": {
+      "v1": {
+        "id": "C...",
+        "sdk": "22.0.8",
+        "deployedAt": "2025-11-07T12:44:26Z",
+        "deployedLedger": null,
+        "txHash": "5f91...",
+        "wasmHash": null
+      }
+    },
+    "indexing": ["C..."]
+  }
+}
+```
+
+`GET /api/contracts/:version` returns a single entry, or 404 if that version is not
+registered on this network.
+
+### Filtering by contract
+
+`/api/registry/attestations`, `/api/registry/schemas`, `/api/data/events` and
+`/api/data/operations` accept:
+
+- `?contract=<address>` — filter to one contract address.
+- `?version=<v1|v2>` — same thing, resolved against the registry for `STELLAR_NETWORK`.
+  An unregistered version is a `400`.
+
+```bash
+curl "$HORIZON/api/registry/attestations?version=v2&limit=50"
+```
+
+### Registering a new contract
+
+1. Add the entry under the network in `contracts/stellar/bindings/src/contracts.json`
+   (`deploy.sh --version vN` does this for you) and release the package.
+2. Deploy the indexer so it picks up the new registry.
+3. Backfill the new contract from the ledger it was deployed in — the ingest cursor is
+   global, so a newly registered contract has no history until you ask for it:
+
+   ```bash
+   curl -X POST $HORIZON/api/ingest/backfill \
+     -H 'content-type: application/json' \
+     -d '{"startLedger": <deployedLedger>}'
+   ```
+
+   `deployedLedger` is the field on the registry entry.
+
+### Railway variables
+
+Railway environment changes are documented here and applied by a maintainer in the Railway
+dashboard; deploys never set them automatically. After each contract deployment, set:
+
+| Key | Testnet | Mainnet |
+| --- | --- | --- |
+| `STELLAR_NETWORK` | `testnet` | `mainnet` |
+| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,<testnet v2 id>` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,<mainnet v2 id>` |
+| `PROTOCOL_CONTRACT_ID` | `<testnet v2 id>` | `<mainnet v2 id>` |
+
+Leaving `INDEX_CONTRACT_IDS` unset achieves the same result once the registry contains both
+versions; set it explicitly only to index a subset. After applying the variables and
+redeploying, run the backfill above with the new contract's `deployedLedger`.
 
 ## Running the Indexer
 
