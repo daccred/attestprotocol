@@ -69,7 +69,7 @@ function be8(value: bigint): Buffer {
  * Create the BLS G1 point a delegated attestation request must be signed over.
  *
  * Layout C (sha256 preimage, then mapped to G1):
- *   "ATTEST_PROTOCOL_V1_DELEGATED" || contract_xdr || network_id_32 ||
+ *   "ATTEST_PROTOCOL_V1_DELEGATED" || sha256(contract_xdr) || network_id_32 ||
  *   schema_uid_raw_32             || subject_hash || nonce_be8     ||
  *   deadline_be8                  || [expiration_be8]?            || value_hash
  *
@@ -91,7 +91,7 @@ export function createAttestMessage(
 
   const components: Buffer[] = [
     ATTEST_DOMAIN_SEPARATOR,
-    encodeAddressXdr(contractId),
+    hashAddress(contractId),
     networkIdBytes(networkPassphrase),
     request.schema_uid,
     hashAddress(request.subject),
@@ -113,7 +113,7 @@ export function createAttestMessage(
  * Create the BLS G1 point a delegated revocation request must be signed over.
  *
  * Layout D (sha256 preimage, then mapped to G1):
- *   "REVOKE_PROTOCOL_V1_DELEGATED" || contract_xdr     || network_id_32 ||
+ *   "REVOKE_PROTOCOL_V1_DELEGATED" || sha256(contract_xdr) || network_id_32 ||
  *   schema_uid_raw_32             || attestation_uid_32 || subject_hash ||
  *   nonce_be8                     || deadline_be8
  *
@@ -135,7 +135,7 @@ export function createRevokeMessage(
 
   const components: Buffer[] = [
     REVOKE_DOMAIN_SEPARATOR,
-    encodeAddressXdr(contractId),
+    hashAddress(contractId),
     networkIdBytes(networkPassphrase),
     request.schema_uid,
     request.attestation_uid,
