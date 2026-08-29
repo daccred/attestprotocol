@@ -1,7 +1,6 @@
-import fs from 'fs'
-import path from 'path'
 import { Address, nativeToScVal } from '@stellar/stellar-sdk';
 import * as ProtocolContract from '../bindings/src/protocol'
+import { getContractId, type ContractVersion } from '../bindings/src/registry'
 import { keccak256 } from 'js-sha3';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -54,25 +53,14 @@ export async function fundAccountIfNeeded(publicKey: string): Promise<void> {
 }
 
 /**
- * Load test configuration from deployments.json and environment
+ * Load test configuration from the contract registry and environment
  */
 export function loadTestConfig(): TestConfig {
-  const deploymentsPath = path.join(__dirname, '..', 'deployments.json')
-  
   try {
-    // Load deployment data
-    const deployments = JSON.parse(fs.readFileSync(deploymentsPath, 'utf8'))
-    const testnetDeployments = deployments.testnet
-    
-    if (!testnetDeployments) {
-      throw new Error('No testnet deployments found in deployments.json')
-    }
-    
-    const protocolContractId = testnetDeployments.protocol?.id
-
-    if (!protocolContractId) {
-      throw new Error('Protocol contract ID not found in deployments.json')
-    }
+    const protocolContractId = getContractId(
+      'testnet',
+      process.env.CONTRACT_VERSION as ContractVersion | undefined
+    )
 
     /** MUST COME from .env file */
     const adminSecretKey = process.env.ADMIN_SECRET_KEY as string;

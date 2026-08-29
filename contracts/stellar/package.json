@@ -19,7 +19,13 @@
       "types": "./dist/protocol.d.ts",
       "import": "./dist/protocol.js",
       "require": "./dist/protocol.js"
-    }
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "import": "./dist/registry.js",
+      "require": "./dist/registry.js"
+    },
+    "./contracts.json": "./dist/contracts.json"
   },
   "files": [
     "dist/",
@@ -46,5 +52,15 @@
     "test": "vitest"
   },
   "type": "module",
-  "types": "./dist/protocol.d.ts"
+  "types": "./dist/protocol.d.ts",
+  "typesVersions": {
+    "*": {
+      "registry": [
+        "./dist/registry.d.ts"
+      ],
+      "protocol": [
+        "./dist/protocol.d.ts"
+      ]
+    }
+  }
 }

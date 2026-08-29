@@ -1,0 +1,24 @@
+{
+  "testnet": {
+    "v1": {
+      "id": "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP",
+      "sdk": "22.0.8",
+      "deployedAt": "2025-11-07T12:44:26Z",
+      "deployedLedger": null,
+      "txHash": "5f91a35f4629473c814c2e949a530f4d3dfe6b44a6426f0d26e69523d83f287d",
+      "wasmHash": null
+    },
+    "current": "v1"
+  },
+  "mainnet": {
+    "v1": {
+      "id": "CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI",
+      "sdk": "22.0.8",
+      "deployedAt": "2025-11-05T07:12:13Z",
+      "deployedLedger": 59706525,
+      "txHash": "6eeaf6691748956417b7929951ff3789f499190b2c220d3e758e3b62ddc66e7f",
+      "wasmHash": null
+    },
+    "current": "v1"
+  }
+}
