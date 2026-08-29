@@ -22,34 +22,23 @@ Resolvers let you:
 - **Distribute rewards** — Incentivize attestation with token rewards
 - **Enforce rules** — Implement custom business logic
 
+```mermaid
+flowchart LR
+    subgraph W1["WITHOUT RESOLVER (Permissionless)"]
+        direction LR
+        P1["Anyone"] --> P2["Attest to Any Schema"] --> P3["✅ Attestation Created"]
+    end
 ```
-┌────────────────────────────────────────────────────────────────┐
-│              WITHOUT RESOLVER (Permissionless)                 │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│   Anyone ──► Attest to Any Schema ──► ✅ Attestation Created   │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────────────────────────────────────────┐
-│               WITH RESOLVER (Access Control)                   │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│   1. Attestation Request                                       │
-│          │                                                     │
-│          ▼                                                     │
-│   2. Resolver.onattest()  ──── Validation ────┐                │
-│          │                                    │                │
-│          ▼ (if approved)                      ▼ (if rejected)  │
-│   3. Store Attestation                   ❌ Error              │
-│          │                                                     │
-│          ▼                                                     │
-│   4. Resolver.onresolve()  ──── Post-processing                │
-│          │                                                     │
-│          ▼                                                     │
-│   ✅ Attestation Created                                       │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph W2["WITH RESOLVER (Access Control)"]
+        R1["1. Attestation Request"] --> R2["2. Resolver.onattest()"]
+        R2 -->|Validation — if rejected| RE["❌ Error"]
+        R2 -->|if approved| R3["3. Store Attestation"]
+        R3 --> R4["4. Resolver.onresolve()"]
+        R4 -->|Post-processing| R5["✅ Attestation Created"]
+    end
 ```
 
 ## Resolver Interface

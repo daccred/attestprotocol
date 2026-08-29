@@ -24,10 +24,12 @@ A signed statement by an issuer about a subject, stored on-chain.
 
 ## Lifecycle
 
-```
-Created ──▶ Active ──▶ Expired
-                │
-                └──▶ Revoked
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Active
+    Active --> Expired
+    Active --> Revoked
 ```
 
 **Created**: Attestation issued and stored on-chain

@@ -21,26 +21,20 @@ AttestProtocol is designed to be open:
 | **Issue Attestation** | Anyone can attest to any schema | Resolver controls access |
 | **Revoke Attestation** | Original attester can revoke | Resolver controls access |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   PERMISSIONLESS BY DEFAULT                 │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   Schema Creation                                           │
-│   └── Any wallet can deploy a schema                        │
-│       └── Creator becomes the "authority" (owner)           │
-│                                                             │
-│   Attestation Issuance                                      │
-│   └── Any wallet can attest to any schema                   │
-│       └── Unless a resolver restricts access                │
-│                                                             │
-│   Access Control (Optional)                                 │
-│   └── Attach a resolver to control who can attest           │
-│       ├── Fee requirements                                  │
-│       ├── Allowlists                                        │
-│       └── Custom validation logic                           │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PD["PERMISSIONLESS BY DEFAULT"]
+        SC["Schema Creation"] --> SC1["Any wallet can deploy a schema"]
+        SC1 --> SC2["Creator becomes the &quot;authority&quot; (owner)"]
+
+        AI["Attestation Issuance"] --> AI1["Any wallet can attest to any schema"]
+        AI1 --> AI2["Unless a resolver restricts access"]
+
+        AC["Access Control (Optional)"] --> AC1["Attach a resolver to control who can attest"]
+        AC1 --> AC2["Fee requirements"]
+        AC1 --> AC3["Allowlists"]
+        AC1 --> AC4["Custom validation logic"]
+    end
 ```
 
 ## Schema Authority

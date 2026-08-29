@@ -7,25 +7,16 @@ description: 'Off-chain signing with BLS keys for scalable attestation issuance'
 
 Delegates are addresses authorized to submit attestations on behalf of an authority. The authority signs attestation data off-chain using BLS keys, and the delegate submits the transaction on-chain.
 
-```
-┌─────────────────────┐          ┌─────────────────────┐
-│      Authority      │          │      Delegate       │
-│  (BLS private key)  │          │  (Stellar wallet)   │
-└─────────────────────┘          └─────────────────────┘
-         │                                │
-         │ 1. Sign attestation            │
-         │    data off-chain              │
-         ▼                                │
-┌─────────────────────┐                   │
-│   BLS Signature     │───────────────────▶
-└─────────────────────┘  2. Submit with   │
-                            signature     │
-                                          ▼
-                              ┌─────────────────────┐
-                              │    Smart Contract   │
-                              │  Verifies signature │
-                              │  Creates attestation│
-                              └─────────────────────┘
+```mermaid
+sequenceDiagram
+    participant A as Authority<br/>(BLS private key)
+    participant D as Delegate<br/>(Stellar wallet)
+    participant C as Smart Contract
+    A->>A: 1. Sign attestation data off-chain
+    Note over A: BLS Signature
+    A->>D: 2. Submit with signature
+    D->>C: Submit attestation
+    C->>C: Verifies signature<br/>Creates attestation
 ```
 
 <Note>
@@ -188,10 +179,12 @@ Different operations (attest, revoke) use different domain separation tags (DST)
 ### Batch Issuance
 Authority pre-signs many attestations, sends signatures to a queue. Workers pull and submit.
 
-```
-Authority ─┬─ Sign 1000 attestations ─▶ Queue ─▶ Worker 1 ─▶ Submit
-           │                                   ─▶ Worker 2 ─▶ Submit
-           │                                   ─▶ Worker 3 ─▶ Submit
+```mermaid
+flowchart LR
+    A["Authority"] -->|Sign 1000 attestations| Q["Queue"]
+    Q --> W1["Worker 1"] --> S1["Submit"]
+    Q --> W2["Worker 2"] --> S2["Submit"]
+    Q --> W3["Worker 3"] --> S3["Submit"]
 ```
 
 ### Event-Driven
