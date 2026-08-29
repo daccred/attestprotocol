@@ -355,3 +355,67 @@ Nyquist criteria for Plan IX:
 - [x] `get_attestation` on testnet v2 with an SDK-computed UID returned the attestation just written.
 - [x] `attest_by_delegation` on testnet v2 with an SDK-computed message and BLS signature succeeded.
 - [x] CHANGELOG records the behavioural change for consumers.
+
+### Plan VII task I: [CHECKPOINT: HUMAN] Mainnet deployment by the user
+
+- **Commit:** none (nothing to commit; no mainnet action taken)
+- **Result:** blocked — awaiting the user
+- **Notes:**
+  - Fresh build with stellar-cli 27.1.0: `stellar contract build` + `stellar contract optimize` produce `target/wasm32v1-none/release/protocol.optimized.wasm`, 34287 bytes, **sha256 `2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8`** — byte-identical to the wasm hash recorded for testnet v2 in Plan VI, so the mainnet deployment will install the same code. (`stellar contract optimize` now warns it is deprecated in favour of `stellar contract build --optimize`; output is identical.)
+  - Nothing was signed, submitted, generated or published. No mainnet key exists on this machine.
+
+## HUMAN CHECKPOINT — mainnet v2 deploy (run by the user)
+
+Prerequisites:
+- stellar-cli 27.1.0 (`stellar --version`), a funded mainnet identity in `stellar keys`, and a mainnet RPC endpoint you trust (the runbook's existing choice is `https://soroban-rpc.mainnet.stellar.gateway.fm`; `https://mainnet.sorobanrpc.com` and a Validation Cloud key are the documented alternatives).
+- Run from a checkout on `jira/2026-08-29-soroban-sdk-27-v2-contracts` with the build above present (or let the script rebuild).
+- Cost: the v1 mainnet deploy used `--fee 120000000` (12 XLM cap on the inclusion fee; the actual charge is far smaller). Keep a few tens of XLM available.
+
+```
+cd contracts/stellar
+./deploy.sh --protocol --version v2 --network mainnet \
+  --rpc-url <your mainnet RPC> \
+  --network-passphrase "Public Global Stellar Network ; September 2015" \
+  --source <your mainnet identity> \
+  --fee 120000000 \
+  --initialize --yes
+```
+
+What it does and what to expect:
+- `--initialize` calls `initialize(admin)` with the source identity's address as the contract admin. That address is permanent-ish administrative control of mainnet v2 — use the identity you intend to keep.
+- The script writes `.mainnet.v2` into `contracts/stellar/bindings/src/contracts.json` (`id`, `sdk: 27.0.6`, `deployedAt`, `deployedLedger`, `txHash`, `wasmHash`) and regenerates `contracts/stellar/deployments.json`. It does **not** touch `mainnet.current`, which stays `v1` until the flip in task II, and it does not touch `mainnet.v1`.
+- Expected wasm hash in the output: `2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8`. If it differs, stop and report it — the mainnet build did not match this branch.
+- Known stellar-cli 27 quirks already fixed in `deploy.sh` during Plan VI: the contract link is now `lab.stellar.org/r/<net>/contract/<id>` and the tx line is `Signing transaction:`. If the script still aborts *after* a successful deploy, the contract exists — send the raw output rather than re-running, or a second contract gets deployed.
+
+Paste back:
+1. the `mainnet.v2` block from `contracts/stellar/bindings/src/contracts.json` (or the raw script output),
+2. the contract ID, deploy tx hash, ledger and wasm hash,
+3. the RPC URL you used and the admin identity's public key (G…, not the secret),
+4. explicit go-ahead to flip `mainnet.current` to `v2` and to finish the release prep.
+
+On resume the executor verifies the entry, simulates the read-only `get_dst_for_attestation` against the new ID, then runs task II (flip `current`, sync bindings/deployments, fill the ID into README/runbooks) and finishes task III.
+
+### Plan VII tasks II and III: work prepared ahead of the mainnet ID
+
+- **Commits:** `1d84f1b` (changeset + config), `50051f3` (README, .env.example, mainnet runbook)
+- **Result:** partial — every part that does not need the mainnet v2 ID is committed; the rest waits on the checkpoint.
+- **Notes:**
+  - `.changeset/config.json`: `baseBranch` → `canary` (D-17). **Deviation (same file, needed for D-17 to work):** `packages` was `["packages/*", "contracts/stellar/*"]`, which matches nothing — `contracts/stellar` *is* the package (`@attestprotocol/stellar-contracts`), there is no package directory under it. Changed to `["packages/*", "contracts/stellar"]`. Without this the coupled major could not be declared at all.
+  - `.changeset/soroban-sdk-27-v2-contracts.md` declares both packages `major`. It also states the two Plan IX encoding fixes (UID `ScVal::Bytes`, delegated message binding to `sha256(contract address)`) and the `ResolverAttestation` → `ResolverAttestationData` rename, both consumer-visible breaks found after the plan was written. `npx changeset status` confirms: major for `@attestprotocol/stellar-contracts` and `@attestprotocol/stellar-sdk`, patch for the dependents `@attestprotocol/sdk` and `@attestprotocol/cli`.
+  - **Not run:** `pnpm changeset version` (would bump both to 3.0.0 and write the CHANGELOGs). Held back deliberately — the version bump is the first half of the release, and the changeset text may still gain the mainnet ID. `packages/stellar-sdk/package.json` and `contracts/stellar/package.json` are still `2.0.2`; the Done-when for task III is therefore not met yet.
+  - Docs: README "Smart Contracts" now lists testnet v2 (current) / v1 (legacy) with the live v2 address, mainnet v1 (current), the two Authority Contract lines are gone, and it names `contracts/stellar/bindings/src/contracts.json` + horizon `/api/contracts` as canonical. `apps/horizon/scripts/mainnet/README.md`: the address table, the testnet/mainnet comparison row and the version history no longer carry the authority contract; the mainnet v2 cells read `<MAINNET_V2_ID>`. `apps/horizon/.env.example`: dev default is now testnet v2 with the mainnet value as a commented `<MAINNET_V2_ID>`. `apps/horizon/README.md` already carried the Railway table with `<mainnet v2 id>` placeholders from Plan VI and was left alone.
+  - **Untouched, as required:** `contracts/stellar/bindings/src/contracts.json` (`mainnet.current` still `v1`), `deployments.json`, `protocol.ts`.
+  - Dependabot, open Cargo alerts now (`gh api repos/{owner}/{repo}/dependabot/alerts?state=open&ecosystem=rust`):
+    - #150 `soroban-env-host` GHSA-pm4j-7r4q-ccg8 — `contracts/stellar/Cargo.lock`
+    - #148 `stellar-xdr` GHSA-x57h-xx53-v53w — `contracts/stellar/Cargo.lock`
+    - #235 `serde_with` GHSA-7gcf-g7xr-8hxj, #191 `rand` GHSA-cq8v-f236-94qc — same lockfile
+    - #207 `anchor-lang`, #190 `rand` — `contracts/solana/Cargo.lock`, out of scope
+    This branch's lockfile has env-host `27.0.1`, xdr `27.0.0`, serde_with `3.22.0`, rand `0.8.8`; all four stellar alerts should close on their own once it is on `canary`. **PR #112** (dependabot's patches for these crates) becomes redundant afterwards — close or rebase it. Verify after merge with the same `gh api` call.
+  - Release commands handed to the user, to run after the merge (executor must not run any of them):
+    - `pnpm changeset version && pnpm -r build` — version bump and CHANGELOGs (can be run by the executor on resume if you prefer; publishing cannot).
+    - `pnpm release` — npm publish of the JS packages; needs npm credentials.
+    - `pnpm release:stellar 2.0.0` — `cargo release --execute`, pushes tags.
+
+### Plan VII paused
+
+2026-08-29 — task I stopped at the human checkpoint as required by D-06. Two preparatory commits made (`1d84f1b`, `50051f3`). Tasks II and III resume once the mainnet v2 contract ID and the user's go-ahead arrive.
