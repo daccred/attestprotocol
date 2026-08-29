@@ -7,11 +7,10 @@ members = [
 ]
 
 [workspace.package]
-version = "1.3.6"
+version = "2.0.0"
 
 [workspace.dependencies]
-soroban-sdk = { version = "22.0.8" }
-# stellar-xdr = { version = "22.1.0", default-features = false }
+soroban-sdk = { version = "27.0.6" }
 
 [profile.release]
 opt-level = "z"

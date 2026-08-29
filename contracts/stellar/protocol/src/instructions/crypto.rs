@@ -100,7 +100,7 @@ const signature = signaturePoint.toRawBytes(false); // -> 96-byte Uint8Array
 use crate::errors::Error;
 use crate::state::{BlsPublicKey, DataKey};
 use soroban_sdk::{
-    crypto::bls12_381::{G1Affine, G2Affine},
+    crypto::bls12_381::{Bls12381G1Affine, Bls12381G2Affine},
     Address, Bytes, BytesN, Env, Vec,
 };
 
@@ -174,7 +174,7 @@ const G2_GENERATOR: [u8; 192] = [
 ///
 /// LIMITATION: This does NOT verify on-curve membership or G1 subgroup
 /// membership. Points with valid flag bytes but invalid curve coordinates
-/// will still cause `G1Affine::from_bytes` to trap inside the Soroban host.
+/// will still cause `Bls12381G1Affine::from_bytes` to trap inside the Soroban host.
 fn validate_g1_point_bytes(bytes: &BytesN<96>) -> Result<(), Error> {
     // BytesN<96> is structurally guaranteed to be exactly 96 bytes long, so
     // index 0 is always in-bounds. `get_unchecked` returns the raw u8 byte.
@@ -213,9 +213,9 @@ fn validate_g2_point_bytes(bytes: &BytesN<192>) -> Result<(), Error> {
 ///
 /// # Security
 /// The public key is structurally pre-validated, then materialised as a
-/// G2Affine point. The pre-check rejects malformed encodings (compressed
+/// Bls12381G2Affine point. The pre-check rejects malformed encodings (compressed
 /// flag set, infinity flag set) with `Err(Error::InvalidSignaturePoint)`
-/// before the host's `G2Affine::from_bytes` is reached. Off-curve or
+/// before the host's `Bls12381G2Affine::from_bytes` is reached. Off-curve or
 /// wrong-subgroup points whose flag byte is well-formed will still cause
 /// `from_bytes` to trap inside the Soroban host (HAL-07 residual).
 pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<192>) -> Result<(), Error> {
@@ -232,7 +232,7 @@ pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<
     // HAL-07 mitigation: structural flag-byte check rejects the common
     // class of malformed encodings (compressed format, infinity point,
     // zero-padded blobs with wrong flags) with a structured error before
-    // `G2Affine::from_bytes` can trap the host. See `validate_g2_point_bytes`
+    // `Bls12381G2Affine::from_bytes` can trap the host. See `validate_g2_point_bytes`
     // for the residual limitation (off-curve / wrong-subgroup points still trap).
     validate_g2_point_bytes(&public_key)?;
 
@@ -240,7 +240,7 @@ pub fn register_bls_public_key(env: &Env, attester: Address, public_key: BytesN<
     // this can still trap on geometrically malformed (off-curve or
     // wrong-subgroup) inputs that nonetheless have a clean flag byte —
     // submitter pays gas in that case.
-    let _validated_pk = G2Affine::from_bytes(public_key.clone());
+    let _validated_pk = Bls12381G2Affine::from_bytes(public_key.clone());
 
     let timestamp = env.ledger().timestamp();
     let bls_key = BlsPublicKey {
@@ -308,7 +308,7 @@ pub fn get_bls_public_key(env: &Env, attester: &Address) -> Result<BlsPublicKey,
 /// * `Err(Error::InvalidSignature)` if the pairing check fails (signature doesn't match).
 /// * `Err(Error::InvalidSignaturePoint)` if the signature bytes have invalid encoding flags
 ///   (compression bit set, or infinity bit set on a non-identity point). Rejected by the
-///   structural pre-check before `G1Affine::from_bytes` is reached.
+///   structural pre-check before `Bls12381G1Affine::from_bytes` is reached.
 /// * `Err(Error::BlsPubKeyNotRegistered)` if the attester has no registered key.
 ///
 /// # Traps (Soroban host abort) — HAL-07 residual
@@ -352,7 +352,7 @@ pub fn verify_bls_signature(
      * STEP 2: Deserialize the signature and public key into curve points.
      * The signature is a G1 point, and the public key is a G2 point.
      *
-     * Trap surface (HAL-07): `G1Affine::from_bytes` / `G2Affine::from_bytes` are
+     * Trap surface (HAL-07): `Bls12381G1Affine::from_bytes` / `Bls12381G2Affine::from_bytes` are
      * infallible thin wrappers in soroban-sdk 22.x and abort the host when the
      * bytes are not a valid in-subgroup point.
      *   - `signature`     : caller-supplied. The structural pre-check below
@@ -366,17 +366,17 @@ pub fn verify_bls_signature(
     let neg_hashed_message = -hashed_message;
 
     // HAL-07 mitigation: structural flag-byte check on the caller-supplied
-    // signature before `G1Affine::from_bytes` can trap the host.
+    // signature before `Bls12381G1Affine::from_bytes` can trap the host.
     validate_g1_point_bytes(signature)?;
 
     // Deserialize signature into a G1 point. With the pre-check above, this
     // only traps on geometrically malformed (off-curve / wrong-subgroup)
     // inputs that nonetheless carry a well-formed flag byte.
-    let s = G1Affine::from_bytes(signature.clone());
+    let s = Bls12381G1Affine::from_bytes(signature.clone());
 
     // Deserialize public key — already structurally validated during
     // registration; same trap residual as above.
-    let pk = G2Affine::from_bytes(bls_key.key);
+    let pk = Bls12381G2Affine::from_bytes(bls_key.key);
 
     /*
      * STEP 3: Prepare the points for the pairing check.
@@ -384,7 +384,7 @@ pub fn verify_bls_signature(
      */
     let g1_points = Vec::from_array(env, [s, neg_hashed_message]);
 
-    let g2_generator = G2Affine::from_bytes(BytesN::from_array(env, &G2_GENERATOR));
+    let g2_generator = Bls12381G2Affine::from_bytes(BytesN::from_array(env, &G2_GENERATOR));
 
     let g2_points = Vec::from_array(env, [g2_generator, pk]);
 
