@@ -16,6 +16,7 @@ import { rpc, scValToNative, xdr, StrKey } from '@stellar/stellar-sdk'
 import {
   sorobanRpcUrl,
   CONTRACT_IDS_TO_INDEX,
+  PROTOCOL_CONTRACT_ID,
   MAX_EVENTS_PER_FETCH,
   getHorizonBaseUrl,
 } from '../common/constants'
@@ -1020,7 +1021,7 @@ function determineContractId(operation: any): string | null {
   }
   
   // If we can't determine, return the first contract ID as fallback
-  return CONTRACT_IDS_TO_INDEX[0] || null
+  return PROTOCOL_CONTRACT_ID
 }
 
 /**

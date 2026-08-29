@@ -1,4 +1,6 @@
 import dotenv from 'dotenv'
+import { getContractId, listContracts, type Network } from './registry'
+
 dotenv.config()
 
 /**
@@ -14,7 +16,7 @@ dotenv.config()
  * PostgreSQL connection string used by Prisma.
  * Example: postgres://user:password@host:port/dbname
  */
-export const DATABASE_URL = process.env.DATABASE_URL as string
+export const DATABASE_URL: string = process.env.DATABASE_URL || ''
 
 /**
  * STELLAR_NETWORK
@@ -22,21 +24,41 @@ export const DATABASE_URL = process.env.DATABASE_URL as string
  * Target Stellar network identifier. Supported values: 'mainnet' | 'testnet'.
  * Defaults to 'testnet' when not specified.
  */
-export const STELLAR_NETWORK = process.env.STELLAR_NETWORK || 'testnet'
+export const STELLAR_NETWORK = (process.env.STELLAR_NETWORK || 'testnet') as Network
+
+if (STELLAR_NETWORK !== 'testnet' && STELLAR_NETWORK !== 'mainnet') {
+  throw new Error(`STELLAR_NETWORK must be 'testnet' or 'mainnet', got '${STELLAR_NETWORK}'`)
+}
 
 /**
  * CONTRACT_IDS_TO_INDEX
-*
-*   'CB3NF4FHZPQOBWSPZNLKU32SK6Z5FR54TN6LWBBY72IDRDRIVWBRRFE5',
-*   'CBLCL256WVODZVVGGC3TRV5ZSVLZXQFGX4OHE2YM2P4WUQIT2OFAOUQQ',
- * Array of contract IDs that the indexer will track for events, operations, and transactions.
- * This replaces the legacy CONTRACT_ID_TO_INDEX environment variable approach.
+ *
+ * Contract addresses the indexer tracks for events, operations and transactions.
+ * Set INDEX_CONTRACT_IDS to a comma-separated list to restrict the set; when it
+ * is empty every contract registered for STELLAR_NETWORK is indexed.
  */
-export const CONTRACT_IDS_TO_INDEX = [
-  process.env.PROTOCOL_CONTRACT_ID as string,
-  process.env.AUTHORITY_CONTRACT_ID as string,
-] 
+const indexFromEnv = (process.env.INDEX_CONTRACT_IDS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
 
+export const CONTRACT_IDS_TO_INDEX: string[] =
+  indexFromEnv.length > 0 ? indexFromEnv : listContracts(STELLAR_NETWORK).map((c) => c.id)
+
+/**
+ * PROTOCOL_CONTRACT_ID
+ *
+ * Attribution target: the address used wherever ingest needs a single contract.
+ * Defaults to the registry's current version for STELLAR_NETWORK.
+ */
+export const PROTOCOL_CONTRACT_ID: string =
+  process.env.PROTOCOL_CONTRACT_ID || getContractId(STELLAR_NETWORK)
+
+if (!CONTRACT_IDS_TO_INDEX.includes(PROTOCOL_CONTRACT_ID)) {
+  throw new Error(
+    `PROTOCOL_CONTRACT_ID ${PROTOCOL_CONTRACT_ID} is not among the indexed contracts (${CONTRACT_IDS_TO_INDEX.join(',')})`
+  )
+}
 
 /**
  * MAX_EVENTS_PER_FETCH
@@ -85,17 +107,8 @@ export function getHorizonBaseUrl(): string {
     : 'https://horizon-testnet.stellar.org'
 }
 
-// Initial console logs for verification (optional to remove for production)
-console.log(`---------------- HORIZON CONSTANTS INIT (constants.ts) ----------------`)
-console.log(`STELLAR_NETWORK: ${STELLAR_NETWORK}`)
-console.log(`Soroban RPC URL: ${sorobanRpcUrl}`)
-console.log(`Contract IDs to Index: ${CONTRACT_IDS_TO_INDEX.join(', ')}`)
-if (CONTRACT_IDS_TO_INDEX.length === 0 && process.env.NODE_ENV !== 'test') {
-  console.warn('Warning: CONTRACT_IDS_TO_INDEX array is empty. Please add contract IDs to track.')
+if (process.env.NODE_ENV !== 'test') {
+  console.log(
+    `horizon: network=${STELLAR_NETWORK} indexing=${CONTRACT_IDS_TO_INDEX.join(',')} target=${PROTOCOL_CONTRACT_ID}`
+  )
 }
-console.log(
-  `Database URL (first 5 chars): ${DATABASE_URL ? DATABASE_URL.substring(0, 5) : 'NOT SET'}...`
-)
-console.log(`Max events per fetch: ${MAX_EVENTS_PER_FETCH}`)
-console.log(`Ledger history limit days: ${LEDGER_HISTORY_LIMIT_DAYS}`)
-console.log(`--------------------------------------------------------------------`)
