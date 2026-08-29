@@ -124,7 +124,7 @@ Nyquist criteria for Plan II:
 
 ### Plan III task I: Make the 77 tests pass under sdk 27 semantics
 
-- **Commit:** `PENDING`
+- **Commit:** `7a54344`
 - **Result:** done
 - **Notes:**
   - Baseline (`cargo test --workspace --no-fail-fast`, log in scratchpad `cargo-test-before.log`): **77 tests, 68 passed, 9 failed**. All nine failures had the identical root cause — `Ledger::set(...)` with `protocol_version: 22` now aborts with `HostError: Error(Context, InternalError)` / `"ledger protocol version too old for host", 22` under soroban-env-host 27.
@@ -134,3 +134,14 @@ Nyquist criteria for Plan II:
   - **No other failures.** Steps 3-5 of the task turned out to be unnecessary: no test hit a CPU/memory/entry budget, so `disable_resource_limits` was added nowhere (`grep -c disable_resource_limits testutils.rs` = 0, and 0 repo-wide); no test asserted a panic on an archived entry; the `env.events().all()` shape change was already absorbed by the `all_events(&env)` helper Plan I added to `testutils.rs`.
   - **Mainnet resource finding:** none. No entrypoint, including `attest_by_delegation` / `revoke_by_delegation` / `register_bls_key`, exceeded the default test budget, so nothing approached `InvocationResourceLimits::mainnet()` in a way the suite could observe.
   - Result: **77 passed, 0 failed** across 16 test binaries. The `7 ignored` line belongs to the doc-test target — seven ```ignore-fenced examples in `protocol/src/utils.rs` and `lib.rs` that predate this sprint and are not `#[test]`s.
+
+### Plan III task II: Close the HAL-07 residual with sdk-26 subgroup checks
+
+- **Commit:** `PENDING2`
+- **Result:** done
+- **Notes:**
+  - `register_bls_key`: the discarded `let _validated_pk = ...` is now a real check — `g2_is_on_curve` + `g2_is_in_subgroup` on the decoded public key, returning `Error::InvalidSignaturePoint`. Signature path: `g1_is_on_curve` + `g1_is_in_subgroup` on the caller-supplied G1 point. The stored public key is not re-checked (it was validated at registration).
+  - Four comment blocks rewritten as behavioural statements: no sdk version numbers, no registry paths, no "HAL-07 residual"/trap language. `grep -c "soroban-sdk-22\|22\.0\.11"` = 0.
+  - `test_hal07_all_zeros_signature_still_traps` → `test_hal07_all_zeros_signature_returns_invalid_point`; the `#[should_panic(expected = "InvokeError::Abort")]` is gone and the test now asserts `Err(Ok(InvalidSignaturePoint))` through `try_attest_by_delegation`. Two new tests: `test_hal07_off_curve_pubkey_returns_invalid_point` (via `try_register_bls_key`, plus a side-effect check that nothing was stored) and `test_hal07_off_curve_signature_returns_invalid_point`.
+  - **Host behaviour worth recording:** the on-curve/subgroup predicates only apply to points whose *coordinates are in-range field elements*. The first draft of the off-curve pubkey test filled all 192 bytes with a pseudo-random pattern; the host still returned `Err(Err(Abort))`, because a 48-byte limb exceeding the field modulus is rejected during decoding, before any predicate runs. Zeroing the leading byte of each 48-byte coordinate (`i % 48 == 0`) keeps every limb in range and produces a genuine off-curve point, which the predicates then reject as `InvalidSignaturePoint`. So: malformed *encodings* with out-of-range limbs still abort; malformed *geometry* is now a structured error. Both new tests use the in-range construction, so both assert the intended path.
+  - `cargo test --workspace --no-fail-fast`: **79 passed, 0 failed** (crypto binary 17 → 19). `cargo clippy --workspace -- -D warnings` exits 0 and neither new test produces a finding under `--all-targets`. `stellar contract build` succeeds.
