@@ -88,5 +88,16 @@ export {
   type Attestation as ProtocolAttestationRecord,
 } from '@attestprotocol/stellar-contracts/protocol'
 
+// Contract registry: resolve deployed contract addresses by network and version
+export {
+  contracts as ProtocolContracts,
+  getContractId,
+  getContractEntry,
+  listContracts,
+  type ContractEntry,
+  type ContractVersion,
+  type Network as ContractNetwork,
+} from '@attestprotocol/stellar-contracts/registry'
+
 // Internal utilities (for advanced usage and testing)
 export * as common from './common'
