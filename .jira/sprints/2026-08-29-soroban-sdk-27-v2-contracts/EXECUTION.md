@@ -137,7 +137,7 @@ Nyquist criteria for Plan II:
 
 ### Plan III task II: Close the HAL-07 residual with sdk-26 subgroup checks
 
-- **Commit:** `PENDING2`
+- **Commit:** `93d2ca5`
 - **Result:** done
 - **Notes:**
   - `register_bls_key`: the discarded `let _validated_pk = ...` is now a real check — `g2_is_on_curve` + `g2_is_in_subgroup` on the decoded public key, returning `Error::InvalidSignaturePoint`. Signature path: `g1_is_on_curve` + `g1_is_in_subgroup` on the caller-supplied G1 point. The stored public key is not re-checked (it was validated at registration).
@@ -145,3 +145,15 @@ Nyquist criteria for Plan II:
   - `test_hal07_all_zeros_signature_still_traps` → `test_hal07_all_zeros_signature_returns_invalid_point`; the `#[should_panic(expected = "InvokeError::Abort")]` is gone and the test now asserts `Err(Ok(InvalidSignaturePoint))` through `try_attest_by_delegation`. Two new tests: `test_hal07_off_curve_pubkey_returns_invalid_point` (via `try_register_bls_key`, plus a side-effect check that nothing was stored) and `test_hal07_off_curve_signature_returns_invalid_point`.
   - **Host behaviour worth recording:** the on-curve/subgroup predicates only apply to points whose *coordinates are in-range field elements*. The first draft of the off-curve pubkey test filled all 192 bytes with a pseudo-random pattern; the host still returned `Err(Err(Abort))`, because a 48-byte limb exceeding the field modulus is rejected during decoding, before any predicate runs. Zeroing the leading byte of each 48-byte coordinate (`i % 48 == 0`) keeps every limb in range and produces a genuine off-curve point, which the predicates then reject as `InvalidSignaturePoint`. So: malformed *encodings* with out-of-range limbs still abort; malformed *geometry* is now a structured error. Both new tests use the in-range construction, so both assert the intended path.
   - `cargo test --workspace --no-fail-fast`: **79 passed, 0 failed** (crypto binary 17 → 19). `cargo clippy --workspace -- -D warnings` exits 0 and neither new test produces a finding under `--all-targets`. `stellar contract build` succeeds.
+
+### Plan III task III: Align Makefiles, cargo config and the release workflow with stellar-cli 27
+
+- **Commit:** `PENDING3`
+- **Result:** deviated (two extra Makefile targets removed as a consequence)
+- **Notes:**
+  - `protocol/Makefile`: `build` is `stellar contract build --package protocol` (bare `cargo build --target wasm32v1-none --release` skips the optimizer and the contract-meta section). The example contract ID in the header comment is now a placeholder pointing at the registry.
+  - `resolvers/Makefile`: `build` is `stellar contract build --package resolvers --features export-default-resolver`, copying the artefact to `dist/resolvers-default.wasm`. `build-token` and `build-fee` deleted — `export-token-reward-resolver` and `export-fee-collection-resolver` do not exist in `resolvers/Cargo.toml`, so both targets had always failed.
+  - Deviation: `deploy-token` and `deploy-fee` were deleted too. They are not named in the task, but each declared the deleted target as its prerequisite, so leaving them would have left `make` referencing undefined targets. `build-default` was folded into `build` (it was the only remaining variant, and the aggregate `build` was just an alias for the three). `help` text updated to match. `deploy-default` now depends on `build`.
+  - `.cargo/config.toml` deleted, and with it the now-empty `contracts/stellar/.cargo/` directory: its only content was a `[target.wasm32-unknown-unknown]` rustflags block, and every build path targets `wasm32v1-none`.
+  - `soroban-release.yml`: `release-authority` deleted (`contracts/stellar/authority` no longer exists), `release-protocol` pinned to `stellar-expert/soroban-build-workflow/.github/workflows/release.yml@v27.0.0` (D-16). Header and Usage Notes rewritten for a single `<tag>-protocol` release; `on.push.tags: ['v*']` untouched.
+  - `make build` exits 0 in both `protocol/` and `resolvers/`.

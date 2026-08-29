@@ -10,13 +10,12 @@
 #   make events         # Query contract events (requires ID and START_LEDGER)
 #   make all            # Format, lint, test, and build
 
-# Example command from comment below:
-# make events ID=CB3NF4FHZPQOBWSPZNLKU32SK6Z5FR54TN6LWBBY72IDRDRIVWBRRFE5 START_LEDGER=265000
+# make events ID=<contract id from bindings/src/contracts.json> START_LEDGER=<ledger>
 
 .PHONY: build
 build:
 	@echo "Building contract for WASM target..."
-	cargo build --target wasm32v1-none --release
+	stellar contract build --package protocol
 
 .PHONY: test
 test:

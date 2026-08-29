@@ -2,11 +2,8 @@
 #
 # Usage examples:
 #   make test
-#   make build-fee
-#   make build-token
-#   make build-default
 #   make build
-#   make deploy-fee IDENTITY=drew NETWORK=testnet
+#   make deploy-default IDENTITY=drew NETWORK=testnet
 #
 # Variables you can override:
 #   TARGET  (default: wasm32v1-none)
@@ -26,13 +23,8 @@ help:
 	@echo "Available targets:"
 	@echo "  test                 - Run tests for the resolvers crate"
 	@echo "  clean                - Clean build artifacts"
-	@echo "  build-default        - Build DefaultResolver Wasm"
-	@echo "  build-token          - Build TokenRewardResolver Wasm"
-	@echo "  build-fee            - Build FeeCollectionResolver Wasm"
-	@echo "  build                - Build all resolver Wasm artifacts"
+	@echo "  build                - Build DefaultResolver Wasm"
 	@echo "  deploy-default       - Deploy DefaultResolver (requires IDENTITY, NETWORK)"
-	@echo "  deploy-token         - Deploy TokenRewardResolver (requires IDENTITY, NETWORK)"
-	@echo "  deploy-fee           - Deploy FeeCollectionResolver (requires IDENTITY, NETWORK)"
 	@echo "\nVariables: TARGET=$(TARGET), PROFILE=$(PROFILE), CARGO_TARGET_DIR=$(CARGO_TARGET_DIR)"
 
 .PHONY: test
@@ -47,56 +39,24 @@ clean:
 $(DIST):
 	@mkdir -p $(DIST)
 
-# Build individual resolvers (Wasm) with feature-gated exports
-.PHONY: build-default
-build-default: $(DIST)
-	cargo build --target $(TARGET) --release --features export-default-resolver
+# DefaultResolver is the only resolver with a feature-gated export.
+.PHONY: build
+build: $(DIST)
+	stellar contract build --package resolvers --features export-default-resolver
 	cp "$(WASM)" "$(DIST)/$(CRATE)-default.wasm"
 	@echo "Built: $(DIST)/$(CRATE)-default.wasm"
 
-.PHONY: build-token
-build-token: $(DIST)
-	cargo build --target $(TARGET) --release --features export-token-reward-resolver
-	cp "$(WASM)" "$(DIST)/$(CRATE)-token-reward.wasm"
-	@echo "Built: $(DIST)/$(CRATE)-token-reward.wasm"
-
-.PHONY: build-fee
-build-fee: $(DIST)
-	cargo build --target $(TARGET) --release --features export-fee-collection-resolver
-	cp "$(WASM)" "$(DIST)/$(CRATE)-fee-collection.wasm"
-	@echo "Built: $(DIST)/$(CRATE)-fee-collection.wasm"
-
-.PHONY: build
-build: build-default build-token build-fee
-	@echo "All resolver Wasms built under $(DIST)/"
-
-# Deploy helpers (requires Stellar CLI). Provide IDENTITY and NETWORK.
-# Example: make deploy-fee IDENTITY=drew NETWORK=testnet
+# Deploy helper (requires Stellar CLI). Provide IDENTITY and NETWORK.
+# Example: make deploy-default IDENTITY=drew NETWORK=testnet
 
 REQ_VARS = \
 	if [ -z "$(IDENTITY)" ]; then echo "Set IDENTITY=<your_identity>"; exit 1; fi; \
 	if [ -z "$(NETWORK)" ]; then echo "Set NETWORK=<testnet|mainnet>"; exit 1; fi
 
 .PHONY: deploy-default
-deploy-default: build-default
+deploy-default: build
 	@$(REQ_VARS)
 	stellar contract deploy \
 		--wasm "$(DIST)/$(CRATE)-default.wasm" \
 		--source "$(IDENTITY)" \
 		--network "$(NETWORK)"
-
-.PHONY: deploy-token
-deploy-token: build-token
-	@$(REQ_VARS)
-	stellar contract deploy \
-		--wasm "$(DIST)/$(CRATE)-token-reward.wasm" \
-		--source "$(IDENTITY)" \
-		--network "$(NETWORK)"
-
-.PHONY: deploy-fee
-deploy-fee: build-fee
-	@$(REQ_VARS)
-	stellar contract deploy \
-		--wasm "$(DIST)/$(CRATE)-fee-collection.wasm" \
-		--source "$(IDENTITY)" \
-		--network "$(NETWORK)" 
