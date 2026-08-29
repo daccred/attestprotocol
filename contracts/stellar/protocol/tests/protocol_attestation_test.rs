@@ -266,7 +266,7 @@ fn test_attestation_and_expiration() {
     let schema_uid: BytesN<32> = client.register(&attester, &schema_definition, &resolver, &revocable);
 
     let default_ledger_info = LedgerInfo {
-        protocol_version: 22,
+        protocol_version: 27,
         sequence_number: 0,
         network_id: Default::default(),
         base_reserve: 10,
@@ -778,7 +778,7 @@ fn test_handling_expired_attestations() {
     // set the ledger timestamp to be in the "future"
     // relative to the expiration time
     env.ledger().set(soroban_sdk::testutils::LedgerInfo {
-        protocol_version: 22,
+        protocol_version: 27,
         sequence_number: 0,
         network_id: Default::default(),
         base_reserve: 10,

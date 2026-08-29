@@ -14,7 +14,7 @@ fn setup<'a>() -> (Env, DefaultResolverClient<'a>) {
     env.mock_all_auths();
     env.ledger().set(LedgerInfo {
         timestamp: 100,
-        protocol_version: 22,
+        protocol_version: 27,
         sequence_number: 1,
         network_id: Default::default(),
         base_reserve: 1,

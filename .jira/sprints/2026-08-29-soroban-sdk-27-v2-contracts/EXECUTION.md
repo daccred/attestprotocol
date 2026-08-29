@@ -121,3 +121,16 @@ Nyquist criteria for Plan II:
 ## Finished
 
 {{iso_timestamp}}
+
+### Plan III task I: Make the 77 tests pass under sdk 27 semantics
+
+- **Commit:** `PENDING`
+- **Result:** done
+- **Notes:**
+  - Baseline (`cargo test --workspace --no-fail-fast`, log in scratchpad `cargo-test-before.log`): **77 tests, 68 passed, 9 failed**. All nine failures had the identical root cause — `Ledger::set(...)` with `protocol_version: 22` now aborts with `HostError: Error(Context, InternalError)` / `"ledger protocol version too old for host", 22` under soroban-env-host 27.
+    - `protocol_attestation_test`: `test_attestation_and_expiration`, `test_handling_expired_attestations`
+    - `resolvers/tests/default_resolver.rs` (all seven): `test_metadata`, `test_accept_valid_attestation`, `test_reject_self_attestation`, `test_reject_expired_attestation`, `test_allow_revocable_attestation_revocation`, `test_reject_non_revocable_attestation_revocation`, `test_revocation_hooks`
+  - Fix: three `protocol_version: 22` → `27` (attestation test lines 269 and 781, default_resolver line 17). Stale `test_snapshots/` directories deleted so they regenerate in the sdk-27 format.
+  - **No other failures.** Steps 3-5 of the task turned out to be unnecessary: no test hit a CPU/memory/entry budget, so `disable_resource_limits` was added nowhere (`grep -c disable_resource_limits testutils.rs` = 0, and 0 repo-wide); no test asserted a panic on an archived entry; the `env.events().all()` shape change was already absorbed by the `all_events(&env)` helper Plan I added to `testutils.rs`.
+  - **Mainnet resource finding:** none. No entrypoint, including `attest_by_delegation` / `revoke_by_delegation` / `register_bls_key`, exceeded the default test budget, so nothing approached `InvocationResourceLimits::mainnet()` in a way the suite could observe.
+  - Result: **77 passed, 0 failed** across 16 test binaries. The `7 ignored` line belongs to the doc-test target — seven ```ignore-fenced examples in `protocol/src/utils.rs` and `lib.rs` that predate this sprint and are not `#[test]`s.
