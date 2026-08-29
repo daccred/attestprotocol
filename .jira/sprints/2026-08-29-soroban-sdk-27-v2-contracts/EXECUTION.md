@@ -254,3 +254,60 @@ Nyquist criteria for Plan V:
 - [x] With no `INDEX_CONTRACT_IDS`, `CONTRACT_IDS_TO_INDEX` equals the registry's IDs for `STELLAR_NETWORK`.
 - [x] `/api/contracts`, `/api/contracts/:version` and the filters behave per D-12/D-13 in unit tests.
 - [x] README and `.env.example` describe the new variables; `railway.toml` watches `contracts/stellar/**`.
+
+### Plan VI task I: Deploy v2 to testnet and register it
+
+- **Commit:** `6a87b7b`
+- **Result:** deviated (two `deploy.sh` bugs had to be fixed to complete the task)
+- **Notes:**
+  - **Identity (D-21):** `contracts/stellar/env.sh` does not exist, so the executor generated and funded `attest-v2-testnet`. Public key `GBRHC2QOPZC2GM2EKGEXJSDPLXGXBHHHRAQQ5MFLAS2AST4ZKM6NCCUB`. It is the v2 testnet admin and the source of `ADMIN_SECRET_KEY` for the vitest suite. The secret was never printed or committed; it lives only in the local `stellar keys` store, so `stellar keys show attest-v2-testnet` on this machine is the only way to retrieve it.
+  - **testnet.v2 = `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD`**, sdk `27.0.6`, `deployedLedger` **4404453**, `deployedAt` `2026-08-29T23:24:12Z`, txHash `214ce424…`, wasmHash `2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8` (matches the Plan I build hash). `testnet.v1` byte-identical; `testnet.current` still `v1` after this task.
+  - Verified on chain: `get_dst_for_attestation` returns `4154544553545f50524f544f434f4c5f56315f44454c4547415445 44` = `ATTEST_PROTOCOL_V1_DELEGATED`; stellar.expert contract page returns HTTP 200.
+  - **Deviation 1 — `deploy.sh` output parsing (file belongs to Plan IV).** stellar-cli 27 changed the deploy output: the contract link is `lab.stellar.org/r/<net>/contract/<id>` (was stellar.expert) and the hash line is `Signing transaction: <hash>` (was `Transaction hash is <hash>`). Both extractors matched nothing, so the script aborted with "Failed to extract valid contract ID" **after** a successful on-chain deploy. Extractors now accept either form (contract ID from any `/contract/<id>` link with a bare-ID line as fallback; tx hash from the last signing line, which is the deploy transaction rather than the wasm upload). `extract_wasm_hash` was also grabbing the first 64-hex token in the output, which under CLI 27 is the signing hash; it now reads the `wasm hash` line.
+  - **Deviation 2 — `update_contracts_json` RETURN trap.** `trap 'rm -f "$tmp_json_file"' RETURN` is not scoped to the function that sets it: it fired again when `deploy_contract` returned, where `$tmp_json_file` is undefined, and `set -u` turned that into `deploy.sh: line 814: tmp_json_file: unbound variable` — again after a fully successful deploy and registry write. The trap is removed; every exit path already moves or deletes the temp file.
+  - Consequence of deviation 1: the first deploy attempt (contract `CCJBSV4BD2CFJX4MTR2KCJU36ZYGV4CP3GHOINM5HB2RYSYDCH6IP3XJ`) is an **orphan on testnet** — deployed, never initialised, never registered. Harmless; ignore it.
+  - Because of deviation 2 the script exited before its initialisation step, so `initialize --admin GBRHC2QO…` was invoked directly against the registered contract (tx `c96b7bd5…`, event `[CONTRACT, INIT]`). Re-running the whole script would have deployed a third contract.
+
+### Plan VI task II: Regenerate bindings and move the workspace to JS SDK 16
+
+- **Commit:** `49555bb`
+- **Result:** deviated (two extra files in `packages/stellar-sdk`)
+- **Notes:**
+  - Bindings generated with stellar-cli 27.1.0 against the v2 address; `src/index.ts` → `bindings/src/protocol.ts`, `README.md` → `bindings/src/protocol.md`; `sync-networks.mjs` rewrote the `networks` const back to the registry (testnet still v1 at this point, plus `local` and `mainnet`).
+  - **Spec diff.** All 13 previous methods are present plus **`get_revoker_nonce`** = the 14 exported functions Plan I saw in the wasm. New generated types: `ResolverType`, `ResolverError`, `ResolverMetadata`, `ResolverAttestationData`, and `DataKey` gained a `RevokerNonce` variant. **No SEP-48 typed event interfaces were generated** — expected, since D-07 keeps `env.events().publish` instead of `#[contractevent]`.
+  - `ResolverAttestation` is gone, renamed `ResolverAttestationData` (identical fields). `bindings/src/types.ts` needed no change (no collision).
+  - **Deviation:** `packages/stellar-sdk/src/index.ts` re-exported `type ResolverAttestation` and no longer compiled; it now re-exports `ResolverAttestationData`. A rename of a public type — acceptable inside the coupled major (D-17), but worth calling out in the changeset.
+  - **Deviation:** `packages/stellar-sdk/__tests__/registry.test.ts` (added by Plan IV) asserted that resolving `contractVersion: 'v2'` on testnet *throws* — true only while testnet had no v2. Replaced with a case that pins v2 and matches `getContractId('testnet','v2')`, plus the same not-registered assertion moved to mainnet, which still has no v2. 5/5 pass.
+  - Peer ranges `>=16.0.0 <17` in `contracts/stellar`, `packages/stellar-sdk`, `packages/cli`; `^16.3.0` in `apps/horizon` and the root. `pnpm ls -r` shows only `@stellar/stellar-sdk 16.3.0`. No devDependency needed in either package — the root devDependency resolves for both.
+  - No JS SDK 15→16 call-site breaks: nothing uses `authorizeInvocation`, `Client.from`, or a default import; every import is named and still valid.
+  - **Deviation (pre-agreed with the orchestrator):** the ~24 security `overrides` in the root `package.json` `pnpm` field moved into `pnpm-workspace.yaml` `overrides:`, merged with the 12 already there (no conflicting keys; `js-yaml@>=4.0.0 <4.1.1` was identical in both). pnpm 11.5 does not read the `package.json` field at all, so every install silently dropped them — Plan IV hit this twice and reverted the lockfile. The regenerated `pnpm-lock.yaml` now carries all 36 overrides and is committed.
+  - `pnpm --filter @attestprotocol/stellar-contracts build`, and `build` / `typecheck` / `lint` for `@attestprotocol/stellar-sdk`, and `lint:ts` / `test:unit` (49 passed) for horizon all exit 0. `pnpm --filter horizon lint` still cannot run (no ESLint 9 config anywhere in the repo; pre-existing, recorded in Plan V). `vitest run` in `packages/stellar-sdk`: 121 passed, 12 failed — the 12 are `__tests__/indexer.test.ts` hitting a live 404 endpoint, unchanged and unrelated (same finding as Plan IV).
+
+### Plan VI task III: Integration suite against v2, flip `testnet.current`, horizon check
+
+- **Commit:** `83b2661`
+- **Result:** deviated (four test files had to be corrected before the suite could pass)
+- **Notes:**
+  - **Suite result against v2 (`CONTRACT_VERSION=v2`): 3 files passed, 1 skipped; 21 tests passed, 0 failed, 8 todo.** Re-run after the flip **without** `CONTRACT_VERSION` (resolving through `current`): identical — 21 passed, 8 todo. The skipped file is `protocol-resolver.integration.test.ts`, whose 8 cases are all `todo` and always have been.
+  - `testnet.current` = `v2`; `deployments.json` alias regenerated to the v2 ID; `protocol.ts` `networks.testnet.contractId` = v2; contracts package rebuilt.
+  - **Deviation — the off-chain helpers in `__test__/testutils.ts` were on pre-hardening layouts.** The first run against v2 failed 3 delegated tests with contract error 21 (`InvalidSignature`). Cause: `createAttestationMessage` / `createRevocationMessage` still built the old preimage (DST || schema_uid || nonce || deadline || value **length**), while `delegation.rs` has long since bound the message to the contract address and the network id and hashes the subject and the value. These tests were passing against **v1**, whose deployed wasm predates that change — so the drift was invisible until a current build was deployed. Both helpers now match `create_attestation_message` / `create_revocation_message` byte for byte and take the contract ID and network passphrase.
+  - **Deviation — `generateAttestationUid` was on the pre-HAL-01 formula** (schema_uid || subject || nonce), so `get_attestation` could not find the attestation the suite had just written. It now follows `utils.rs::generate_attestation_uid`: `"ATTEST_UID_V1" || contract_xdr || schema_uid_xdr || subject_xdr || attester_xdr || nonce_be8`, keccak256.
+  - **Encoding settled by evidence:** `BytesN<32>::to_xdr` is the **ScVal::Bytes** serialization (`nativeToScVal(buf).toXDR()`), not a bare 4-byte length prefix — `impl<T: IntoVal<Env,Val>> ToXdr for T` in soroban-sdk 27.0.6 converts to `Val` and calls `serialize_to_bytes`. With the bare-length encoding the on-chain lookup missed; with the ScVal encoding it hit. Same for addresses: `Address::to_xdr` is the full ScVal, i.e. `new Address(a).toScVal().toXDR()`.
+  - **Finding for the mainnet/SDK wave — `packages/stellar-sdk` has both bugs the test helpers had, and they are shipping in the major.** `src/utils/uidGenerator.ts:encodeBytesN32Xdr` uses the bare `0x00000020` length prefix for the schema UID (should be the ScVal::Bytes form), and `src/delegation.ts:createAttestMessage`/`createRevokeMessage` append `encodeAddressXdr(contractId)` where the contract appends `sha256(contract_xdr)`. Both were verified wrong against the deployed v2 contract by the corrected helpers passing where these layouts fail. **Not fixed here** — `packages/stellar-sdk/src` is outside this plan's `files_modified` and the SDK major belongs to Plan VII/VIII. This should be a task there; the SDK's own unit tests only check determinism, so they do not catch it.
+  - **Deviation — nonce sequence.** The revocation test read `get_attester_nonce`; the contract tracks revocations on a separate counter, so it failed with error 19 (`InvalidNonce`). It now reads `get_revoker_nonce`, one of the entry points the regenerated bindings exposed.
+  - **Deviation — test isolation.** `protocol.integration.test.ts` registered a fixed `TEST_XDR_SCHEMA` constant, which fails with error 28 (`SchemaAlreadyExists`) on every run after the first. It now builds a per-run definition with `createTestXDRSchema` and the existing run id, matching how the JSON-schema case already worked.
+  - **Deviation — `contract-status.test.ts` UID vector.** Its hardcoded expected digest is meaningless under the new formula (the UID depends on the contract address). Replaced with determinism plus the two properties the hardening exists for: two attesters over the same subject and nonce differ, and two deployments differ.
+  - `__test__/readme.md` rewritten: the four suites, the registry as the address source, `ADMIN_SECRET_KEY` / `CONTRACT_VERSION`, and the three off-chain parity points. No "Authority" content remains.
+  - **Horizon check (limited).** `pnpm --filter horizon build` then `STELLAR_NETWORK=testnet node -e "require('./dist/common/constants')"` prints `indexing=<v1>,<v2> target=<v2>` and the exported `CONTRACT_IDS_TO_INDEX` is exactly the two testnet IDs with `PROTOCOL_CONTRACT_ID` = v2. No `DATABASE_URL` is available on this host, so horizon was not started and `GET /api/contracts` was not exercised at runtime; the endpoint is covered by Plan V's unit tests.
+  - `apps/horizon/README.md` Railway table now carries the real testnet values and the backfill command with `startLedger: 4404453`. Mainnet cells remain placeholders for Plan VII. **Nothing in this plan touched mainnet.**
+
+### Plan VI finished
+
+2026-08-30T00:00:00Z — three tasks committed (`6a87b7b`, `49555bb`, `83b2661`).
+
+Nyquist criteria for Plan VI:
+- [x] `testnet.v2` = `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD`, sdk `27.0.6`, `deployedLedger` 4404453; `testnet.v1` untouched.
+- [x] Bindings regenerated with stellar-cli 27.1.0; `networks` follows `current` on both networks (testnet v2, mainnet v1).
+- [x] Workspace on `@stellar/stellar-sdk` 16.3.0 only; every package builds, type-checks and unit-tests (horizon `lint` still blocked repo-wide, pre-existing).
+- [x] Integration suite green against v2 both pinned and via `current`: 21 passed, 0 failed, 8 todo.
+- [x] Testnet Railway values and the backfill `startLedger` documented in `apps/horizon/README.md`.
