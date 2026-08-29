@@ -61,6 +61,8 @@ Does not deliver: migration of v1 state, Solana/Starknet/Aptos/Sui, code changes
 - Shape of the `registry.ts` TypeScript types and the helper `resolveContractFilter` in horizon.
 - Wording of README / runbook updates.
 
+- **D-22:** (2026-08-30, user) The stellar-sdk off-chain encoding bugs found in Plan VI (`uidGenerator.ts` BytesN<32> XDR prefix; `delegation.ts` contract component must be `sha256(contract_xdr)`) are fixed inside this sprint as Plan IX (wave IV-b), before the Plan VII release — not deferred to a follow-up issue.
+
 ## Deferred ideas
 
 - Remove `contracts/stellar/deployments.json` and its `files` entry one release after the registry ships (it is a generated alias of `contracts.json` `current` until then).

@@ -6,7 +6,7 @@ goal: Stellar contracts run on soroban-sdk 27 as versioned v2 deployments whose 
 worktree: false
 branch: jira/2026-08-29-soroban-sdk-27-v2-contracts
 issue: none
-depends_on: [VI]
+depends_on: [VI, IX]
 parallel_with: []
 files_modified:
   - contracts/stellar/bindings/src/contracts.json
