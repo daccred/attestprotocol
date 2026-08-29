@@ -33,6 +33,7 @@ export interface AttestationFilters {
   attesterAddress?: string
   subjectAddress?: string
   revoked?: boolean
+  contractAddress?: string
   limit?: number
   offset?: number
 }
@@ -121,6 +122,7 @@ export async function getAttestations(filters: AttestationFilters = {}) {
       attesterAddress,
       subjectAddress,
       revoked,
+      contractAddress,
       limit = 50,
       offset = 0,
     } = filters
@@ -133,6 +135,7 @@ export async function getAttestations(filters: AttestationFilters = {}) {
     if (attesterAddress) where.attesterAddress = attesterAddress
     if (subjectAddress) where.subjectAddress = subjectAddress
     if (revoked !== undefined) where.revoked = revoked
+    if (contractAddress) where.contractAddress = contractAddress
 
     // Build query params, omitting empty where for exact test expectations
     const findParams: any = {
