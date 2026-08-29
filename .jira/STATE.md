@@ -45,6 +45,10 @@ Status legend: `researching`, `planned`, `executing`, `verifying`, `done`, `bloc
 - 2026-08-29 [2026-08-29-soroban-sdk-27-v2-contracts] D-20: Cargo workspace version becomes `2.0.0` (`contracts/stellar/Cargo.toml` `[workspace.package] version`), matching the "v2" contract generation.
 - 2026-08-29 [2026-08-29-soroban-sdk-27-v2-contracts] D-21: Testnet deployer identity: if `contracts/stellar/env.sh` provides `SOURCE_IDENTITY`, use it; otherwise the executor generates and funds `attest-v2-testnet` with.
 
+## Issues
+
+- [2026-08-29-soroban-sdk-27-v2-contracts] wave issues: #113 (compile, plan I), #114 (tests+BLS, III), #115 (registry, IV), #116 (horizon, V), #117 (testnet v2, VI), #118 (mainnet v2, VII); plans II and VIII held as drafts pending screenshots (`ISSUE-wave-*-plan-*.md`).
+
 ## Blockers
 
 <!-- Active blockers across all sprints. Resolved blockers move to the Decisions log. -->
