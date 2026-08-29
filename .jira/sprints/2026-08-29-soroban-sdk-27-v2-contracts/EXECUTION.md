@@ -311,3 +311,47 @@ Nyquist criteria for Plan VI:
 - [x] Workspace on `@stellar/stellar-sdk` 16.3.0 only; every package builds, type-checks and unit-tests (horizon `lint` still blocked repo-wide, pre-existing).
 - [x] Integration suite green against v2 both pinned and via `current`: 21 passed, 0 failed, 8 todo.
 - [x] Testnet Railway values and the backfill `startLedger` documented in `apps/horizon/README.md`.
+
+### Plan IX task I: Fix `encodeBytesN32Xdr` and the delegation contract component
+
+- **Commit:** `d36d8e6`
+- **Result:** done
+- **Notes:**
+  - `uidGenerator.ts`: `encodeBytesN32Xdr` now returns `nativeToScVal(buf).toXDR()`; the doc comment that asserted the opposite ("intentionally NOT nativeToScVal") is gone. `encodeAddressXdr` was already `new Address(addr).toScVal().toXDR()` — unchanged.
+  - `delegation.ts`: the contract component in both `createAttestMessage` and `createRevokeMessage` is now the sha256 of the address XDR. Confirmed against `delegation.rs:460-461` (`sha256(current_contract_address().to_xdr())`).
+  - **Small deviation:** the plan's Done-when grep expected the literal `sha256(encodeAddressXdr(contractId))`. The file already has a `hashAddress()` helper that is exactly that expression, and it is what the subject component uses, so both call sites use `hashAddress(contractId)` rather than re-inlining. `grep -c "hashAddress(contractId)"` = 2.
+  - No helper became unused. `typecheck` and `lint` exit 0.
+
+### Plan IX task II: Parity tests against the reference helpers
+
+- **Commit:** `2b38951`
+- **Result:** done
+- **Notes:**
+  - `contracts/stellar/__test__/testutils.ts` imports cleanly from the package tests (`../../../contracts/stellar/__test__/testutils`) — no verbatim copy was needed, so there is no second copy to drift.
+  - `uid-parity.test.ts` (6 tests): nonces 0, 1, 2^40, plus swapped subject/attester, all equal to the reference; one regression vector reconstructing the old bare-prefix digest and asserting it differs; one asserting the ScVal::Bytes prefix is not `00000020`.
+  - `delegation-parity.test.ts` (5 tests): attest with and without `expiration`, attest at nonce 0 with an empty value, revoke, and a contract-binding check, all on the testnet passphrase.
+  - `delegation.test.ts`: determinism assertions kept; added a test that rebuilds the preimage and asserts bytes `[len(DST), len(DST)+32)` are the 32-byte sha256 of the contract address, and that the rebuilt preimage hashes to the same G1 point the SDK returns.
+  - All three files green: 20 tests passed. `indexer.test.ts` live-HTTP failures remain out of scope.
+
+### Plan IX task III: Live round-trip against testnet v2 and changelog entry
+
+- **Commit:** `<task-III-sha>`
+- **Result:** done
+- **Notes:**
+  - Throwaway script under `$CLAUDE_JOB_DIR/tmp` (not committed), importing **the SDK sources** `packages/stellar-sdk/src/utils/uidGenerator.ts` and `src/delegation.ts` directly — not the contract test helpers. `ADMIN_SECRET_KEY` came from `stellar keys show attest-v2-testnet` in the shell; never printed, never written to a file. `contracts/stellar/env.sh` still does not exist on this machine (same as Plan VI).
+  - Against `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD`, run id `e8d83756`, schema `1013003d5c2ea8f10e66bbf1585e93b0c5cfd8f4a5b6b846e0259ada30b09dab`:
+    - **`attest` tx `fbfaac3be29c6e7eb089ebe339cd77488bc806088e6d39a9b761113ea5293a6b`** — the UID the SDK predicted, `c458469416a630ee2247f19b22ec8f563b94b9c89c9e2b432b90103a4fdb6489`, is byte-identical to the UID the contract returned, and `get_attestation` with that UID returned the attestation just written.
+    - **`attest_by_delegation` tx `0bcd4e01b19f314c994b7a11bb3ad85cc5aa27e7315d0d9d05e6942fafa8ed61`** — BLS key registered for the run, signature over the SDK-computed message point, accepted (no error 21); the resulting attestation is readable at the SDK-computed UID.
+  - Both hashes return HTTP 200 from Horizon testnet and resolve on `https://stellar.expert/explorer/testnet/tx/<hash>`.
+  - `packages/stellar-sdk/CHANGELOG.md` gained an `## Unreleased` / `### Fixed` entry stating both encoding fixes and that UIDs and delegated signatures produced by earlier SDK versions do not match on chain. Plan VII's changeset consumes it.
+
+### Plan IX finished
+
+2026-08-30 — three tasks committed (`d36d8e6`, `2b38951`, `<task-III-sha>`).
+
+Nyquist criteria for Plan IX:
+- [x] SDK `generateAttestationUid` equals the reference helper for every fixture.
+- [x] SDK `createAttestMessage`/`createRevokeMessage` equal the reference helper for every fixture.
+- [x] `get_attestation` on testnet v2 with an SDK-computed UID returned the attestation just written.
+- [x] `attest_by_delegation` on testnet v2 with an SDK-computed message and BLS signature succeeded.
+- [x] CHANGELOG records the behavioural change for consumers.

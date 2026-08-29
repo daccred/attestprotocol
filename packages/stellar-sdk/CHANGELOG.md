@@ -1,5 +1,20 @@
 # @attestprotocol/stellar-sdk
 
+## Unreleased
+
+### Fixed
+
+- Attestation UIDs and delegated attest/revoke messages now match the formula the
+  Soroban contract uses. Two encodings were wrong: 32-byte values were serialized
+  with a bare 4-byte length prefix instead of the full `ScVal::Bytes` form that
+  `BytesN<32>::to_xdr` produces, and the delegated message bound the contract by its
+  raw XDR address instead of the SHA-256 of it.
+
+  **Breaking for consumers:** UIDs computed by earlier versions of this package do
+  not match the UIDs stored on chain, so lookups built from them fail. Recompute any
+  cached UID. Delegated signatures produced by earlier versions are rejected by the
+  contract and must be re-signed.
+
 ## 2.0.2
 
 ### Patch Changes
