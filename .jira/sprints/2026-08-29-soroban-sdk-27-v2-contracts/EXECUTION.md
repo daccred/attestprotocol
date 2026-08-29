@@ -148,7 +148,7 @@ Nyquist criteria for Plan II:
 
 ### Plan III task III: Align Makefiles, cargo config and the release workflow with stellar-cli 27
 
-- **Commit:** `PENDING3`
+- **Commit:** `01625c0`
 - **Result:** deviated (two extra Makefile targets removed as a consequence)
 - **Notes:**
   - `protocol/Makefile`: `build` is `stellar contract build --package protocol` (bare `cargo build --target wasm32v1-none --release` skips the optimizer and the contract-meta section). The example contract ID in the header comment is now a placeholder pointing at the registry.
@@ -199,3 +199,13 @@ Nyquist criteria for Plan II:
 ### Plan IV finished
 
 2026-08-29T23:20:00Z — three tasks committed (`e811efe`, `fb28f41`, `32ffbba`).
+
+### Plan III finished
+
+2026-08-29T23:55:00Z — all three tasks committed (`7a54344`, `93d2ca5`, `01625c0`).
+
+Nyquist criteria for Plan III:
+- [x] `cargo test --workspace` in `contracts/stellar`: **79 passed, 0 failed** (77 original + 2 new HAL-07 tests).
+- [x] `cargo clippy --workspace -- -D warnings` exits 0.
+- [x] `make build` invokes `stellar contract build` and exits 0 in both `protocol/` and `resolvers/`.
+- [x] `soroban-release.yml` has one job, pinned to `@v27.0.0`.
