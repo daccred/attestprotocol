@@ -27,9 +27,19 @@ describe('registry-based contract resolution', () => {
     expect(client.resolvedContractId).toBe(contractId)
   })
 
+  it('pins an explicit version', () => {
+    const client = new StellarAttestationClient({
+      rpcUrl,
+      network: 'testnet',
+      publicKey,
+      contractVersion: 'v2',
+    })
+    expect(client.resolvedContractId).toBe(getContractId('testnet', 'v2'))
+  })
+
   it('throws for a version that is not registered', () => {
     expect(
-      () => new StellarAttestationClient({ rpcUrl, network: 'testnet', publicKey, contractVersion: 'v2' })
-    ).toThrow('No v2 contract registered for testnet')
+      () => new StellarAttestationClient({ rpcUrl, network: 'mainnet', publicKey, contractVersion: 'v2' })
+    ).toThrow('No v2 contract registered for mainnet')
   })
 })
