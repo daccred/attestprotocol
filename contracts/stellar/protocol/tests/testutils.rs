@@ -168,3 +168,38 @@ impl DummyResolver {
         Ok(())
     }
 }
+
+/// =======================================================================================
+///
+///                              EVENT ACCESS HELPER
+///
+/// =======================================================================================
+/// Returns the emitted contract events as `(contract address, topics, data)` triples.
+///
+/// `env.events().all()` returns an opaque `ContractEvents` wrapper that only exposes
+/// the XDR form, so this rebuilds the triple shape the assertions in these tests are
+/// written against.
+pub fn all_events(env: &Env) -> soroban_sdk::Vec<(Address, soroban_sdk::Vec<soroban_sdk::Val>, soroban_sdk::Val)> {
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::{xdr, TryFromVal};
+
+    let mut out = soroban_sdk::Vec::new(env);
+    for event in env.events().all().events() {
+        let xdr::ContractEventBody::V0(body) = &event.body;
+
+        let contract_id = event.contract_id.clone().expect("event without contract id");
+        let address = Address::try_from_val(env, &xdr::ScAddress::Contract(contract_id))
+            .expect("event contract id is not an address");
+
+        let topics = soroban_sdk::Vec::<soroban_sdk::Val>::try_from_val(
+            env,
+            &xdr::ScVal::Vec(Some(xdr::ScVec(body.topics.clone()))),
+        )
+        .expect("event topics are not a vec");
+
+        let data = soroban_sdk::Val::try_from_val(env, &body.data).expect("event data is not a val");
+
+        out.push_back((address, topics, data));
+    }
+    out
+}

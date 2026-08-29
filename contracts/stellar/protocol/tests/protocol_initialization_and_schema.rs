@@ -1,3 +1,4 @@
+mod testutils;
 use protocol::{errors::Error, state::Schema, utils::create_xdr_string, AttestationContract, AttestationContractClient};
 use soroban_sdk::{
     symbol_short,
@@ -96,7 +97,7 @@ fn initialize_and_register_schema() {
         }]);
         let schema_uid: BytesN<32> = client.register(&authority, &schema_definition, &case.resolver, &case.revocable);
 
-        let events = env.events().all();
+        let events = testutils::all_events(&env);
         dbg!(&events);
         let last = events.last().unwrap();
         dbg!(&last);
