@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { Keypair } from '@stellar/stellar-sdk'
-import { getContractId } from '@attestprotocol/stellar-contracts/registry'
+import { getContractId, type ContractVersion } from '@attestprotocol/stellar-contracts/registry'
 import { StellarAttestationClient } from '../src/client'
 
 const publicKey = Keypair.random().publicKey()
@@ -37,9 +37,25 @@ describe('registry-based contract resolution', () => {
     expect(client.resolvedContractId).toBe(getContractId('testnet', 'v2'))
   })
 
+  it('pins an explicit version on mainnet', () => {
+    const client = new StellarAttestationClient({
+      rpcUrl,
+      network: 'mainnet',
+      publicKey,
+      contractVersion: 'v2',
+    })
+    expect(client.resolvedContractId).toBe(getContractId('mainnet', 'v2'))
+  })
+
   it('throws for a version that is not registered', () => {
     expect(
-      () => new StellarAttestationClient({ rpcUrl, network: 'mainnet', publicKey, contractVersion: 'v2' })
-    ).toThrow('No v2 contract registered for mainnet')
+      () =>
+        new StellarAttestationClient({
+          rpcUrl,
+          network: 'mainnet',
+          publicKey,
+          contractVersion: 'v9' as ContractVersion,
+        })
+    ).toThrow('No v9 contract registered for mainnet')
   })
 })

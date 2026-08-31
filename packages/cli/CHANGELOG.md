@@ -1,5 +1,11 @@
 # @attestprotocol/cli
 
+## 2.0.3
+
+### Patch Changes
+
+- @attestprotocol/sdk@2.0.3
+
 ## 2.0.2
 
 ### Patch Changes
