@@ -48,7 +48,12 @@ Intentionally out of scope for this step:
 
 ## Visual evidence
 
-[TODO: attach screenshots of the four pages in light and dark — eight images. None exist yet; the pages have not been changed, and the mainnet address they will show does not exist until the preceding step runs.]
+Visual evidence (light/dark, captured from the running docs site):
+
+- [introduction](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/introduction-ids-light.png) / [dark](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/introduction-ids-dark.png)
+- [stellar/reference](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/stellar-reference-ids-light.png) / [dark](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/stellar-reference-ids-dark.png)
+- [stellar/getting-started](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/stellar-getting-started-ids-light.png) / [dark](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/stellar-getting-started-ids-dark.png)
+- [concepts/authorities](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/concepts-authorities-ids-light.png) / [dark](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/concepts-authorities-ids-dark.png)
 
 ## Verification
 
@@ -67,3 +72,6 @@ N/A — direct merge. Documentation only.
 
 - The snippet duplicates the registry rather than importing it, so the two can drift. The address-equality check above is what catches that, and it belongs in review of any future deployment.
 - Interpolating snippet values inside a code fence is documented by Mintlify but unverified in this project; the fallback of dropping the address from the sample covers it.
+status: pushed
+url: https://github.com/daccred/attestprotocol/issues/121
+pushed_at: 2026-08-31T18:52:06Z

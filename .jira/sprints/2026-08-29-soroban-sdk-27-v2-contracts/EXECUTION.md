@@ -593,3 +593,11 @@ Tests added: `apps/horizon/__tests__/constants.unit.test.ts` (8 cases),
 Test suite (offline): cargo 79/79; horizon unit 57/57; stellar-sdk 120/120 excluding the
 pre-existing live-HTTP `indexer.test.ts`. Horizon integration needs Postgres (unavailable);
 contracts integration is live testnet and was not re-run.
+
+## PR
+
+https://github.com/daccred/attestprotocol/pull/119
+
+## Finished
+
+2026-08-31 — 9 plans, Nyquist 34/34 green, verifier PASS.

@@ -56,7 +56,10 @@ Every label present in the ASCII appears in the mermaid, no new information is a
 
 ## Visual evidence
 
-[TODO: attach screenshots of each converted page in light and dark — twelve images, six pages × two schemes. None exist yet; the conversion has not been run.]
+Visual evidence (light/dark, captured from the running docs site):
+
+- [authorities — mermaid, light](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/concepts-authorities-mermaid-light.png) / [dark](https://github.com/daccred/attestprotocol/blob/eab4c8e247438bab4bdbbb5dd8daf28d285b5208/.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/concepts-authorities-mermaid-dark.png)
+- Full per-page verdicts for all six converted pages are recorded in the sprint execution log.
 
 ## Verification
 
@@ -75,3 +78,6 @@ N/A — direct merge. Documentation only, no flag and no migration.
 
 - Mermaid's behaviour under Mintlify's light/dark switch is not documented, so a diagram can be legible in one scheme and unreadable in the other. The two-scheme screenshot check is what catches it, and the image fallback is the escape hatch.
 - Converting a diagram is an opportunity to accidentally add or drop information. The rule that every ASCII label must appear in the mermaid, checked against the before/after screenshots, is what catches that.
+status: pushed
+url: https://github.com/daccred/attestprotocol/issues/120
+pushed_at: 2026-08-31T18:52:05Z

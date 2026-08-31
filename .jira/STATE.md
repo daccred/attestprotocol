@@ -15,7 +15,7 @@ Project-wide state for the `jira` workflow. The orchestrator commands keep this 
 
 | Slug | Status | Goal | Outcome |
 |------|--------|------|---------|
-| 2026-08-29-soroban-sdk-27-v2-contracts | executing | Upgrade Stellar contracts to soroban-sdk 27, deploy versioned v2 contracts, registry-driven addresses in SDK/horizon/docs | — |
+| 2026-08-29-soroban-sdk-27-v2-contracts | done | Upgrade Stellar contracts to soroban-sdk 27, deploy versioned v2 contracts, registry-driven addresses in SDK/horizon/docs | https://github.com/daccred/attestprotocol/pull/119 |
 
 Status legend: `researching`, `planned`, `executing`, `verifying`, `done`, `blocked`, `abandoned`.
 
@@ -47,13 +47,13 @@ Status legend: `researching`, `planned`, `executing`, `verifying`, `done`, `bloc
 
 ## Issues
 
-- [2026-08-29-soroban-sdk-27-v2-contracts] wave issues: #113 (compile, plan I), #114 (tests+BLS, III), #115 (registry, IV), #116 (horizon, V), #117 (testnet v2, VI), #118 (mainnet v2, VII); plans II and VIII held as drafts pending screenshots (`ISSUE-wave-*-plan-*.md`).
+- [2026-08-29-soroban-sdk-27-v2-contracts] wave issues: #113 (compile, plan I), #114 (tests+BLS, III), #115 (registry, IV), #116 (horizon, V), #117 (testnet v2, VI), #118 (mainnet v2, VII); #120 (docs diagrams, II), #121 (docs IDs, VIII) pushed after screenshots landed.
 
 ## Blockers
 
 <!-- Active blockers across all sprints. Resolved blockers move to the Decisions log. -->
 
-- [2026-08-29-soroban-sdk-27-v2-contracts] Plan VII blocked at the mainnet checkpoint: user must run `deploy.sh --protocol --version v2 --network mainnet …` with their own identity, then paste back the `mainnet.v2` block and approve the `current` flip. Waves I–IV-b complete; Plan VIII (docs IDs) also waits on the mainnet ID.
+- RESOLVED (2026-08-31, mainnet v2 deployed by user, current flipped): Plan VII blocked at the mainnet checkpoint: user must run `deploy.sh --protocol --version v2 --network mainnet …` with their own identity, then paste back the `mainnet.v2` block and approve the `current` flip. Waves I–IV-b complete; Plan VIII (docs IDs) also waits on the mainnet ID.
 
 ## Notes
 
