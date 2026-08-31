@@ -27,6 +27,14 @@
       "txHash": "6eeaf6691748956417b7929951ff3789f499190b2c220d3e758e3b62ddc66e7f",
       "wasmHash": null
     },
-    "current": "v1"
+    "current": "v2",
+    "v2": {
+      "id": "CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N",
+      "sdk": "27.0.6",
+      "deployedAt": "2026-08-31T18:25:04Z",
+      "deployedLedger": 64212659,
+      "txHash": "36d0d511ff34c575662bad84ffdbf917f74f1110e77824610979e8e14d7f5688",
+      "wasmHash": "2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8"
+    }
   }
 }

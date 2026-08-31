@@ -228,12 +228,34 @@ dashboard; deploys never set them automatically. After each contract deployment,
 | Key | Testnet | Mainnet |
 | --- | --- | --- |
 | `STELLAR_NETWORK` | `testnet` | `mainnet` |
-| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,<mainnet v2 id>` |
-| `PROTOCOL_CONTRACT_ID` | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `<mainnet v2 id>` |
+| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` |
+| `PROTOCOL_CONTRACT_ID` | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` |
+
+`AUTHORITY_CONTRACT_ID` is no longer read by the indexer — delete it from both services.
 
 Leaving `INDEX_CONTRACT_IDS` unset achieves the same result once the registry contains both
-versions; set it explicitly only to index a subset. After applying the variables and
-redeploying, run the backfill above with the new contract's `deployedLedger`.
+versions; set it explicitly only to index a subset.
+
+After applying the variables and redeploying, backfill each service from the ledger its new
+contract was deployed in:
+
+```bash
+# production (mainnet), protocol v2 deployed in ledger 64212659
+curl -X POST https://graph.attest.so/api/ingest/backfill \
+  -H 'content-type: application/json' \
+  -d '{"startLedger": 64212659}'
+
+# testnet, protocol v2 deployed in ledger 4404453
+curl -X POST $HORIZON_TESTNET/api/ingest/backfill \
+  -H 'content-type: application/json' \
+  -d '{"startLedger": 4404453}'
+```
+
+Confirm the redeployed service resolves the new contract:
+
+```bash
+curl https://graph.attest.so/api/contracts | jq .data.current   # -> "v2"
+```
 
 ## Running the Indexer
 

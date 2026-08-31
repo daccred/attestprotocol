@@ -42,8 +42,8 @@ These scripts use the official mainnet deployments:
 
 | Contract | Address |
 |----------|---------|
-| **Protocol v2** | `<MAINNET_V2_ID>` — becomes current once the mainnet v2 deployment lands |
-| **Protocol v1 (current)** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+| **Protocol v2 (current)** | `CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` |
+| **Protocol v1 (legacy)** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
 | **RPC URL** | `https://soroban-rpc.mainnet.stellar.gateway.fm` |
 | **Network Passphrase** | `Public Global Stellar Network ; September 2015` |
 
@@ -295,7 +295,7 @@ npx ts-node mainnet/importSchema.ts identity --secret=SABCDEF123...
 
 | Aspect | Testnet | Mainnet |
 |--------|---------|---------|
-| **Contract ID** | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` (v2) | `<MAINNET_V2_ID>` (v2, pending deployment) |
+| **Contract ID** | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` (v2) | `CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` (v2) |
 | **RPC URL** | `https://soroban-testnet.stellar.org` | `https://soroban-rpc.mainnet.stellar.gateway.fm` |
 | **Network** | Testnet | Public mainnet |
 | **Friendbot** | Automated funding available | Not available |
@@ -372,6 +372,8 @@ To minimize mainnet costs during testing:
 
 - **v1.0** (November 2025): Initial mainnet scripts with secret key arguments
   - Mainnet Protocol Contract: `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` (now the v1 entry of the registry)
+- **v2.0** (August 2026): Protocol v2 on soroban-sdk 27 is the current mainnet deployment
+  - Mainnet Protocol Contract: `CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` (registry `mainnet.current` = `v2`)
 
 ---
 

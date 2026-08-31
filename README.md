@@ -35,8 +35,8 @@
 ### Smart Contracts
 
 **Stellar (Mainnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/public)
-<!-- Protocol v2 (current) is added here once the mainnet v2 deployment lands; see contracts.json. -->
-- [Protocol v1 (current)](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
+- [Protocol v2 (current)](https://stellar.expert/explorer/public/contract/CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N) · `CAMZU...`
+- [Protocol v1 (legacy)](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
 
 **Stellar (Testnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/testnet)
 - [Protocol v2 (current)](https://stellar.expert/explorer/testnet/contract/CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD) · `CA2QE...`
