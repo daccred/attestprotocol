@@ -26,7 +26,7 @@ Unlike traditional event-only indexers, our enhanced approach provides comprehen
 
 ### 🎯 **Contract-Specific Focus**
 - Indexes data for specific smart contracts only (not global blockchain data)
-- Tracks both **protocol** and **authority** contracts from deployments.json
+- Tracks every protocol contract version registered in the contract registry (`contracts.json`)
 - Optimized for attestation protocol interactions
 
 ### 📊 **Multi-Source Data Collection**
@@ -44,7 +44,7 @@ Unlike traditional event-only indexers, our enhanced approach provides comprehen
 ## Key Features
 
 - **Comprehensive Contract Indexing** - Goes beyond events to capture all contract interactions
-- **Multi-Contract Support** - Simultaneous indexing of protocol and authority contracts
+- **Multi-Contract Support** - Simultaneous indexing of every registered protocol contract version
 - **Enhanced Database Schema** - Optimized models for contract-specific operations tracking
 - **Queue-Based Job Processing** - Reliable background processing with retry logic
 - **Failed Operation Tracking** - Complete visibility including unsuccessful operations
