@@ -80,13 +80,13 @@ overrides:
   ws@>=8.0.0 <8.20.1: '>=8.20.1'
   zod@3: '>=3.22.3 <4'
   zod@<=3.22.2: '>=3.22.3'
-onlyBuiltDependencies:
-- '@prisma/client'
-- '@prisma/engines'
-- bufferutil
-- esbuild
-- keytar
-- prisma
-- puppeteer
-- unrs-resolver
-- utf-8-validate
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  bufferutil: true
+  esbuild: true
+  keytar: true
+  prisma: true
+  puppeteer: true
+  unrs-resolver: true
+  utf-8-validate: true
