@@ -473,3 +473,45 @@ Nyquist criteria for Plan VII:
 - [x] Railway runbook has exact keys and values for both services plus the backfill call and the confirmation curl.
 - [x] Changeset named both packages major; both are 3.0.0 and `pnpm -r build` passes after versioning.
 - [ ] npm publish and `cargo release` — handed to the user, to run after merge.
+
+### Plan VIII task I: Create the contracts snippet and render the ID tables from it
+
+- **Commit:** `b312047`
+- **Result:** deviated (snippet mechanism; authorities fallback taken)
+- **Notes:**
+  - `apps/docs/snippets/contracts.mdx` (new) exports `testnetV1`, `testnetV2`, `mainnetV1`, `mainnetV2`, `testnetCurrent`, `mainnetCurrent`, copied verbatim from `contracts/stellar/bindings/src/contracts.json` (testnet v2 `CA2QET2K…AUCD`, mainnet v2 `CAMZUXDE…SF2N`), with the provenance comment on line 1.
+  - **Deviation 1 — the plan's `export const ContractAddresses = () => (<table>…)` component renders nothing.** The page compiles (the sentence after it renders), but `<ContractAddresses />` produces no DOM: 1 table on `/introduction` (the Key Features one) and no ID text. A named arrow-function component exported from an `.mdx` snippet is not resolved by this Mintlify build; only `.jsx` snippets document that pattern. Replaced with the plain snippet-content form the Mintlify docs give first: the snippet body *is* the markdown table, imported as a default `import ContractAddresses from "/snippets/contracts.mdx"` and used as `<ContractAddresses />`. Same use-site markup, same Done-when greps.
+  - **Deviation 2 — snippet variables do not interpolate inside backticks.** `` `{testnetV2}` `` in a table cell rendered as the literal `{testnetV2}`; `<code>{testnetV2}</code>` renders the address. The table cells use `<code>`.
+  - **Deviation 3 — a snippet export cannot reference another export.** `export const testnetCurrent = testnetV2` imported as `undefined` at the use site (the paragraph rendered with an empty gap). The `*Current` constants are literals instead. Verified: `diff <(jq -r '.testnet[.testnet.current].id, .mainnet[.mainnet.current].id' contracts/stellar/bindings/src/contracts.json) <(grep -oP 'Current = "\K[^"]+' apps/docs/snippets/contracts.mdx)` is empty.
+  - **Deviation 4 — a `{/* … */}` comment line between exports hides every export below it from importers.** `testnetCurrent` resolved only after the comment above it was removed. All exports are now one contiguous run and the constraint is recorded in the file's top comment. This is the trap to watch when the snippet is next edited.
+  - **Authorities: the plan's fallback path was taken.** `contractId: '{testnetCurrent}'` inside the ```` ```typescript ```` fence rendered as the literal `{testnetCurrent}` — code-fence interpolation does not work here (same cause as deviation 2). The sample now passes `network: 'testnet'` only, with a sentence underneath quoting the resolved address from `{testnetCurrent}` in prose, so the page still imports the snippet per D-18.
+  - Done-when: the ID grep across `apps/docs/**/*.mdx` returns only `snippets/contracts.mdx`; `<ContractAddresses />` count = 1 on each of the three pages; the snippet import matches on `concepts/authorities.mdx`; all four pages reload from `mintlify dev` with no MDX error.
+  - `mintlify dev` was restarted (still the `/tmp/docsqa/mint` throwaway install from Plan II, cwd `apps/docs`, `http://localhost:3000`) — a server started before `snippets/` existed does not pick the directory up.
+
+### Plan VIII task II: Visual QA of the four pages in light and dark
+
+- **Commit:** screenshots + this log entry; the one QA fix landed inside task I's commit `b312047` (QA ran before that commit was made)
+- **Result:** done
+- **Notes:**
+  - `agent-browser` at 1440x1200, `set media light|dark`, Chrome launched with `--args "--no-sandbox"` (Plan II's host workaround; the flag only applies on the `open` that launches the browser, so `open` must come before `set viewport`).
+  - Screenshots in `.jira/sprints/2026-08-29-soroban-sdk-27-v2-contracts/screenshots/`: `introduction-ids-{light,dark}.png`, `stellar-reference-ids-{light,dark}.png`, `stellar-getting-started-ids-{light,dark}.png`, `concepts-authorities-ids-{light,dark}.png`, plus `concepts-authorities-mermaid-{light,dark}.png` for the Plan II diagram check.
+
+    | Page | Light | Dark | Verdict |
+    |---|---|---|---|
+    | introduction | pass | pass | four rows, full 56-char IDs in monospace, wrapped over two lines with no characters hidden |
+    | stellar/reference | pass | pass | same |
+    | stellar/getting-started | pass | pass | same |
+    | concepts/authorities | pass | pass | resolved testnet ID in prose; no `{testnetCurrent}` literal anywhere on the page |
+
+  - The permissionless-model mermaid diagram from Plan II still renders on `concepts/authorities.mdx` in both schemes.
+  - One QA fix: the sample's trailing comment (`// resolves to the current registered contract for that network`) overflowed the code block's horizontal bound and was clipped mid-word; shortened to `// resolves to the current contract` and re-captured.
+  - Table IDs sit in Mintlify's muted code style in dark mode — dimmer than body text but legible at 100%; no change made.
+
+### Plan VIII finished
+
+2026-08-31 — both tasks committed.
+
+Nyquist criteria for Plan VIII:
+- [x] No hardcoded protocol contract ID in any `.mdx` outside `snippets/contracts.mdx`.
+- [x] Snippet values equal `contracts.json` — both the `*V2` diff and the `*Current` diff are empty.
+- [x] Four pages pass visual QA in both schemes.
