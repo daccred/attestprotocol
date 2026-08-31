@@ -515,3 +515,81 @@ Nyquist criteria for Plan VIII:
 - [x] No hardcoded protocol contract ID in any `.mdx` outside `snippets/contracts.mdx`.
 - [x] Snippet values equal `contracts.json` — both the `*V2` diff and the `*Current` diff are empty.
 - [x] Four pages pass visual QA in both schemes.
+
+## Nyquist results
+
+Verified 2026-08-31 by `jira-nyquist` on `jira/2026-08-29-soroban-sdk-27-v2-contracts`. Live-network
+criteria are not re-run; the verdict cites the run recorded above.
+
+**Plan I — toolchain and sdk 27 compile**
+- [x] `stellar --version` = 27.1.0, `wasm32v1-none` present — re-checked.
+- [x] `cargo clippy --workspace -- -D warnings` exits 0 — re-run.
+- [x] `Cargo.lock` resolves soroban-env-host 27.0.1 and stellar-xdr 27.0.0 — re-checked.
+- [x] `protocol.wasm` and `resolvers.wasm` present in `target/wasm32v1-none/release/`.
+- [x] `cargo test --workspace` compiles and runs — re-run.
+
+**Plan II — mermaid diagrams**
+- [x] No box-drawing fences remain in `apps/docs/concepts/*.mdx`.
+- [x] Pages render under `mintlify dev` — covered by inspection; recorded in Plan II task I.
+- [x] Light/dark screenshots — covered by inspection: 10 files in `screenshots/`.
+
+**Plan III — sdk 27 semantics and HAL-07**
+- [x] `cargo test --workspace`: 79 passed, 0 failed — re-run.
+- [x] `cargo clippy --workspace -- -D warnings` exits 0 — re-run.
+- [x] `make build` invokes `stellar contract build` — covered by inspection (wasm artifacts present).
+- [x] `soroban-release.yml` pinned to `@v27.0.0` — re-checked.
+
+**Plan IV — registry as the single source of contract IDs**
+- [x] `@attestprotocol/stellar-contracts/registry` resolves from `apps/horizon` and returns the v1
+      mainnet ID — **gap filled**: `apps/horizon/__tests__/constants.unit.test.ts` (commit `e855364`).
+- [x] `deployments.json` regenerates byte-identical — `bash scripts/sync-deployments.sh` leaves no diff.
+- [x] `deploy.sh` syntax-checks — `bash -n deploy.sh` exits 0.
+- [x] `sync-networks.mjs` idempotent — reports "already matches", no diff.
+- [x] stellar-sdk typecheck/lint/tests pass — `vitest run` (excluding the pre-existing live-HTTP
+      `indexer.test.ts`): 13 files, 120 tests passed.
+
+**Plan V — horizon indexes from the registry**
+- [x] `lint:ts` and `test:unit` exit 0 (`lint` has no ESLint 9 config repo-wide; pre-existing).
+- [x] With no `INDEX_CONTRACT_IDS`, `CONTRACT_IDS_TO_INDEX` equals the registry's IDs for
+      `STELLAR_NETWORK` — **gap filled**: was a manual `node -e` check, now asserted in
+      `apps/horizon/__tests__/constants.unit.test.ts` for both networks, plus the override path and
+      both start-up guards.
+- [x] `/api/contracts`, `/api/contracts/:version` and the filters — `contracts.unit.test.ts`.
+- [x] README, `.env.example` and `railway.toml` — verified by inspection.
+
+**Plan VI — testnet v2**
+- [x] `testnet.v2` registered, sdk 27.0.6, `deployedLedger` 4404453; `testnet.v1` untouched.
+- [x] Bindings `networks` carries the current ID for testnet and mainnet.
+- [x] Workspace on `@stellar/stellar-sdk` 16.x in every package; unit suites green.
+- [x] Integration suite green against v2 (21 passed, recorded above); `testnet.current = "v2"` —
+      not re-run (live testnet).
+- [x] Railway values and backfill `startLedger` in `apps/horizon/README.md`.
+
+**Plan VII — mainnet v2 and release**
+- [x] `mainnet.v2` present, `mainnet.current = "v2"`, `mainnet.v1` untouched.
+- [x] No stray contract addresses in READMEs or runbooks; `AUTHORITY_CONTRACT_ID` documented as
+      removed. Observation, not a failure: `apps/horizon/README.md:29,47` still describes indexing
+      "authority contracts" in prose.
+- [x] Railway runbook has the keys, values and the backfill call for both environments.
+- [x] Coupled major applied — both packages at 3.0.0 (`changeset version` consumed the changeset).
+
+**Plan VIII — contract IDs from one snippet**
+- [x] No hardcoded protocol contract ID in any `.mdx` outside `snippets/contracts.mdx` — **gap
+      filled**: `contracts/stellar/__test__/docs-contract-ids.test.ts` (commit `ea1d8e6`).
+- [x] Snippet values equal `contracts.json` — same test, per constant plus the `current` pointers.
+- [x] Four pages pass visual QA in both schemes — covered by inspection (screenshots).
+
+**Plan IX — SDK encodings match the contract**
+- [x] `generateAttestationUid` parity — `packages/stellar-sdk/__tests__/uid-parity.test.ts`.
+- [x] `createAttestMessage`/`createRevokeMessage` parity —
+      `packages/stellar-sdk/__tests__/delegation-parity.test.ts`.
+- [x] `get_attestation` round-trip and `attest_by_delegation` on testnet v2 — recorded above, not
+      re-run (live testnet).
+- [x] CHANGELOG records the behavioural change for consumers.
+
+Tests added: `apps/horizon/__tests__/constants.unit.test.ts` (8 cases),
+`contracts/stellar/__test__/docs-contract-ids.test.ts` (6 cases).
+
+Test suite (offline): cargo 79/79; horizon unit 57/57; stellar-sdk 120/120 excluding the
+pre-existing live-HTTP `indexer.test.ts`. Horizon integration needs Postgres (unavailable);
+contracts integration is live testnet and was not re-run.
