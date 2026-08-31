@@ -1,0 +1,15 @@
+{/* Source of truth: contracts/stellar/bindings/src/contracts.json — update both together. The *Current constants repeat each network's `current` entry as a literal; keep every export on a contiguous run of lines, a comment between them hides the ones below from importers. */}
+
+export const testnetV1 = "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP"
+export const testnetV2 = "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD"
+export const mainnetV1 = "CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI"
+export const mainnetV2 = "CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N"
+export const testnetCurrent = "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD"
+export const mainnetCurrent = "CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N"
+
+| Network | Version | Protocol Contract |
+| ------- | ------- | ----------------- |
+| Testnet | v2 (current) | <code>{testnetV2}</code> |
+| Testnet | v1 (legacy)  | <code>{testnetV1}</code> |
+| Mainnet | v2 (current) | <code>{mainnetV2}</code> |
+| Mainnet | v1 (legacy)  | <code>{mainnetV1}</code> |
