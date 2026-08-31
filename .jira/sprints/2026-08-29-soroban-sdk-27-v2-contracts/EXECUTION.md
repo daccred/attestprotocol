@@ -419,3 +419,57 @@ On resume the executor verifies the entry, simulates the read-only `get_dst_for_
 ### Plan VII paused
 
 2026-08-29 — task I stopped at the human checkpoint as required by D-06. Two preparatory commits made (`1d84f1b`, `50051f3`). Tasks II and III resume once the mainnet v2 contract ID and the user's go-ahead arrive.
+
+### Plan VII task I: mainnet deployment — resolved by the user
+
+- **Commit:** none (the registry write landed as part of task II's commit)
+- **Result:** done (by the user, verified by the orchestrator)
+- **Notes:**
+  - `mainnet.v2` = **`CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N`**, sdk `27.0.6`, `deployedAt` `2026-08-31T18:25:04Z`, `deployedLedger` **64212659**, txHash `36d0d511ff34c575662bad84ffdbf917f74f1110e77824610979e8e14d7f5688`, wasmHash `2b699bf3a0f8c2363bb0b296be8afcaffc424986dafe33a082a058c3fe0950a8` — identical to the testnet v2 wasm and to the Plan I build, so both networks run the same code.
+  - Initialized with admin `GCUP5ZBYMK3GWOXZVILFGSS5MUKWZ2WQWZIPGVAPBJDPYGQPVVA3CNZI`.
+  - `mainnet.v1` byte-identical. The executor performed no mainnet transaction of any kind, before or after the checkpoint; `deploy.sh` (run by the user) wrote the registry entry, which arrived as an uncommitted working-tree change and is committed in task II.
+
+### Plan VII task II: Flip `mainnet.current`, fill in the mainnet ID, complete the Railway runbook
+
+- **Commit:** `c67f1af`
+- **Result:** done
+- **Notes:**
+  - `mainnet.current` = `v2`. `sync-networks.mjs` rewrote `protocol.ts` `networks.mainnet.contractId` to the v2 address; `sync-deployments.sh` regenerated the `deployments.json` alias (mainnet `protocol.id` = mainnet v2, testnet unchanged at testnet v2). `@attestprotocol/stellar-contracts` rebuilt.
+  - README "Smart Contracts": mainnet now lists Protocol v2 (current) and v1 (legacy) with stellar.expert links, matching the testnet block already written in the preparatory commit.
+  - `apps/horizon/.env.example`: the dev default stays testnet v2; the commented production value is the real mainnet v2 ID.
+  - `apps/horizon/scripts/mainnet/README.md`: address table rows are Protocol v2 (current) / v1 (legacy); the testnet-vs-mainnet comparison row carries the real ID; version history gained a v2.0 (August 2026) entry. No authority contract references remain.
+  - `apps/horizon/README.md` Railway table now has final values for both services — `STELLAR_NETWORK`, `INDEX_CONTRACT_IDS` (v1,v2 comma list per network), `PROTOCOL_CONTRACT_ID` (v2) — an explicit "delete `AUTHORITY_CONTRACT_ID`" line, backfill calls for both services (mainnet `startLedger: 64212659`, testnet `4404453`) and the `curl .../api/contracts | jq .data.current` → `"v2"` confirmation. Per D-04 nothing was applied in Railway.
+  - **Small deviation:** the plan's Done-when grep `INDEX_CONTRACT_IDS=CBUUI7WK` assumes a `KEY=value` form. The runbook has always used a per-service table, so the value lives in the mainnet cell of the `INDEX_CONTRACT_IDS` row instead. Every other Done-when check passes verbatim.
+
+### Plan VII task III: Coupled major via changesets; Dependabot status
+
+- **Commit:** `cf60e1d`
+- **Result:** deviated (one stale test; changesets auto-commits)
+- **Notes:**
+  - `pnpm changeset version` consumed `.changeset/soroban-sdk-27-v2-contracts.md`: **`@attestprotocol/stellar-contracts` 2.0.2 → 3.0.0**, **`@attestprotocol/stellar-sdk` 2.0.2 → 3.0.0**, and the dependents `@attestprotocol/sdk` and `@attestprotocol/cli` 2.0.2 → 2.0.3. `pnpm-lock.yaml` was not touched (no install ran, workspace deps are `workspace:*`), so there is no lockfile churn to review.
+  - **Deviation:** the changeset config has `commit: true`, so `changeset version` made its own `RELEASING: Releasing 4 package(s)` commit, which is not a conventional-commit subject and would fail commitlint on a hook-checked path. Amended into one conventional commit for this task together with the two fixes below.
+  - **Deviation:** the changeset appends its section above the existing `## Unreleased` heading rather than absorbing it, leaving Plan IX's encoding-fix notes stranded below 3.0.0 as if still unreleased. The block moved verbatim under `## 3.0.0` as `### Fixed`; no `## Unreleased` heading remains.
+  - **Deviation (file outside `files_modified`):** `packages/stellar-sdk/__tests__/registry.test.ts` asserted that pinning `contractVersion: 'v2'` on mainnet throws — true only while mainnet had no v2, and false the moment task II landed. It now asserts mainnet v2 resolves to `getContractId('mainnet','v2')`, and the not-registered case uses an unknown version key. Same class of drift Plan VI hit on testnet.
+  - Verification: `pnpm -r build` exit 0; `@attestprotocol/stellar-sdk` `typecheck` and `lint` exit 0; its vitest suite 120 passed / 13 files (excluding `__tests__/indexer.test.ts`, which hits a live 404 endpoint — unchanged, unrelated, same finding as Plans IV/VI); horizon `test:unit` 49 passed.
+  - **Dependabot, open alerts now** (`gh api "repos/{owner}/{repo}/dependabot/alerts?state=open"`):
+    - #150 `soroban-env-host` GHSA-pm4j-7r4q-ccg8 — `contracts/stellar/Cargo.lock`
+    - #148 `stellar-xdr` GHSA-x57h-xx53-v53w — `contracts/stellar/Cargo.lock`
+    - #276 `extract-zip` GHSA-jmr9-qjv8-65gv — `pnpm-lock.yaml`, unrelated to this sprint
+    The `serde_with` (#235) and `rand` (#191) alerts recorded before the checkpoint have since closed. This branch's `contracts/stellar/Cargo.lock` carries env-host `27.0.1` and xdr `27.0.0`, so #150 and #148 close on their own once it is on `canary`; re-run the same `gh api` call after merge to confirm. **PR #112** (dependabot's patches for those two crates) becomes redundant then — close or rebase it.
+  - **Handed back to the user — nothing below was run by the executor.** Run after this branch merges to `canary`:
+    ```bash
+    pnpm release                 # npm publish of the JS packages (needs npm credentials)
+    pnpm release:stellar 2.0.0   # cargo release --execute; pushes the Rust crate tags
+    ```
+    `pnpm changeset version` is already done — the version bumps and CHANGELOGs are committed on this branch; do not re-run it.
+
+### Plan VII finished
+
+2026-08-31 — tasks II and III committed (`c67f1af`, `cf60e1d`); task I completed by the user at the checkpoint.
+
+Nyquist criteria for Plan VII:
+- [x] Mainnet v2 deployed only after the user's explicit go-ahead; `mainnet.v1` untouched.
+- [x] `mainnet.current` = `v2`; no authority IDs or v1-only tables remain in README or the runbooks.
+- [x] Railway runbook has exact keys and values for both services plus the backfill call and the confirmation curl.
+- [x] Changeset named both packages major; both are 3.0.0 and `pnpm -r build` passes after versioning.
+- [ ] npm publish and `cargo release` — handed to the user, to run after merge.
