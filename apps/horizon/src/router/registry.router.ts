@@ -24,6 +24,8 @@ import {
   getSchemaByTxHash,
   Schema,
 } from '../repository/schemas.repository'
+import { resolveContractFilter } from '../common/registry'
+import { STELLAR_NETWORK } from '../common/constants'
 
 // Route constants for registry endpoints
 const ATTESTATIONS_LIST_ROUTE = '/attestations'
@@ -129,6 +131,8 @@ router.get(ATTESTATIONS_LIST_ROUTE, async (req: Request, res: Response) => {
       attester,
       subject,
       revoked,
+      contract,
+      version,
     } = req.query as any
 
     // Input validation
@@ -165,6 +169,14 @@ router.get(ATTESTATIONS_LIST_ROUTE, async (req: Request, res: Response) => {
     if (attester) filters.attesterAddress = attester as string
     if (subject) filters.subjectAddress = subject as string
     if (revoked !== undefined) filters.revoked = String(revoked) === 'true'
+
+    let contractAddress: string | undefined
+    try {
+      contractAddress = resolveContractFilter(STELLAR_NETWORK, contract, version)
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message })
+    }
+    if (contractAddress) filters.contractAddress = contractAddress
 
     // Get attestations from repository
     const { attestations, total } = await getAttestations(filters)
@@ -311,6 +323,8 @@ router.get(SCHEMAS_LIST_ROUTE, async (req: Request, res: Response) => {
       type,
       context,
       revocable,
+      contract,
+      version,
     } = req.query as any
 
     // Input validation
@@ -348,6 +362,14 @@ router.get(SCHEMAS_LIST_ROUTE, async (req: Request, res: Response) => {
     if (deployerParam) filters.deployerAddress = deployerParam
     if (typeParam) filters.type = typeParam
     if (revocable !== undefined) filters.revocable = String(revocable) === 'true'
+
+    let contractAddress: string | undefined
+    try {
+      contractAddress = resolveContractFilter(STELLAR_NETWORK, contract, version)
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message })
+    }
+    if (contractAddress) filters.contractAddress = contractAddress
 
     const result = await getSchemas(filters)
 

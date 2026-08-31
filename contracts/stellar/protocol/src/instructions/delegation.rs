@@ -287,6 +287,7 @@ pub fn revoke_by_delegation(env: &Env, submitter: Address, request: DelegatedRev
 ///
 /// # Returns
 /// * `Result<(), Error>` - Success or error
+///
 /// **CRITICAL SECURITY FUNCTION**: Verifies and increments the nonce for an attester
 ///
 /// This function implements the core replay attack protection for delegated attestations.
@@ -391,6 +392,7 @@ fn verify_and_increment_revoker_nonce(
 /// The message construction MUST be deterministic and match exactly between:
 /// 1. Off-chain signing (JavaScript/TypeScript with @noble/curves)  
 /// 2. On-chain verification (this Rust function)
+///
 /// Any mismatch will cause signature verification to fail.
 ///
 /// # Cryptographic Security Model

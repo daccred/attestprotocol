@@ -26,7 +26,7 @@ Unlike traditional event-only indexers, our enhanced approach provides comprehen
 
 ### 🎯 **Contract-Specific Focus**
 - Indexes data for specific smart contracts only (not global blockchain data)
-- Tracks both **protocol** and **authority** contracts from deployments.json
+- Tracks every protocol contract version registered in the contract registry (`contracts.json`)
 - Optimized for attestation protocol interactions
 
 ### 📊 **Multi-Source Data Collection**
@@ -44,7 +44,7 @@ Unlike traditional event-only indexers, our enhanced approach provides comprehen
 ## Key Features
 
 - **Comprehensive Contract Indexing** - Goes beyond events to capture all contract interactions
-- **Multi-Contract Support** - Simultaneous indexing of protocol and authority contracts
+- **Multi-Contract Support** - Simultaneous indexing of every registered protocol contract version
 - **Enhanced Database Schema** - Optimized models for contract-specific operations tracking
 - **Queue-Based Job Processing** - Reliable background processing with retry logic
 - **Failed Operation Tracking** - Complete visibility including unsuccessful operations
@@ -133,7 +133,7 @@ curl "https://horizon.attest.so/api/health"
    ```bash
    DATABASE_URL=postgresql://username:password@host:port/database
    STELLAR_NETWORK=testnet  # or 'mainnet'
-   # Note: Contract IDs are now configured in src/common/constants.ts as CONTRACT_IDS_TO_INDEX array
+   # Contract addresses come from the registry; see "Tracked Contracts" below
    ```
 3. Run database migrations:
    ```bash
@@ -142,11 +142,120 @@ curl "https://horizon.attest.so/api/health"
 
 ## Tracked Contracts
 
-The indexer is configured to track specific contracts from `deployments.json`:
+Contract addresses live in one versioned registry, `contracts/stellar/bindings/src/contracts.json`,
+published as the `@attestprotocol/stellar-contracts/registry` export. Nothing in this app
+hardcodes an address.
 
-### Testnet Contracts:
-- **Protocol Contract**: `CADB73DZ7QP5BG5ZG6MRRL3J3X4WWHBCJ7PMCVZXYG7ZGCPIO2XCDBOM`
-- **Authority Contract**: `CAD6YMZCO4Q3L5XZT2FD3MDHP3ZHFMYL24RZYG4YQAL4XQKVGVXYPSQQ`
+Two variables control what gets indexed:
+
+- `INDEX_CONTRACT_IDS` — comma-separated allowlist of contract addresses. Leave it empty
+  to index every contract registered for `STELLAR_NETWORK`, which is the normal setup:
+  a new deployment is picked up as soon as the registry ships.
+- `PROTOCOL_CONTRACT_ID` — the attribution target used where ingest needs to name a single
+  contract. Defaults to the registry's `current` version for the network. It must be one of
+  the indexed addresses; the process refuses to start otherwise.
+
+### GET /api/contracts
+
+Returns the registry for the configured network. This is the documented contract the
+attest.so frontend reads instead of carrying its own `NEXT_PUBLIC_*_CONTRACT_ID` values.
+
+```json
+{
+  "success": true,
+  "data": {
+    "network": "testnet",
+    "current": "v1",
+    "contracts": {
+      "v1": {
+        "id": "C...",
+        "sdk": "22.0.8",
+        "deployedAt": "2025-11-07T12:44:26Z",
+        "deployedLedger": null,
+        "txHash": "5f91...",
+        "wasmHash": null
+      }
+    },
+    "indexing": ["C..."]
+  }
+}
+```
+
+`GET /api/contracts/:version` returns a single entry, or 404 if that version is not
+registered on this network.
+
+### Filtering by contract
+
+`/api/registry/attestations`, `/api/registry/schemas`, `/api/data/events` and
+`/api/data/operations` accept:
+
+- `?contract=<address>` — filter to one contract address.
+- `?version=<v1|v2>` — same thing, resolved against the registry for `STELLAR_NETWORK`.
+  An unregistered version is a `400`.
+
+```bash
+curl "$HORIZON/api/registry/attestations?version=v2&limit=50"
+```
+
+### Registering a new contract
+
+1. Add the entry under the network in `contracts/stellar/bindings/src/contracts.json`
+   (`deploy.sh --version vN` does this for you) and release the package.
+2. Deploy the indexer so it picks up the new registry.
+3. Backfill the new contract from the ledger it was deployed in — the ingest cursor is
+   global, so a newly registered contract has no history until you ask for it:
+
+   ```bash
+   curl -X POST $HORIZON/api/ingest/backfill \
+     -H 'content-type: application/json' \
+     -d '{"startLedger": <deployedLedger>}'
+   ```
+
+   `deployedLedger` is the field on the registry entry. For the current testnet
+   deployment that is ledger `4404453`:
+
+   ```bash
+   curl -X POST $HORIZON/api/ingest/backfill \
+     -H 'content-type: application/json' \
+     -d '{"startLedger": 4404453}'
+   ```
+
+### Railway variables
+
+Railway environment changes are documented here and applied by a maintainer in the Railway
+dashboard; deploys never set them automatically. After each contract deployment, set:
+
+| Key | Testnet | Mainnet |
+| --- | --- | --- |
+| `STELLAR_NETWORK` | `testnet` | `mainnet` |
+| `INDEX_CONTRACT_IDS` | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP,CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI,CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` |
+| `PROTOCOL_CONTRACT_ID` | `CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD` | `CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N` |
+
+`AUTHORITY_CONTRACT_ID` is no longer read by the indexer — delete it from both services.
+
+Leaving `INDEX_CONTRACT_IDS` unset achieves the same result once the registry contains both
+versions; set it explicitly only to index a subset.
+
+After applying the variables and redeploying, backfill each service from the ledger its new
+contract was deployed in:
+
+```bash
+# production (mainnet), protocol v2 deployed in ledger 64212659
+curl -X POST https://graph.attest.so/api/ingest/backfill \
+  -H 'content-type: application/json' \
+  -d '{"startLedger": 64212659}'
+
+# testnet, protocol v2 deployed in ledger 4404453
+curl -X POST $HORIZON_TESTNET/api/ingest/backfill \
+  -H 'content-type: application/json' \
+  -d '{"startLedger": 4404453}'
+```
+
+Confirm the redeployed service resolves the new contract:
+
+```bash
+curl https://graph.attest.so/api/contracts | jq .data.current   # -> "v2"
+```
 
 ## Running the Indexer
 

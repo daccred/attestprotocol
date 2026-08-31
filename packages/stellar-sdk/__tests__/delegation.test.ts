@@ -14,6 +14,9 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { Address } from '@stellar/stellar-sdk'
+import { bls12_381 } from '@noble/curves/bls12-381.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 import { createAttestMessage, createRevokeMessage } from '../src/delegation'
 
 const baseAttest = {
@@ -94,5 +97,36 @@ describe('H-SDK-1 / HAL-06: message preimage binds contract id and network', () 
     expect(() =>
       createRevokeMessage({ ...baseRevoke, attestation_uid: Buffer.alloc(8) }, CONTRACT_A, PASSPHRASE_TESTNET)
     ).toThrow(/32-byte/)
+  })
+
+  it('places a 32-byte sha256 of the contract address right after the DST', () => {
+    const dst = Buffer.from('ATTEST_PROTOCOL_V1_DELEGATED', 'utf8')
+    const contractComponent = Buffer.from(sha256(new Address(CONTRACT_A).toScVal().toXDR()))
+    expect(contractComponent).toHaveLength(32)
+
+    const be8 = (v: bigint) => {
+      const b = Buffer.alloc(8)
+      b.writeBigUInt64BE(v, 0)
+      return b
+    }
+    const preimage = Buffer.concat([
+      dst,
+      contractComponent,
+      Buffer.from(sha256(Buffer.from(PASSPHRASE_TESTNET, 'utf8'))),
+      baseAttest.schema_uid,
+      Buffer.from(sha256(new Address(baseAttest.subject).toScVal().toXDR())),
+      be8(baseAttest.nonce),
+      be8(baseAttest.deadline),
+      Buffer.from(
+        sha256(Buffer.from('0000000e0000000576616c7565000000', 'hex'))
+      ),
+    ])
+    // The contract component occupies bytes [len(DST), len(DST) + 32).
+    expect(preimage.subarray(dst.length, dst.length + 32).toString('hex')).toBe(
+      contractComponent.toString('hex')
+    )
+    expect(pointHex(bls12_381.shortSignatures.hash(sha256(preimage)))).toBe(
+      pointHex(createAttestMessage(baseAttest, CONTRACT_A, PASSPHRASE_TESTNET))
+    )
   })
 })

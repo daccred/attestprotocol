@@ -3,6 +3,8 @@ title: 'Stellar SDK Reference'
 description: 'Complete API reference for @attestprotocol/stellar-sdk'
 ---
 
+import ContractAddresses from "/snippets/contracts.mdx"
+
 ## Installation
 
 ```bash
@@ -11,10 +13,9 @@ npm install @attestprotocol/stellar-sdk @stellar/stellar-sdk
 
 ## Contract Addresses
 
-| Network | Contract ID |
-|---------|-------------|
-| Testnet | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
-| Mainnet | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+<ContractAddresses />
+
+Programmatic access: `getContractId(network, version?)` from `@attestprotocol/stellar-sdk`, or `GET /api/contracts` on horizon.
 
 ---
 

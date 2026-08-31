@@ -12,6 +12,8 @@
 
 import { Router, Request, Response } from 'express'
 import { getDB } from '../common/db'
+import { resolveContractFilter } from '../common/registry'
+import { STELLAR_NETWORK } from '../common/constants'
 
 // Route constants for data endpoints
 const DATA_EVENTS_ROUTE = '/events'
@@ -64,10 +66,24 @@ router.get(DATA_EVENTS_ROUTE, async (req: Request, res: Response) => {
       ledgerStart,
       ledgerEnd,
       cursor,
+      contract,
+      version,
     } = req.query
 
+    let resolvedContract: string | undefined
+    try {
+      resolvedContract = resolveContractFilter(
+        STELLAR_NETWORK,
+        contract as string | undefined,
+        version as string | undefined
+      )
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message })
+    }
+
     const where: any = {}
-    if (contractId) where.contractId = contractId as string
+    const contractFilter = resolvedContract ?? (contractId as string | undefined)
+    if (contractFilter) where.contractId = contractFilter
     if (eventType) where.eventType = eventType as string
     if (ledgerStart) where.ledger = { gte: parseInt(ledgerStart as string) }
     if (ledgerEnd) where.ledger = { ...where.ledger, lte: parseInt(ledgerEnd as string) }
@@ -204,11 +220,25 @@ router.get(DATA_OPERATIONS_ROUTE, async (req: Request, res: Response) => {
       sourceAccount,
       limit = '50',
       offset = '0',
+      contract,
+      version,
     } = req.query
+
+    let resolvedContract: string | undefined
+    try {
+      resolvedContract = resolveContractFilter(
+        STELLAR_NETWORK,
+        contract as string | undefined,
+        version as string | undefined
+      )
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message })
+    }
 
     const where: any = {}
     if (transactionHash) where.transactionHash = transactionHash as string
-    if (contractId) where.contractId = contractId as string
+    const contractFilter = resolvedContract ?? (contractId as string | undefined)
+    if (contractFilter) where.contractId = contractFilter
     if (type) where.operationType = type as string
     if (sourceAccount) where.sourceAccount = sourceAccount as string
 

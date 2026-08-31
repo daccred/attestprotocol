@@ -13,9 +13,6 @@ import { Keypair, Transaction, xdr } from '@stellar/stellar-sdk'
 import * as ProtocolContract from '../bindings/src/protocol'
 import { loadTestConfig, fundAccountIfNeeded, createTestXDRSchema, parseXDRSchema } from './testutils'
 
-// Pre-generated XDR schema string for testing
-// This represents a simple schema with one field: { name: "value", type: "string" }
-const TEST_XDR_SCHEMA = "XDR:AAAAAQAAAA5UZXN0IFNjaGVtYSB4eHh4AAAAAQAAAAZ2YWx1ZQAAAAZzdHJpbmcAAAAAAA=="
 
  
 describe('Protocol Contract Integration Tests', () => {
@@ -117,8 +114,11 @@ describe('Protocol Contract Integration Tests', () => {
   }, 60000)
 
   it('should register an XDR schema', async () => {
-    // Use the pre-generated XDR schema
-    const xdrSchema = TEST_XDR_SCHEMA
+    // Unique per run: the contract rejects a duplicate definition from the same
+    // authority with SchemaAlreadyExists, so a fixed string only registers once.
+    const xdrSchema = createTestXDRSchema(`Test Schema ${testRunId}`, [
+      { name: 'value', type: 'string' },
+    ])
     
     const tx = await protocolClient.register({
       caller: adminKeypair.publicKey(),

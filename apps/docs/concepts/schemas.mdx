@@ -7,23 +7,9 @@ description: 'Define the structure and meaning of attestation data'
 
 A schema is a template that defines what data an attestation contains. Every attestation references a schema, ensuring data consistency and enabling verification.
 
-```
-┌─────────────────────────────────────────┐
-│              Schema: KYC                │
-│  ┌─────────────────────────────────┐   │
-│  │ verified: bool                  │   │
-│  │ level: string                   │   │
-│  │ timestamp: u64                  │   │
-│  └─────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-          │
-          ▼ (references)
-┌─────────────────────────────────────────┐
-│         Attestation #1                  │
-│  verified: true                         │
-│  level: "premium"                       │
-│  timestamp: 1701234567                  │
-└─────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    S["Schema: KYC<br/>verified: bool<br/>level: string<br/>timestamp: u64"] -->|references| A1["Attestation #1<br/>verified: true<br/>level: &quot;premium&quot;<br/>timestamp: 1701234567"]
 ```
 
 ## Why Schemas Matter

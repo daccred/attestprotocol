@@ -3,6 +3,8 @@ title: 'Getting Started with Stellar'
 description: 'Complete guide to using AttestProtocol on Stellar'
 ---
 
+import ContractAddresses from "/snippets/contracts.mdx"
+
 ## Prerequisites
 
 - Node.js 18+
@@ -146,10 +148,9 @@ try {
 
 ## Contract Addresses
 
-| Network | Protocol Contract |
-|---------|-------------------|
-| Testnet | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
-| Mainnet | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+<ContractAddresses />
+
+Programmatic access: `getContractId(network, version?)` from `@attestprotocol/stellar-sdk`, or `GET /api/contracts` on horizon.
 
 ## Next Steps
 

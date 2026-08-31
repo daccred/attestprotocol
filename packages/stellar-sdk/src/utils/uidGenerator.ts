@@ -18,18 +18,18 @@ import { sha256 } from '@noble/hashes/sha2.js'
 const ATTEST_UID_PREFIX = Buffer.from('ATTEST_UID_V1', 'utf8')
 
 /**
- * Encode a 32-byte buffer as the Soroban `BytesN<32>::to_xdr(env)` byte
- * sequence: a 4-byte big-endian length prefix (always 0x00000020) followed
- * by the 32 raw bytes. Total length: 36 bytes.
+ * Encode a 32-byte buffer the way Soroban's `BytesN<32>::to_xdr(env)` does.
  *
- * This is intentionally NOT `nativeToScVal(buf).toXDR()` — that wraps the
- * payload in `ScVal::Bytes` and emits a different prefix.
+ * In soroban-sdk 27 `ToXdr` is implemented for any value convertible to `Val`,
+ * so `to_xdr` serializes the full `ScVal::Bytes` wrapper — not a bare 4-byte
+ * length prefix. Verified against the deployed contract: the bare-prefix form
+ * produced UIDs that no on-chain attestation matched.
  */
 function encodeBytesN32Xdr(buf: Buffer): Buffer {
   if (buf.length !== 32) {
     throw new Error('BytesN<32> XDR encoding requires exactly 32 bytes of input')
   }
-  return Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x20]), buf])
+  return nativeToScVal(buf).toXDR()
 }
 
 /**

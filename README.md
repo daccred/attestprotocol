@@ -35,12 +35,14 @@
 ### Smart Contracts
 
 **Stellar (Mainnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/public)
-- [Protocol Contract](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
-- [Authority Contract](https://stellar.expert/explorer/public/contract/CBKOB6XEEXYH5SEFQ4YSUEFJGYNBVISQBHQHVGCKB736A3JVGK7F77JG) · `CBKOB...`
+- [Protocol v2 (current)](https://stellar.expert/explorer/public/contract/CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N) · `CAMZU...`
+- [Protocol v1 (legacy)](https://stellar.expert/explorer/public/contract/CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI) · `CBUUI...`
 
 **Stellar (Testnet)** · [View on Stellar.Expert](https://stellar.expert/explorer/testnet)
-- [Protocol Contract](https://stellar.expert/explorer/testnet/contract/CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP) · `CBFE5...`
-- [Authority Contract](https://stellar.expert/explorer/testnet/contract/CCMJGCRSQRZ56BDSLCAYV4BNS3SLIDPIP4CQYNT5X2VOPZIQ2ZM7GBVV) · `CCMJG...`
+- [Protocol v2 (current)](https://stellar.expert/explorer/testnet/contract/CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD) · `CA2QE...`
+- [Protocol v1 (legacy)](https://stellar.expert/explorer/testnet/contract/CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP) · `CBFE5...`
+
+The canonical list is `contracts/stellar/bindings/src/contracts.json`, served by horizon at `/api/contracts`.
 
 ### NPM Packages
 

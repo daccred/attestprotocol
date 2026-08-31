@@ -34,14 +34,6 @@ export interface StellarConfig extends IProtocolConfig {
   networkPassphrase?: string
 
   /**
-   * Contract addresses for protocol and authority contracts
-   */
-  contractAddresses?: {
-    protocol?: string
-    authority?: string
-  }
-
-  /**
    * Whether to allow HTTP connections (for development)
    */
   allowHttp?: boolean
@@ -59,6 +51,8 @@ export interface ClientOptions {
   network?: 'testnet' | 'mainnet' | 'futurenet' | 'local'
   /** Protocol contract ID */
   contractId?: string
+  /** Registry version to resolve when contractId is not given; defaults to the network's current */
+  contractVersion?: 'v1' | 'v2'
   /** Public Key for client instance*/
   publicKey: string
   /** Network passphrase override */

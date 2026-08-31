@@ -1,5 +1,12 @@
 # @attestprotocol/sdk
 
+## 2.0.3
+
+### Patch Changes
+
+- Updated dependencies [1d84f1b]
+  - @attestprotocol/stellar-sdk@3.0.0
+
 ## 2.0.2
 
 ### Patch Changes

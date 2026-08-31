@@ -1,7 +1,7 @@
 {
   "name": "@attestprotocol/cli",
   "description": "Unified CLI for Attest Protocol across all supported blockchains",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "author": "Andrew Miracle <andrew@daccred.co>",
   "bin": {
     "attest-protocol": "./dist/bin/run.js"
@@ -47,7 +47,7 @@
   "license": "MIT",
   "main": "./dist/bin/run.js",
   "peerDependencies": {
-    "@stellar/stellar-sdk": ">=14.3.0"
+    "@stellar/stellar-sdk": ">=16.0.0 <17"
   },
   "publishConfig": {
     "access": "public"

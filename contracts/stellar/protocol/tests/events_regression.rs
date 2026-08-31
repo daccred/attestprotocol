@@ -10,6 +10,7 @@
 //! emissions), bypassing the full attestation/schema entry points. This isolates
 //! event-shape correctness from BLS signature setup, delegation, and storage logic.
 
+mod testutils;
 use protocol::{events, AttestationContract};
 use protocol::state::{Attestation, Schema};
 use soroban_sdk::{
@@ -54,7 +55,7 @@ fn test_attest_create_event_includes_schema_uid() {
         events::publish_attestation_event(&env, &attestation);
     });
 
-    let all_events = env.events().all();
+    let all_events = testutils::all_events(&env);
     assert!(!all_events.is_empty(), "expected at least one event");
 
     // Find the ATTEST/CREATE event by topics.
@@ -101,7 +102,7 @@ fn test_schema_register_event_has_no_redundant_authority() {
         events::schema_registered(&env, &schema_uid, &schema);
     });
 
-    let all_events = env.events().all();
+    let all_events = testutils::all_events(&env);
     assert!(!all_events.is_empty(), "expected at least one event");
 
     let expected_topics = (symbol_short!("SCHEMA"), symbol_short!("REGISTER")).into_val(&env);

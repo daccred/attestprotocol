@@ -5,14 +5,11 @@ description: 'Architecture overview of AttestProtocol'
 
 ## Four Actors
 
-```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  Issuer  │───▶│ Protocol │───▶│  Holder  │◀───│ Verifier │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
-     │                │                              │
-     │  Creates       │  Stores                      │  Queries
-     │  schemas &     │  attestations                │  & validates
-     │  attestations  │  on-chain                    │
+```mermaid
+flowchart LR
+    Issuer -->|Creates schemas & attestations| Protocol
+    Protocol -->|Stores attestations on-chain| Holder
+    Verifier -->|Queries & validates| Holder
 ```
 
 **Issuer**: Creates schemas and issues attestations (e.g., KYC provider)

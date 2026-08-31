@@ -1,5 +1,5 @@
 import { Buffer } from "buffer";
-import { Address } from '@stellar/stellar-sdk';
+import { Address } from "@stellar/stellar-sdk";
 import {
   AssembledTransaction,
   Client as ContractClient,
@@ -7,7 +7,7 @@ import {
   MethodOptions,
   Result,
   Spec as ContractSpec,
-} from '@stellar/stellar-sdk/contract';
+} from "@stellar/stellar-sdk/contract";
 import type {
   u32,
   i32,
@@ -18,48 +18,24 @@ import type {
   u256,
   i256,
   Option,
-  Typepoint,
+  Timepoint,
   Duration,
-} from '@stellar/stellar-sdk/contract';
-export * from '@stellar/stellar-sdk'
-export * as contract from '@stellar/stellar-sdk/contract'
-export * as rpc from '@stellar/stellar-sdk/rpc'
+} from "@stellar/stellar-sdk/contract";
+export * from "@stellar/stellar-sdk";
+export * as contract from "@stellar/stellar-sdk/contract";
+export * as rpc from "@stellar/stellar-sdk/rpc";
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   //@ts-ignore Buffer exists
   window.Buffer = window.Buffer || Buffer;
 }
 
 
 export const networks = {
-  testnet: {
-    networkPassphrase: "Test SDF Network ; September 2015",
-    contractId: "CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP",
-  },
-  local: {
-    networkPassphrase: "Test SDF Network ; September 2015",
-    contractId: undefined,
-  },
-  mainnet: {
-    networkPassphrase: "Public Global Stellar Network ; September 2015",
-    contractId: "CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI",
-  },
+  testnet: { networkPassphrase: "Test SDF Network ; September 2015", contractId: "CA2QET2KOUGAECEVYQEQT3SLDDZRUMAQHI7MMDTFVJY62WTHUTERAUCD" },
+  local: { networkPassphrase: "Test SDF Network ; September 2015", contractId: undefined },
+  mainnet: { networkPassphrase: "Public Global Stellar Network ; September 2015", contractId: "CAMZUXDEMJ4BDEA2FCTXPRQW3VPEJLFOV5IB3NKKJB2G4CV7ANHNSF2N" },
 } as const
- 
-
-export interface ResolverAttestation {
-  attester: string;
-  data: Buffer;
-  expiration_time: u64;
-  recipient: string;
-  ref_uid: Buffer;
-  revocable: boolean;
-  revocation_time: u64;
-  schema_uid: Buffer;
-  time: u64;
-  uid: Buffer;
-  value: i128;
-}
 
 
 /**
@@ -107,7 +83,7 @@ revocable: boolean;
  * Each variant corresponds to a different type of data that can be stored
  * in the contract's persistent storage.
  */
-export type DataKey = {tag: "Admin", values: void} | {tag: "Authority", values: readonly [string]} | {tag: "Schema", values: readonly [Buffer]} | {tag: "AttestationUID", values: readonly [Buffer]} | {tag: "AttesterNonce", values: readonly [string]} | {tag: "AttesterPublicKey", values: readonly [string]};
+export type DataKey = {tag: "Admin", values: void} | {tag: "Authority", values: readonly [string]} | {tag: "Schema", values: readonly [Buffer]} | {tag: "AttestationUID", values: readonly [Buffer]} | {tag: "AttesterNonce", values: readonly [string]} | {tag: "AttesterPublicKey", values: readonly [string]} | {tag: "RevokerNonce", values: readonly [string]};
 
 
 /**
@@ -315,6 +291,16 @@ export const Errors = {
   6: {message:"NotAuthorized"},
   7: {message:"StorageFailed"},
   9: {message:"InvalidUid"},
+  /**
+   * Returned by the protocol's resolver-dispatch path when a resolver
+   * rejects an attestation or revocation by returning `Ok(false)` from
+   * `onattest` / `onrevoke`. This is the protocol-side rejection signal
+   * and is **distinct** from the resolvers-crate `ResolverError` enum,
+   * which is the typed error type returned *by* resolver implementations
+   * (NotAuthorized, InvalidAttestation, ValidationFailed, etc.). When a
+   * resolver returns `Err(ResolverError::*)` rather than `Ok(false)`, the
+   * protocol surfaces it as `ResolverCallFailed` (variant 24).
+   */
   10: {message:"ResolverError"},
   11: {message:"SchemaHasNoResolver"},
   12: {message:"AdminNotSet"},
@@ -330,9 +316,70 @@ export const Errors = {
   22: {message:"AttestationExpired"},
   23: {message:"InvalidDeadline"},
   24: {message:"ResolverCallFailed"},
+  /**
+   * The submitted BLS point bytes have invalid encoding flags (e.g. the
+   * compression bit is set on what should be an uncompressed point, or
+   * the infinity bit is set on a non-identity point). Returned by the
+   * HAL-07 structural pre-check in `register_bls_public_key` and
+   * `verify_bls_signature` before `from_bytes` is invoked. Note: off-curve
+   * or wrong-subgroup points whose flag byte happens to be 0x00 still
+   * cause a Soroban host trap rather than this error.
+   */
   25: {message:"InvalidSignaturePoint"},
+  /**
+   * The attester has not registered a BLS public key with the protocol,
+   * so delegated attestation / revocation cannot be cryptographically verified.
+   */
   26: {message:"BlsPubKeyNotRegistered"},
-  27: {message:"IntegerOverflow"}
+  27: {message:"IntegerOverflow"},
+  /**
+   * A schema with the same definition, authority, and resolver already exists.
+   * This indicates an attempt to register a duplicate schema.
+   */
+  28: {message:"SchemaAlreadyExists"},
+  /**
+   * Returned when an attempt is made to revoke an attestation that is already revoked.
+   * Distinct from `AttestationNotFound` so callers (and indexers) can tell apart a
+   * missing record from a terminal record.
+   * Source: HAL-08 (Halborn §7.8)
+   */
+  29: {message:"AlreadyRevoked"}
+}
+
+export type ResolverType = {tag: "Default", values: void} | {tag: "Authority", values: void} | {tag: "TokenReward", values: void} | {tag: "FeeCollection", values: void} | {tag: "Hybrid", values: void} | {tag: "Staking", values: void} | {tag: "Custom", values: void};
+
+export const ResolverError = {
+  1: {message:"NotAuthorized"},
+  2: {message:"InvalidAttestation"},
+  3: {message:"InvalidSchema"},
+  4: {message:"InsufficientFunds"},
+  5: {message:"TokenTransferFailed"},
+  6: {message:"StakeRequired"},
+  7: {message:"ValidationFailed"},
+  8: {message:"CustomError"}
+}
+
+
+export interface ResolverMetadata {
+  description: string;
+  name: string;
+  resolver_type: ResolverType;
+  version: string;
+}
+
+
+export interface ResolverAttestationData {
+  attester: string;
+  data: Buffer;
+  expiration_time: u64;
+  recipient: string;
+  ref_uid: Buffer;
+  revocable: boolean;
+  revocation_time: u64;
+  schema_uid: Buffer;
+  time: u64;
+  uid: Buffer;
+  value: i128;
 }
 
 export interface Client {
@@ -355,22 +402,7 @@ export interface Client {
    * Returns a `Result` containing the 32-byte UID of the newly created attestation,
    * or an error if the process fails.
    */
-  attest: ({attester, schema_uid, value, expiration_time}: {attester: string, schema_uid: Buffer, value: string, expiration_time: Option<u64>}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Buffer>>>
+  attest: ({attester, schema_uid, value, expiration_time}: {attester: string, schema_uid: Buffer, value: string, expiration_time: Option<u64>}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Buffer>>>
 
   /**
    * Construct and simulate a revoke transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -388,22 +420,7 @@ export interface Client {
    * 
    * Returns `Ok(())` on successful revocation, or an error if the revocation fails.
    */
-  revoke: ({revoker, attestation_uid}: {revoker: string, attestation_uid: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  revoke: ({revoker, attestation_uid}: {revoker: string, attestation_uid: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a register transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -424,22 +441,7 @@ export interface Client {
    * Returns a `Result` containing the 32-byte UID of the newly registered schema,
    * or an error if the registration fails.
    */
-  register: ({caller, schema_definition, resolver, revocable}: {caller: string, schema_definition: string, resolver: Option<string>, revocable: boolean}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Buffer>>>
+  register: ({caller, schema_definition, resolver, revocable}: {caller: string, schema_definition: string, resolver: Option<string>, revocable: boolean}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Buffer>>>
 
   /**
    * Construct and simulate a get_schema transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -454,54 +456,25 @@ export interface Client {
    * Returns a `Result` containing the `Schema` struct if found, or an error
    * if no schema with the given UID exists.
    */
-  get_schema: ({schema_uid}: {schema_uid: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Schema>>>
+  get_schema: ({schema_uid}: {schema_uid: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Schema>>>
 
   /**
    * Construct and simulate a initialize transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Initializes the contract with an administrative address.
    * 
    * This function can only be called once. Subsequent calls will result in an
-   * `AlreadyInitialized` error.
+   * `AlreadyInitialized` error. The admin address must authorize the initialization
+   * to prevent front-running attacks.
    * 
    * # Arguments
    * 
-   * * `admin` - The address to be set as the contract administrator.
+   * * `admin` - The address to be set as the contract administrator. Must authorize this call.
    * 
    * # Errors
    * 
    * Returns `Err(errors::Error::AlreadyInitialized)` if the contract has already been initialized.
    */
-  initialize: ({admin}: {admin: string}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  initialize: ({admin}: {admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_bls_key transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -516,22 +489,7 @@ export interface Client {
    * Returns a `Result` containing the `BlsPublicKey` if found, or an error if no key
    * is registered for the given attester.
    */
-  get_bls_key: ({attester}: {attester: string}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<BlsPublicKey>>>
+  get_bls_key: ({attester}: {attester: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<BlsPublicKey>>>
 
   /**
    * Construct and simulate a get_attestation transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -546,22 +504,7 @@ export interface Client {
    * Returns a `Result` containing the `Attestation` struct if found, or an error
    * if no attestation with the given UID exists.
    */
-  get_attestation: ({attestation_uid}: {attestation_uid: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Attestation>>>
+  get_attestation: ({attestation_uid}: {attestation_uid: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Attestation>>>
 
   /**
    * Construct and simulate a register_bls_key transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -579,22 +522,20 @@ export interface Client {
    * 
    * Returns `Ok(())` on successful registration, or an error if one already exists or registration fails.
    */
-  register_bls_key: ({attester, public_key}: {attester: string, public_key: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
+  register_bls_key: ({attester, public_key}: {attester: string, public_key: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  /**
+   * Construct and simulate a get_revoker_nonce transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Returns the next expected nonce for a delegated revoker.
+   * 
+   * Independent of `get_attester_nonce` because revocation has its own
+   * nonce dimension (see `DataKey::RevokerNonce`). Off-chain clients
+   * constructing a `DelegatedRevocationRequest` MUST use this counter,
+   * not `get_attester_nonce`.
+   * 
+   * Source: C-CONTRACT-1 (independent audit), extends HAL-03.
+   */
+  get_revoker_nonce: ({revoker}: {revoker: string}, options?: MethodOptions) => Promise<AssembledTransaction<u64>>
 
   /**
    * Construct and simulate a get_attester_nonce transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -611,22 +552,7 @@ export interface Client {
    * 
    * Returns the next expected nonce (`u64`) for the given attester.
    */
-  get_attester_nonce: ({attester}: {attester: string}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<u64>>
+  get_attester_nonce: ({attester}: {attester: string}, options?: MethodOptions) => Promise<AssembledTransaction<u64>>
 
   /**
    * Construct and simulate a attest_by_delegation transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -648,22 +574,7 @@ export interface Client {
    * 
    * Returns `Ok(())` on success, or an error if the request is invalid or signature verification fails.
    */
-  attest_by_delegation: ({submitter, request}: {submitter: string, request: DelegatedAttestationRequest}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  attest_by_delegation: ({submitter, request}: {submitter: string, request: DelegatedAttestationRequest}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a revoke_by_delegation transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -682,22 +593,7 @@ export interface Client {
    * 
    * Returns `Ok(())` on success, or an error if the request is invalid or signature verification fails.
    */
-  revoke_by_delegation: ({submitter, request}: {submitter: string, request: DelegatedRevocationRequest}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  revoke_by_delegation: ({submitter, request}: {submitter: string, request: DelegatedRevocationRequest}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_dst_for_revocation transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -711,22 +607,7 @@ export interface Client {
    * 
    * Returns the `Bytes` slice representing the DST for delegated revocations.
    */
-  get_dst_for_revocation: (options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Buffer>>
+  get_dst_for_revocation: (options?: MethodOptions) => Promise<AssembledTransaction<Buffer>>
 
   /**
    * Construct and simulate a get_dst_for_attestation transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -740,22 +621,7 @@ export interface Client {
    * 
    * Returns the `Bytes` slice representing the DST for delegated attestations.
    */
-  get_dst_for_attestation: (options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Buffer>>
+  get_dst_for_attestation: (options?: MethodOptions) => Promise<AssembledTransaction<Buffer>>
 
 }
 export class Client extends ContractClient {
@@ -775,28 +641,32 @@ export class Client extends ContractClient {
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
-      new ContractSpec([ "AAAAAQAAAAAAAAAAAAAAE1Jlc29sdmVyQXR0ZXN0YXRpb24AAAAACwAAAAAAAAAIYXR0ZXN0ZXIAAAATAAAAAAAAAARkYXRhAAAADgAAAAAAAAAPZXhwaXJhdGlvbl90aW1lAAAAAAYAAAAAAAAACXJlY2lwaWVudAAAAAAAABMAAAAAAAAAB3JlZl91aWQAAAAADgAAAAAAAAAJcmV2b2NhYmxlAAAAAAAAAQAAAAAAAAAPcmV2b2NhdGlvbl90aW1lAAAAAAYAAAAAAAAACnNjaGVtYV91aWQAAAAAA+4AAAAgAAAAAAAAAAR0aW1lAAAABgAAAAAAAAADdWlkAAAAA+4AAAAgAAAAAAAAAAV2YWx1ZQAAAAAAAAs=",
-        "AAAAAAAAAutDcmVhdGVzIGFuIGF0dGVzdGF0aW9uIHdoZXJlIHRoZSBhdHRlc3RlciBpcyBhbHNvIHRoZSBzdWJqZWN0LgoKVGhpcyBmdW5jdGlvbiBjcmVhdGVzIGEgbmV3IGF0dGVzdGF0aW9uIGJhc2VkIG9uIGEgc3BlY2lmaWVkIHNjaGVtYS4gVGhlIGBhdHRlc3RlcmAKbXVzdCBhdXRob3JpemUgdGhpcyBvcGVyYXRpb24gYnkgc2lnbmluZyB0aGUgdHJhbnNhY3Rpb24sIGFuZCB0aGV5IHdpbGwgYWxzbyBiZSB0aGUgc3ViamVjdCBvZiB0aGUgYXR0ZXN0YXRpb24uCgojIEFyZ3VtZW50cwoKKiBgYXR0ZXN0ZXJgIC0gVGhlIGFkZHJlc3Mgb2YgdGhlIGVudGl0eSBtYWtpbmcgdGhlIGF0dGVzdGF0aW9uLiBNdXN0IGJlIHRoZSB0cmFuc2FjdGlvbiBzaWduZXIuCiogYHNjaGVtYV91aWRgIC0gVGhlIFVJRCBvZiB0aGUgc2NoZW1hIGZvciB3aGljaCB0aGUgYXR0ZXN0YXRpb24gaXMgYmVpbmcgbWFkZS4KKiBgdmFsdWVgIC0gVGhlIHZhbHVlIG9mIHRoZSBhdHRlc3RhdGlvbiwgY29uZm9ybWluZyB0byB0aGUgc2NoZW1hJ3MgZGVmaW5pdGlvbi4KKiBgZXhwaXJhdGlvbl90aW1lYCAtIEFuIG9wdGlvbmFsIFVuaXggdGltZXN0YW1wIGluZGljYXRpbmcgd2hlbiB0aGUgYXR0ZXN0YXRpb24gZXhwaXJlcy4KCiMgUmV0dXJucwoKUmV0dXJucyBhIGBSZXN1bHRgIGNvbnRhaW5pbmcgdGhlIDMyLWJ5dGUgVUlEIG9mIHRoZSBuZXdseSBjcmVhdGVkIGF0dGVzdGF0aW9uLApvciBhbiBlcnJvciBpZiB0aGUgcHJvY2VzcyBmYWlscy4AAAAABmF0dGVzdAAAAAAABAAAAAAAAAAIYXR0ZXN0ZXIAAAATAAAAAAAAAApzY2hlbWFfdWlkAAAAAAPuAAAAIAAAAAAAAAAFdmFsdWUAAAAAAAAQAAAAAAAAAA9leHBpcmF0aW9uX3RpbWUAAAAD6AAAAAYAAAABAAAD6QAAA+4AAAAgAAAAAw==",
-        "AAAAAAAAAclSZXZva2VzIGFuIGV4aXN0aW5nIGF0dGVzdGF0aW9uLgoKT25seSB0aGUgb3JpZ2luYWwgYXR0ZXN0ZXIgb3IgYW4gYXV0aG9yaXplZCBwYXJ0eSAoYXMgZGVmaW5lZCBieSB0aGUgc2NoZW1hKSBjYW4KcmV2b2tlIGFuIGF0dGVzdGF0aW9uLiBUaGUgc2NoZW1hIG11c3QgYWxzbyBwZXJtaXQgcmV2b2NhdGlvbnMuCgojIEFyZ3VtZW50cwoKKiBgcmV2b2tlcmAgLSBUaGUgYWRkcmVzcyBvZiB0aGUgZW50aXR5IHJldm9raW5nIHRoZSBhdHRlc3RhdGlvbi4gTXVzdCBiZSBhdXRob3JpemVkIHRvIHBlcmZvcm0gdGhpcyBhY3Rpb24uCiogYGF0dGVzdGF0aW9uX3VpZGAgLSBUaGUgVUlEIG9mIHRoZSBhdHRlc3RhdGlvbiB0byBiZSByZXZva2VkLgoKIyBSZXR1cm5zCgpSZXR1cm5zIGBPaygoKSlgIG9uIHN1Y2Nlc3NmdWwgcmV2b2NhdGlvbiwgb3IgYW4gZXJyb3IgaWYgdGhlIHJldm9jYXRpb24gZmFpbHMuAAAAAAAABnJldm9rZQAAAAAAAgAAAAAAAAAHcmV2b2tlcgAAAAATAAAAAAAAAA9hdHRlc3RhdGlvbl91aWQAAAAD7gAAACAAAAABAAAD6QAAA+0AAAAAAAAAAw==",
+      new ContractSpec([ "AAAAAAAAAutDcmVhdGVzIGFuIGF0dGVzdGF0aW9uIHdoZXJlIHRoZSBhdHRlc3RlciBpcyBhbHNvIHRoZSBzdWJqZWN0LgoKVGhpcyBmdW5jdGlvbiBjcmVhdGVzIGEgbmV3IGF0dGVzdGF0aW9uIGJhc2VkIG9uIGEgc3BlY2lmaWVkIHNjaGVtYS4gVGhlIGBhdHRlc3RlcmAKbXVzdCBhdXRob3JpemUgdGhpcyBvcGVyYXRpb24gYnkgc2lnbmluZyB0aGUgdHJhbnNhY3Rpb24sIGFuZCB0aGV5IHdpbGwgYWxzbyBiZSB0aGUgc3ViamVjdCBvZiB0aGUgYXR0ZXN0YXRpb24uCgojIEFyZ3VtZW50cwoKKiBgYXR0ZXN0ZXJgIC0gVGhlIGFkZHJlc3Mgb2YgdGhlIGVudGl0eSBtYWtpbmcgdGhlIGF0dGVzdGF0aW9uLiBNdXN0IGJlIHRoZSB0cmFuc2FjdGlvbiBzaWduZXIuCiogYHNjaGVtYV91aWRgIC0gVGhlIFVJRCBvZiB0aGUgc2NoZW1hIGZvciB3aGljaCB0aGUgYXR0ZXN0YXRpb24gaXMgYmVpbmcgbWFkZS4KKiBgdmFsdWVgIC0gVGhlIHZhbHVlIG9mIHRoZSBhdHRlc3RhdGlvbiwgY29uZm9ybWluZyB0byB0aGUgc2NoZW1hJ3MgZGVmaW5pdGlvbi4KKiBgZXhwaXJhdGlvbl90aW1lYCAtIEFuIG9wdGlvbmFsIFVuaXggdGltZXN0YW1wIGluZGljYXRpbmcgd2hlbiB0aGUgYXR0ZXN0YXRpb24gZXhwaXJlcy4KCiMgUmV0dXJucwoKUmV0dXJucyBhIGBSZXN1bHRgIGNvbnRhaW5pbmcgdGhlIDMyLWJ5dGUgVUlEIG9mIHRoZSBuZXdseSBjcmVhdGVkIGF0dGVzdGF0aW9uLApvciBhbiBlcnJvciBpZiB0aGUgcHJvY2VzcyBmYWlscy4AAAAABmF0dGVzdAAAAAAABAAAAAAAAAAIYXR0ZXN0ZXIAAAATAAAAAAAAAApzY2hlbWFfdWlkAAAAAAPuAAAAIAAAAAAAAAAFdmFsdWUAAAAAAAAQAAAAAAAAAA9leHBpcmF0aW9uX3RpbWUAAAAD6AAAAAYAAAABAAAD6QAAA+4AAAAgAAAAAw==",
+        "AAAAAAAAAclSZXZva2VzIGFuIGV4aXN0aW5nIGF0dGVzdGF0aW9uLgoKT25seSB0aGUgb3JpZ2luYWwgYXR0ZXN0ZXIgb3IgYW4gYXV0aG9yaXplZCBwYXJ0eSAoYXMgZGVmaW5lZCBieSB0aGUgc2NoZW1hKSBjYW4KcmV2b2tlIGFuIGF0dGVzdGF0aW9uLiBUaGUgc2NoZW1hIG11c3QgYWxzbyBwZXJtaXQgcmV2b2NhdGlvbnMuCgojIEFyZ3VtZW50cwoKKiBgcmV2b2tlcmAgLSBUaGUgYWRkcmVzcyBvZiB0aGUgZW50aXR5IHJldm9raW5nIHRoZSBhdHRlc3RhdGlvbi4gTXVzdCBiZSBhdXRob3JpemVkIHRvIHBlcmZvcm0gdGhpcyBhY3Rpb24uCiogYGF0dGVzdGF0aW9uX3VpZGAgLSBUaGUgVUlEIG9mIHRoZSBhdHRlc3RhdGlvbiB0byBiZSByZXZva2VkLgoKIyBSZXR1cm5zCgpSZXR1cm5zIGBPaygoKSlgIG9uIHN1Y2Nlc3NmdWwgcmV2b2NhdGlvbiwgb3IgYW4gZXJyb3IgaWYgdGhlIHJldm9jYXRpb24gZmFpbHMuAAAAAAAABnJldm9rZQAAAAAAAgAAAAAAAAAHcmV2b2tlcgAAAAATAAAAAAAAAA9hdHRlc3RhdGlvbl91aWQAAAAD7gAAACAAAAABAAAD6QAAAAIAAAAD",
         "AAAAAAAAAu1SZWdpc3RlcnMgYSBuZXcgYXR0ZXN0YXRpb24gc2NoZW1hLgoKQSBzY2hlbWEgZGVmaW5lcyB0aGUgc3RydWN0dXJlIGFuZCBydWxlcyBmb3IgYXR0ZXN0YXRpb25zLiBFYWNoIHNjaGVtYSBpcwppZGVudGlmaWVkIGJ5IGEgdW5pcXVlIFVJRCwgd2hpY2ggaXMgZGVyaXZlZCBmcm9tIGl0cyBkZWZpbml0aW9uLgoKIyBBcmd1bWVudHMKCiogYGNhbGxlcmAgLSBUaGUgYWRkcmVzcyBvZiB0aGUgZW50aXR5IHJlZ2lzdGVyaW5nIHRoZSBzY2hlbWEuIFRoZSBjYWxsZXIgaXMgZGVzaWduYXRlZCBhcyB0aGUgc2NoZW1hJ3MgY3JlYXRvci4KKiBgc2NoZW1hX2RlZmluaXRpb25gIC0gQSBzdHJpbmcgZGVmaW5pbmcgdGhlIHNjaGVtYS4gVGhlIGZvcm1hdCBvZiB0aGlzIHN0cmluZyBpcyB1cCB0byB0aGUgaW1wbGVtZW50ZXIuCiogYHJlc29sdmVyYCAtIEFuIG9wdGlvbmFsIGFkZHJlc3Mgb2YgYSBjb250cmFjdCB0aGF0IGNhbiByZXNvbHZlIG9yIHZhbGlkYXRlIGF0dGVzdGF0aW9ucyBhZ2FpbnN0IHRoaXMgc2NoZW1hLgoqIGByZXZvY2FibGVgIC0gQSBib29sZWFuIGluZGljYXRpbmcgd2hldGhlciBhdHRlc3RhdGlvbnMgbWFkZSBhZ2FpbnN0IHRoaXMgc2NoZW1hIGNhbiBiZSByZXZva2VkLgoKIyBSZXR1cm5zCgpSZXR1cm5zIGEgYFJlc3VsdGAgY29udGFpbmluZyB0aGUgMzItYnl0ZSBVSUQgb2YgdGhlIG5ld2x5IHJlZ2lzdGVyZWQgc2NoZW1hLApvciBhbiBlcnJvciBpZiB0aGUgcmVnaXN0cmF0aW9uIGZhaWxzLgAAAAAAAAhyZWdpc3RlcgAAAAQAAAAAAAAABmNhbGxlcgAAAAAAEwAAAAAAAAARc2NoZW1hX2RlZmluaXRpb24AAAAAAAAQAAAAAAAAAAhyZXNvbHZlcgAAA+gAAAATAAAAAAAAAAlyZXZvY2FibGUAAAAAAAABAAAAAQAAA+kAAAPuAAAAIAAAAAM=",
         "AAAAAAAAAP1SZXRyaWV2ZXMgYSByZWdpc3RlcmVkIHNjaGVtYSBieSBpdHMgVUlELgoKIyBBcmd1bWVudHMKCiogYHNjaGVtYV91aWRgIC0gVGhlIDMyLWJ5dGUgdW5pcXVlIGlkZW50aWZpZXIgb2YgdGhlIHNjaGVtYSB0byByZXRyaWV2ZS4KCiMgUmV0dXJucwoKUmV0dXJucyBhIGBSZXN1bHRgIGNvbnRhaW5pbmcgdGhlIGBTY2hlbWFgIHN0cnVjdCBpZiBmb3VuZCwgb3IgYW4gZXJyb3IKaWYgbm8gc2NoZW1hIHdpdGggdGhlIGdpdmVuIFVJRCBleGlzdHMuAAAAAAAACmdldF9zY2hlbWEAAAAAAAEAAAAAAAAACnNjaGVtYV91aWQAAAAAA+4AAAAgAAAAAQAAA+kAAAfQAAAABlNjaGVtYQAAAAAAAw==",
-        "AAAAAAAAAVhJbml0aWFsaXplcyB0aGUgY29udHJhY3Qgd2l0aCBhbiBhZG1pbmlzdHJhdGl2ZSBhZGRyZXNzLgoKVGhpcyBmdW5jdGlvbiBjYW4gb25seSBiZSBjYWxsZWQgb25jZS4gU3Vic2VxdWVudCBjYWxscyB3aWxsIHJlc3VsdCBpbiBhbgpgQWxyZWFkeUluaXRpYWxpemVkYCBlcnJvci4KCiMgQXJndW1lbnRzCgoqIGBhZG1pbmAgLSBUaGUgYWRkcmVzcyB0byBiZSBzZXQgYXMgdGhlIGNvbnRyYWN0IGFkbWluaXN0cmF0b3IuCgojIEVycm9ycwoKUmV0dXJucyBgRXJyKGVycm9yczo6RXJyb3I6OkFscmVhZHlJbml0aWFsaXplZClgIGlmIHRoZSBjb250cmFjdCBoYXMgYWxyZWFkeSBiZWVuIGluaXRpYWxpemVkLgAAAAppbml0aWFsaXplAAAAAAABAAAAAAAAAAVhZG1pbgAAAAAAABMAAAABAAAD6QAAA+0AAAAAAAAAAw==",
+        "AAAAAAAAAchJbml0aWFsaXplcyB0aGUgY29udHJhY3Qgd2l0aCBhbiBhZG1pbmlzdHJhdGl2ZSBhZGRyZXNzLgoKVGhpcyBmdW5jdGlvbiBjYW4gb25seSBiZSBjYWxsZWQgb25jZS4gU3Vic2VxdWVudCBjYWxscyB3aWxsIHJlc3VsdCBpbiBhbgpgQWxyZWFkeUluaXRpYWxpemVkYCBlcnJvci4gVGhlIGFkbWluIGFkZHJlc3MgbXVzdCBhdXRob3JpemUgdGhlIGluaXRpYWxpemF0aW9uCnRvIHByZXZlbnQgZnJvbnQtcnVubmluZyBhdHRhY2tzLgoKIyBBcmd1bWVudHMKCiogYGFkbWluYCAtIFRoZSBhZGRyZXNzIHRvIGJlIHNldCBhcyB0aGUgY29udHJhY3QgYWRtaW5pc3RyYXRvci4gTXVzdCBhdXRob3JpemUgdGhpcyBjYWxsLgoKIyBFcnJvcnMKClJldHVybnMgYEVycihlcnJvcnM6OkVycm9yOjpBbHJlYWR5SW5pdGlhbGl6ZWQpYCBpZiB0aGUgY29udHJhY3QgaGFzIGFscmVhZHkgYmVlbiBpbml0aWFsaXplZC4AAAAKaW5pdGlhbGl6ZQAAAAAAAQAAAAAAAAAFYWRtaW4AAAAAAAATAAAAAQAAA+kAAAACAAAAAw==",
         "AAAAAAAAAOVHZXRzIHRoZSBCTFMgcHVibGljIGtleSBmb3IgYW4gYXR0ZXN0ZXIuCgojIEFyZ3VtZW50cwoKKiBgYXR0ZXN0ZXJgIC0gVGhlIGFkZHJlc3Mgb2YgdGhlIGF0dGVzdGVyLgoKIyBSZXR1cm5zCgpSZXR1cm5zIGEgYFJlc3VsdGAgY29udGFpbmluZyB0aGUgYEJsc1B1YmxpY0tleWAgaWYgZm91bmQsIG9yIGFuIGVycm9yIGlmIG5vIGtleQppcyByZWdpc3RlcmVkIGZvciB0aGUgZ2l2ZW4gYXR0ZXN0ZXIuAAAAAAAAC2dldF9ibHNfa2V5AAAAAAEAAAAAAAAACGF0dGVzdGVyAAAAEwAAAAEAAAPpAAAH0AAAAAxCbHNQdWJsaWNLZXkAAAAD",
         "AAAAAAAAAQxSZXRyaWV2ZXMgYW4gYXR0ZXN0YXRpb24gYnkgaXRzIFVJRC4KCiMgQXJndW1lbnRzCgoqIGBhdHRlc3RhdGlvbl91aWRgIC0gVGhlIDMyLWJ5dGUgdW5pcXVlIGlkZW50aWZpZXIgb2YgdGhlIGF0dGVzdGF0aW9uIHRvIHJldHJpZXZlLgoKIyBSZXR1cm5zCgpSZXR1cm5zIGEgYFJlc3VsdGAgY29udGFpbmluZyB0aGUgYEF0dGVzdGF0aW9uYCBzdHJ1Y3QgaWYgZm91bmQsIG9yIGFuIGVycm9yCmlmIG5vIGF0dGVzdGF0aW9uIHdpdGggdGhlIGdpdmVuIFVJRCBleGlzdHMuAAAAD2dldF9hdHRlc3RhdGlvbgAAAAABAAAAAAAAAA9hdHRlc3RhdGlvbl91aWQAAAAD7gAAACAAAAABAAAD6QAAB9AAAAALQXR0ZXN0YXRpb24AAAAAAw==",
-        "AAAAAAAAAflSZWdpc3RlcnMgYSBCTFMgcHVibGljIGtleSBmb3IgYW4gYXR0ZXN0ZXIuCgpUaGlzIHB1YmxpYyBrZXkgY2FuIGJlIHVzZWQgdG8gdmVyaWZ5IGRlbGVnYXRlZCBhdHRlc3RhdGlvbnMgYW5kIHJldm9jYXRpb25zLAplbmFibGluZyBtb3JlIGFkdmFuY2VkIGNyeXB0b2dyYXBoaWMgb3BlcmF0aW9ucy4gVGhlIGF0dGVzdGVyIG11c3QgYXV0aG9yaXplIHRoaXMgcmVnaXN0cmF0aW9uLgoKIyBBcmd1bWVudHMKCiogYGF0dGVzdGVyYCAtIFRoZSBhZGRyZXNzIG9mIHRoZSBhdHRlc3RlciBmb3Igd2hvbSB0aGUgQkxTIGtleSBpcyBiZWluZyByZWdpc3RlcmVkLiBNdXN0IGF1dGhvcml6ZSB0cmFuc2FjdGlvbi4KKiBgcHVibGljX2tleWAgLSBUaGUgMTkyLWJ5dGUgQkxTIHB1YmxpYyBrZXkuCgojIFJldHVybnMKClJldHVybnMgYE9rKCgpKWAgb24gc3VjY2Vzc2Z1bCByZWdpc3RyYXRpb24sIG9yIGFuIGVycm9yIGlmIG9uZSBhbHJlYWR5IGV4aXN0cyBvciByZWdpc3RyYXRpb24gZmFpbHMuAAAAAAAAEHJlZ2lzdGVyX2Jsc19rZXkAAAACAAAAAAAAAAhhdHRlc3RlcgAAABMAAAAAAAAACnB1YmxpY19rZXkAAAAAA+4AAADAAAAAAQAAA+kAAAPtAAAAAAAAAAM=",
+        "AAAAAAAAAflSZWdpc3RlcnMgYSBCTFMgcHVibGljIGtleSBmb3IgYW4gYXR0ZXN0ZXIuCgpUaGlzIHB1YmxpYyBrZXkgY2FuIGJlIHVzZWQgdG8gdmVyaWZ5IGRlbGVnYXRlZCBhdHRlc3RhdGlvbnMgYW5kIHJldm9jYXRpb25zLAplbmFibGluZyBtb3JlIGFkdmFuY2VkIGNyeXB0b2dyYXBoaWMgb3BlcmF0aW9ucy4gVGhlIGF0dGVzdGVyIG11c3QgYXV0aG9yaXplIHRoaXMgcmVnaXN0cmF0aW9uLgoKIyBBcmd1bWVudHMKCiogYGF0dGVzdGVyYCAtIFRoZSBhZGRyZXNzIG9mIHRoZSBhdHRlc3RlciBmb3Igd2hvbSB0aGUgQkxTIGtleSBpcyBiZWluZyByZWdpc3RlcmVkLiBNdXN0IGF1dGhvcml6ZSB0cmFuc2FjdGlvbi4KKiBgcHVibGljX2tleWAgLSBUaGUgMTkyLWJ5dGUgQkxTIHB1YmxpYyBrZXkuCgojIFJldHVybnMKClJldHVybnMgYE9rKCgpKWAgb24gc3VjY2Vzc2Z1bCByZWdpc3RyYXRpb24sIG9yIGFuIGVycm9yIGlmIG9uZSBhbHJlYWR5IGV4aXN0cyBvciByZWdpc3RyYXRpb24gZmFpbHMuAAAAAAAAEHJlZ2lzdGVyX2Jsc19rZXkAAAACAAAAAAAAAAhhdHRlc3RlcgAAABMAAAAAAAAACnB1YmxpY19rZXkAAAAAA+4AAADAAAAAAQAAA+kAAAACAAAAAw==",
+        "AAAAAAAAAVVSZXR1cm5zIHRoZSBuZXh0IGV4cGVjdGVkIG5vbmNlIGZvciBhIGRlbGVnYXRlZCByZXZva2VyLgoKSW5kZXBlbmRlbnQgb2YgYGdldF9hdHRlc3Rlcl9ub25jZWAgYmVjYXVzZSByZXZvY2F0aW9uIGhhcyBpdHMgb3duCm5vbmNlIGRpbWVuc2lvbiAoc2VlIGBEYXRhS2V5OjpSZXZva2VyTm9uY2VgKS4gT2ZmLWNoYWluIGNsaWVudHMKY29uc3RydWN0aW5nIGEgYERlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0YCBNVVNUIHVzZSB0aGlzIGNvdW50ZXIsCm5vdCBgZ2V0X2F0dGVzdGVyX25vbmNlYC4KClNvdXJjZTogQy1DT05UUkFDVC0xIChpbmRlcGVuZGVudCBhdWRpdCksIGV4dGVuZHMgSEFMLTAzLgAAAAAAABFnZXRfcmV2b2tlcl9ub25jZQAAAAAAAAEAAAAAAAAAB3Jldm9rZXIAAAAAEwAAAAEAAAAG",
         "AAAAAAAAATpHZXRzIHRoZSBuZXh0IG5vbmNlIGZvciBhbiBhdHRlc3Rlci4KCk5vbmNlcyBhcmUgdXNlZCBpbiBkZWxlZ2F0ZWQgcmVxdWVzdHMgdG8gcHJldmVudCByZXBsYXkgYXR0YWNrcy4gRWFjaCBkZWxlZ2F0ZWQKcmVxdWVzdCBmcm9tIGFuIGF0dGVzdGVyIG11c3QgaGF2ZSBhIHVuaXF1ZSwgc2VxdWVudGlhbCBub25jZS4KCiMgQXJndW1lbnRzCgoqIGBhdHRlc3RlcmAgLSBUaGUgYWRkcmVzcyBvZiB0aGUgYXR0ZXN0ZXIuCgojIFJldHVybnMKClJldHVybnMgdGhlIG5leHQgZXhwZWN0ZWQgbm9uY2UgKGB1NjRgKSBmb3IgdGhlIGdpdmVuIGF0dGVzdGVyLgAAAAAAEmdldF9hdHRlc3Rlcl9ub25jZQAAAAAAAQAAAAAAAAAIYXR0ZXN0ZXIAAAATAAAAAQAAAAY=",
-        "AAAAAAAAAtdDcmVhdGVzIGFuIGF0dGVzdGF0aW9uIHVzaW5nIGEgZGVsZWdhdGVkIHNpZ25hdHVyZS4KClRoaXMgbWV0aG9kIGFsbG93cyBmb3IgZ2FzLWxlc3MgYXR0ZXN0YXRpb25zIHdoZXJlIGEgYHN1Ym1pdHRlcmAgY2FuIHBvc3QgYW4KYXR0ZXN0YXRpb24gb24gYmVoYWxmIG9mIGFuIGBhdHRlc3RlcmAuIFRoZSBgYXR0ZXN0ZXJgJ3MgYXV0aG9yaXphdGlvbiBpcwp2ZXJpZmllZCB0aHJvdWdoIGEgc2lnbmVkIGBEZWxlZ2F0ZWRBdHRlc3RhdGlvblJlcXVlc3RgLiBUaGUgYXR0ZXN0YXRpb24gVUlECmNhbiBiZSBkZXJpdmVkIG9mZi1jaGFpbiBmcm9tIHRoZSByZXF1ZXN0IHBhcmFtZXRlcnMuCgpBbnlvbmUgY2FuIHN1Ym1pdCB0aGlzIHRyYW5zYWN0aW9uLCBwYXlpbmcgdGhlIGZlZXMuCgojIEFyZ3VtZW50cwoKKiBgc3VibWl0dGVyYCAtIFRoZSBhZGRyZXNzIHN1Ym1pdHRpbmcgdGhlIHRyYW5zYWN0aW9uLCB3aGljaCBtdXN0IGF1dGhvcml6ZSB0aGUgaW52b2NhdGlvbi4KKiBgcmVxdWVzdGAgLSBUaGUgYERlbGVnYXRlZEF0dGVzdGF0aW9uUmVxdWVzdGAgc3RydWN0IGNvbnRhaW5pbmcgdGhlIGF0dGVzdGF0aW9uIGRldGFpbHMgYW5kIHRoZSBhdHRlc3RlcidzIHNpZ25hdHVyZS4KCiMgUmV0dXJucwoKUmV0dXJucyBgT2soKCkpYCBvbiBzdWNjZXNzLCBvciBhbiBlcnJvciBpZiB0aGUgcmVxdWVzdCBpcyBpbnZhbGlkIG9yIHNpZ25hdHVyZSB2ZXJpZmljYXRpb24gZmFpbHMuAAAAABRhdHRlc3RfYnlfZGVsZWdhdGlvbgAAAAIAAAAAAAAACXN1Ym1pdHRlcgAAAAAAABMAAAAAAAAAB3JlcXVlc3QAAAAH0AAAABtEZWxlZ2F0ZWRBdHRlc3RhdGlvblJlcXVlc3QAAAAAAQAAA+kAAAPtAAAAAAAAAAM=",
-        "AAAAAAAAAk1SZXZva2VzIGFuIGF0dGVzdGF0aW9uIHVzaW5nIGEgZGVsZWdhdGVkIHNpZ25hdHVyZS4KClRoaXMgbWV0aG9kIGFsbG93cyBmb3IgZ2FzLWxlc3MgcmV2b2NhdGlvbnMgd2hlcmUgYSBgc3VibWl0dGVyYCBjYW4gcG9zdCBhCnJldm9jYXRpb24gb24gYmVoYWxmIG9mIGEgYHJldm9rZXJgLiBUaGUgYHJldm9rZXJgJ3MgYXV0aG9yaXphdGlvbiBpcwp2ZXJpZmllZCB0aHJvdWdoIGEgc2lnbmVkIGBEZWxlZ2F0ZWRSZXZvY2F0aW9uUmVxdWVzdGAuCgojIEFyZ3VtZW50cwoKKiBgc3VibWl0dGVyYCAtIFRoZSBhZGRyZXNzIHN1Ym1pdHRpbmcgdGhlIHRyYW5zYWN0aW9uLCB3aGljaCBtdXN0IGF1dGhvcml6ZSB0aGUgaW52b2NhdGlvbi4KKiBgcmVxdWVzdGAgLSBUaGUgYERlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0YCBzdHJ1Y3QgY29udGFpbmluZyB0aGUgcmV2b2NhdGlvbiBkZXRhaWxzIGFuZCB0aGUgcmV2b2tlcidzIHNpZ25hdHVyZS4KCiMgUmV0dXJucwoKUmV0dXJucyBgT2soKCkpYCBvbiBzdWNjZXNzLCBvciBhbiBlcnJvciBpZiB0aGUgcmVxdWVzdCBpcyBpbnZhbGlkIG9yIHNpZ25hdHVyZSB2ZXJpZmljYXRpb24gZmFpbHMuAAAAAAAAFHJldm9rZV9ieV9kZWxlZ2F0aW9uAAAAAgAAAAAAAAAJc3VibWl0dGVyAAAAAAAAEwAAAAAAAAAHcmVxdWVzdAAAAAfQAAAAGkRlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0AAAAAAABAAAD6QAAA+0AAAAAAAAAAw==",
+        "AAAAAAAAAtdDcmVhdGVzIGFuIGF0dGVzdGF0aW9uIHVzaW5nIGEgZGVsZWdhdGVkIHNpZ25hdHVyZS4KClRoaXMgbWV0aG9kIGFsbG93cyBmb3IgZ2FzLWxlc3MgYXR0ZXN0YXRpb25zIHdoZXJlIGEgYHN1Ym1pdHRlcmAgY2FuIHBvc3QgYW4KYXR0ZXN0YXRpb24gb24gYmVoYWxmIG9mIGFuIGBhdHRlc3RlcmAuIFRoZSBgYXR0ZXN0ZXJgJ3MgYXV0aG9yaXphdGlvbiBpcwp2ZXJpZmllZCB0aHJvdWdoIGEgc2lnbmVkIGBEZWxlZ2F0ZWRBdHRlc3RhdGlvblJlcXVlc3RgLiBUaGUgYXR0ZXN0YXRpb24gVUlECmNhbiBiZSBkZXJpdmVkIG9mZi1jaGFpbiBmcm9tIHRoZSByZXF1ZXN0IHBhcmFtZXRlcnMuCgpBbnlvbmUgY2FuIHN1Ym1pdCB0aGlzIHRyYW5zYWN0aW9uLCBwYXlpbmcgdGhlIGZlZXMuCgojIEFyZ3VtZW50cwoKKiBgc3VibWl0dGVyYCAtIFRoZSBhZGRyZXNzIHN1Ym1pdHRpbmcgdGhlIHRyYW5zYWN0aW9uLCB3aGljaCBtdXN0IGF1dGhvcml6ZSB0aGUgaW52b2NhdGlvbi4KKiBgcmVxdWVzdGAgLSBUaGUgYERlbGVnYXRlZEF0dGVzdGF0aW9uUmVxdWVzdGAgc3RydWN0IGNvbnRhaW5pbmcgdGhlIGF0dGVzdGF0aW9uIGRldGFpbHMgYW5kIHRoZSBhdHRlc3RlcidzIHNpZ25hdHVyZS4KCiMgUmV0dXJucwoKUmV0dXJucyBgT2soKCkpYCBvbiBzdWNjZXNzLCBvciBhbiBlcnJvciBpZiB0aGUgcmVxdWVzdCBpcyBpbnZhbGlkIG9yIHNpZ25hdHVyZSB2ZXJpZmljYXRpb24gZmFpbHMuAAAAABRhdHRlc3RfYnlfZGVsZWdhdGlvbgAAAAIAAAAAAAAACXN1Ym1pdHRlcgAAAAAAABMAAAAAAAAAB3JlcXVlc3QAAAAH0AAAABtEZWxlZ2F0ZWRBdHRlc3RhdGlvblJlcXVlc3QAAAAAAQAAA+kAAAACAAAAAw==",
+        "AAAAAAAAAk1SZXZva2VzIGFuIGF0dGVzdGF0aW9uIHVzaW5nIGEgZGVsZWdhdGVkIHNpZ25hdHVyZS4KClRoaXMgbWV0aG9kIGFsbG93cyBmb3IgZ2FzLWxlc3MgcmV2b2NhdGlvbnMgd2hlcmUgYSBgc3VibWl0dGVyYCBjYW4gcG9zdCBhCnJldm9jYXRpb24gb24gYmVoYWxmIG9mIGEgYHJldm9rZXJgLiBUaGUgYHJldm9rZXJgJ3MgYXV0aG9yaXphdGlvbiBpcwp2ZXJpZmllZCB0aHJvdWdoIGEgc2lnbmVkIGBEZWxlZ2F0ZWRSZXZvY2F0aW9uUmVxdWVzdGAuCgojIEFyZ3VtZW50cwoKKiBgc3VibWl0dGVyYCAtIFRoZSBhZGRyZXNzIHN1Ym1pdHRpbmcgdGhlIHRyYW5zYWN0aW9uLCB3aGljaCBtdXN0IGF1dGhvcml6ZSB0aGUgaW52b2NhdGlvbi4KKiBgcmVxdWVzdGAgLSBUaGUgYERlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0YCBzdHJ1Y3QgY29udGFpbmluZyB0aGUgcmV2b2NhdGlvbiBkZXRhaWxzIGFuZCB0aGUgcmV2b2tlcidzIHNpZ25hdHVyZS4KCiMgUmV0dXJucwoKUmV0dXJucyBgT2soKCkpYCBvbiBzdWNjZXNzLCBvciBhbiBlcnJvciBpZiB0aGUgcmVxdWVzdCBpcyBpbnZhbGlkIG9yIHNpZ25hdHVyZSB2ZXJpZmljYXRpb24gZmFpbHMuAAAAAAAAFHJldm9rZV9ieV9kZWxlZ2F0aW9uAAAAAgAAAAAAAAAJc3VibWl0dGVyAAAAAAAAEwAAAAAAAAAHcmVxdWVzdAAAAAfQAAAAGkRlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0AAAAAAABAAAD6QAAAAIAAAAD",
         "AAAAAAAAAUlHZXRzIHRoZSBkb21haW4gc2VwYXJhdGlvbiB0YWcgKERTVCkgZm9yIGRlbGVnYXRlZCByZXZvY2F0aW9ucy4KClRoZSBEU1QgaXMgYSB1bmlxdWUgYnl0ZSBzdHJpbmcgdXNlZCB0byBlbnN1cmUgdGhhdCBzaWduYXR1cmVzIGNyZWF0ZWQgZm9yIG9uZQpwdXJwb3NlIGNhbm5vdCBiZSByZXB1cnBvc2VkIGZvciBhbm90aGVyLiBUaGlzIGlzIGNydWNpYWwgZm9yIHRoZSBzZWN1cml0eSBvZgpkZWxlZ2F0ZWQgb3BlcmF0aW9ucy4KCiMgUmV0dXJucwoKUmV0dXJucyB0aGUgYEJ5dGVzYCBzbGljZSByZXByZXNlbnRpbmcgdGhlIERTVCBmb3IgZGVsZWdhdGVkIHJldm9jYXRpb25zLgAAAAAAABZnZXRfZHN0X2Zvcl9yZXZvY2F0aW9uAAAAAAAAAAAAAQAAAA4=",
         "AAAAAAAAAUtHZXRzIHRoZSBkb21haW4gc2VwYXJhdGlvbiB0YWcgKERTVCkgZm9yIGRlbGVnYXRlZCBhdHRlc3RhdGlvbnMuCgpUaGUgRFNUIGlzIGEgdW5pcXVlIGJ5dGUgc3RyaW5nIHVzZWQgdG8gZW5zdXJlIHRoYXQgc2lnbmF0dXJlcyBjcmVhdGVkIGZvciBvbmUKcHVycG9zZSBjYW5ub3QgYmUgcmVwdXJwb3NlZCBmb3IgYW5vdGhlci4gVGhpcyBpcyBjcnVjaWFsIGZvciB0aGUgc2VjdXJpdHkgb2YKZGVsZWdhdGVkIG9wZXJhdGlvbnMuCgojIFJldHVybnMKClJldHVybnMgdGhlIGBCeXRlc2Agc2xpY2UgcmVwcmVzZW50aW5nIHRoZSBEU1QgZm9yIGRlbGVnYXRlZCBhdHRlc3RhdGlvbnMuAAAAABdnZXRfZHN0X2Zvcl9hdHRlc3RhdGlvbgAAAAAAAAAAAQAAAA4=",
         "AAAAAQAAAzfilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgU2NoZW1hICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhIHNjaGVtYSBkZWZpbml0aW9uIHRoYXQgYXR0ZXN0YXRpb25zIGNhbiBmb2xsb3cuCgpTY2hlbWFzIGRlZmluZSB0aGUgc3RydWN0dXJlIGFuZCB2YWxpZGF0aW9uIHJ1bGVzIGZvciBhdHRlc3RhdGlvbnMuClRoZSBkZWZpbml0aW9uIGZpZWxkIHN1cHBvcnRzIG11bHRpcGxlIGZvcm1hdHM6Ci0gWERSLWVuY29kZWQ6IFN0ZWxsYXItbmF0aXZlIGJpbmFyeSBmb3JtYXQgZm9yIHN0cnVjdHVyZWQgZGF0YQotIEpTT046IEh1bWFuLXJlYWRhYmxlIHN0cnVjdHVyZWQgZm9ybWF0AAAAAAAAAAAGU2NoZW1hAAAAAAAEAAAANVRoZSBhZGRyZXNzIG9mIHRoZSBhdXRob3JpdHkgdGhhdCBjcmVhdGVkIHRoaXMgc2NoZW1hAAAAAAAACWF1dGhvcml0eQAAAAAAABMAAABbVGhlIHNjaGVtYSBkZWZpbml0aW9uIGluIGFueSBzdXBwb3J0ZWQgZm9ybWF0CgpTdXBwb3J0cyBYRFItZW5jb2RlZCBzdHJ1Y3R1cmVkIGRhdGEgb3IgSlNPTgAAAAAKZGVmaW5pdGlvbgAAAAAAEAAAAINPcHRpb25hbCBhZGRyZXNzIG9mIGEgcmVzb2x2ZXIgY29udHJhY3QgZm9yIHRoaXMgc2NoZW1hCgpJZiBwcmVzZW50LCB0aGlzIGNvbnRyYWN0IHdpbGwgYmUgY2FsbGVkIHRvIGhhbmRsZSBhdHRlc3RhdGlvbiBvcGVyYXRpb25zLgAAAAAIcmVzb2x2ZXIAAAPoAAAAEwAAADVXaGV0aGVyIGF0dGVzdGF0aW9ucyB1c2luZyB0aGlzIHNjaGVtYSBjYW4gYmUgcmV2b2tlZAAAAAAAAAlyZXZvY2FibGUAAAAAAAAB",
-        "AAAAAgAAAsbilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgRGF0YUtleSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyB0aGUga2V5cyB1c2VkIGZvciBkYXRhIHN0b3JhZ2UgaW4gdGhlIGNvbnRyYWN0LgoKRWFjaCB2YXJpYW50IGNvcnJlc3BvbmRzIHRvIGEgZGlmZmVyZW50IHR5cGUgb2YgZGF0YSB0aGF0IGNhbiBiZSBzdG9yZWQKaW4gdGhlIGNvbnRyYWN0J3MgcGVyc2lzdGVudCBzdG9yYWdlLgAAAAAAAAAAAAdEYXRhS2V5AAAAAAYAAAAAAAAAKktleSBmb3Igc3RvcmluZyB0aGUgY29udHJhY3QgYWRtaW4gYWRkcmVzcwAAAAAABUFkbWluAAAAAAAAAQAAAElLZXkgZm9yIHN0b3JpbmcgYXV0aG9yaXR5IGluZm9ybWF0aW9uLCBpbmRleGVkIGJ5IHRoZSBhdXRob3JpdHkncyBhZGRyZXNzAAAAAAAACUF1dGhvcml0eQAAAAAAAAEAAAATAAAAAQAAAFhLZXkgZm9yIHN0b3Jpbmcgc3RydWN0dXJlZCBzY2hlbWEgaW5mb3JtYXRpb24sIGluZGV4ZWQgYnkgdGhlIHNjaGVtYSdzIHVuaXF1ZSBpZGVudGlmaWVyAAAABlNjaGVtYQAAAAAAAQAAA+4AAAAgAAAAAQAAAE5LZXkgZm9yIHN0b3JpbmcgYXR0ZXN0YXRpb24gZGF0YQoKSW5kZXhlZCBieSBhdHRlc3RhdGlvbiBVSUQgZm9yIGRpcmVjdCBsb29rdXAAAAAAAA5BdHRlc3RhdGlvblVJRAAAAAAAAQAAA+4AAAAgAAAAAQAAAGtLZXkgZm9yIHN0b3JpbmcgdGhlIGN1cnJlbnQgbm9uY2UgZm9yIGFuIGF0dGVzdGVyCgpVc2VkIHRvIHByZXZlbnQgcmVwbGF5IGF0dGFja3MgaW4gZGVsZWdhdGVkIGF0dGVzdGF0aW9ucwAAAAANQXR0ZXN0ZXJOb25jZQAAAAAAAAEAAAATAAAAAQAAAGhLZXkgZm9yIHN0b3JpbmcgdGhlIEJMUyBwdWJsaWMga2V5IGZvciBhbiBhdHRlc3RlcgoKT25lLXRvLW9uZSBtYXBwaW5nOiB3YWxsZXQgYWRkcmVzcyAtPiBCTFMgcHVibGljIGtleQAAABFBdHRlc3RlclB1YmxpY0tleQAAAAAAAAEAAAAT",
+        "AAAAAgAAAsbilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgRGF0YUtleSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyB0aGUga2V5cyB1c2VkIGZvciBkYXRhIHN0b3JhZ2UgaW4gdGhlIGNvbnRyYWN0LgoKRWFjaCB2YXJpYW50IGNvcnJlc3BvbmRzIHRvIGEgZGlmZmVyZW50IHR5cGUgb2YgZGF0YSB0aGF0IGNhbiBiZSBzdG9yZWQKaW4gdGhlIGNvbnRyYWN0J3MgcGVyc2lzdGVudCBzdG9yYWdlLgAAAAAAAAAAAAdEYXRhS2V5AAAAAAcAAAAAAAAAKktleSBmb3Igc3RvcmluZyB0aGUgY29udHJhY3QgYWRtaW4gYWRkcmVzcwAAAAAABUFkbWluAAAAAAAAAQAAAElLZXkgZm9yIHN0b3JpbmcgYXV0aG9yaXR5IGluZm9ybWF0aW9uLCBpbmRleGVkIGJ5IHRoZSBhdXRob3JpdHkncyBhZGRyZXNzAAAAAAAACUF1dGhvcml0eQAAAAAAAAEAAAATAAAAAQAAAFhLZXkgZm9yIHN0b3Jpbmcgc3RydWN0dXJlZCBzY2hlbWEgaW5mb3JtYXRpb24sIGluZGV4ZWQgYnkgdGhlIHNjaGVtYSdzIHVuaXF1ZSBpZGVudGlmaWVyAAAABlNjaGVtYQAAAAAAAQAAA+4AAAAgAAAAAQAAAE5LZXkgZm9yIHN0b3JpbmcgYXR0ZXN0YXRpb24gZGF0YQoKSW5kZXhlZCBieSBhdHRlc3RhdGlvbiBVSUQgZm9yIGRpcmVjdCBsb29rdXAAAAAAAA5BdHRlc3RhdGlvblVJRAAAAAAAAQAAA+4AAAAgAAAAAQAAAGtLZXkgZm9yIHN0b3JpbmcgdGhlIGN1cnJlbnQgbm9uY2UgZm9yIGFuIGF0dGVzdGVyCgpVc2VkIHRvIHByZXZlbnQgcmVwbGF5IGF0dGFja3MgaW4gZGVsZWdhdGVkIGF0dGVzdGF0aW9ucwAAAAANQXR0ZXN0ZXJOb25jZQAAAAAAAAEAAAATAAAAAQAAAGhLZXkgZm9yIHN0b3JpbmcgdGhlIEJMUyBwdWJsaWMga2V5IGZvciBhbiBhdHRlc3RlcgoKT25lLXRvLW9uZSBtYXBwaW5nOiB3YWxsZXQgYWRkcmVzcyAtPiBCTFMgcHVibGljIGtleQAAABFBdHRlc3RlclB1YmxpY0tleQAAAAAAAAEAAAATAAAAAQAAAQdLZXkgZm9yIHN0b3JpbmcgdGhlIGN1cnJlbnQgbm9uY2UgZm9yIGEgcmV2b2tlciAoZGVsZWdhdGVkIHJldm9jYXRpb24KcmVwbGF5IHByb3RlY3Rpb24pLiBJbmRlcGVuZGVudCBvZiBBdHRlc3Rlck5vbmNlIHNvIHJldm9raW5nIGF0dGVzdGF0aW9uCk4gbmV2ZXIgcmVxdWlyZXMgdGhlIGF0dGVzdGVyJ3MgY3VycmVudCBub25jZS4KU291cmNlOiBDLUNPTlRSQUNULTEgKGluZGVwZW5kZW50IGF1ZGl0KSwgZXh0ZW5kcyBIQUwtMDMgKEhhbGJvcm4gwqc3LjMpLgAAAAAMUmV2b2tlck5vbmNlAAAAAQAAABM=",
         "AAAAAQAAAtvilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIEF1dGhvcml0eSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhbiBhdXRob3JpdHkgdGhhdCBjYW4gY3JlYXRlIHNjaGVtYXMgYW5kIGF0dGVzdGF0aW9ucy4KCkF1dGhvcml0aWVzIGFyZSByZWdpc3RlcmVkIGVudGl0aWVzIHdpdGggc3BlY2lmaWMgcGVybWlzc2lvbnMgaW4gdGhlIHN5c3RlbQp0aGF0IGNhbiBjcmVhdGUgc2NoZW1hcyBhbmQgaXNzdWUgYXR0ZXN0YXRpb25zLgAAAAAAAAAACUF1dGhvcml0eQAAAAAAAAIAAAAkVGhlIFN0ZWxsYXIgYWRkcmVzcyBvZiB0aGUgYXV0aG9yaXR5AAAAB2FkZHJlc3MAAAAAEwAAAGhNZXRhZGF0YSBkZXNjcmliaW5nIHRoZSBhdXRob3JpdHkKClR5cGljYWxseSBpbiBKU09OIGZvcm1hdCwgY29udGFpbmluZyBpbmZvcm1hdGlvbiBhYm91dCB0aGUgYXV0aG9yaXR5LgAAAAhtZXRhZGF0YQAAABA=",
         "AAAAAQAAAtzilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgIEF0dGVzdGF0aW9uICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhbiBhdHRlc3RhdGlvbiB3aXRoIHN1cHBvcnQgZm9yIGJvdGggZGlyZWN0IGFuZCBkZWxlZ2F0ZWQgYXR0ZXN0YXRpb25zLgoKVXNlZCBmb3IgdHJhY2tpbmcgYXR0ZXN0YXRpb25zIGFuZCBzdXBwb3J0aW5nIG11bHRpcGxlIGF0dGVzdGF0aW9ucyBwZXIgc2NoZW1hL3N1YmplY3QKcGFpciB0aHJvdWdoIG5vbmNlcy4AAAAAAAAAC0F0dGVzdGF0aW9uAAAAAAoAAACcVGhlIGFkZHJlc3Mgb2YgdGhlIGVudGl0eSB0aGF0IGNyZWF0ZWQgdGhpcyBhdHRlc3RhdGlvbgoKSW4gZGlyZWN0IGF0dGVzdGF0aW9ucywgdGhpcyBpcyB0aGUgY2FsbGVyLgpJbiBkZWxlZ2F0ZWQgYXR0ZXN0YXRpb25zLCB0aGlzIGlzIHRoZSBvcmlnaW5hbCBzaWduZXIuAAAACGF0dGVzdGVyAAAAEwAAAF1PcHRpb25hbCBleHBpcmF0aW9uIHRpbWVzdGFtcAoKSWYgc2V0LCB0aGUgYXR0ZXN0YXRpb24gaXMgY29uc2lkZXJlZCBpbnZhbGlkIGFmdGVyIHRoaXMgdGltZS4AAAAAAAAPZXhwaXJhdGlvbl90aW1lAAAAA+gAAAAGAAAAo1VuaXF1ZSBub25jZSBmb3IgdGhpcyBhdHRlc3RhdGlvbgoKQWxsb3dzIGZvciBtdWx0aXBsZSBhdHRlc3RhdGlvbnMgb2YgdGhlIHNhbWUgc2NoZW1hIGZvciB0aGUgc2FtZSBzdWJqZWN0LAphbmQgcHJldmVudHMgcmVwbGF5IGF0dGFja3MgaW4gZGVsZWdhdGVkIGF0dGVzdGF0aW9ucy4AAAAABW5vbmNlAAAAAAAABgAAADNPcHRpb25hbCB0aW1lc3RhbXAgd2hlbiB0aGUgYXR0ZXN0YXRpb24gd2FzIHJldm9rZWQAAAAAD3Jldm9jYXRpb25fdGltZQAAAAPoAAAABgAAAClXaGV0aGVyIHRoaXMgYXR0ZXN0YXRpb24gaGFzIGJlZW4gcmV2b2tlZAAAAAAAAAdyZXZva2VkAAAAAAEAAAA8VGhlIHVuaXF1ZSBpZGVudGlmaWVyIG9mIHRoZSBzY2hlbWEgdGhpcyBhdHRlc3RhdGlvbiBmb2xsb3dzAAAACnNjaGVtYV91aWQAAAAAA+4AAAAgAAAAQVRoZSBhZGRyZXNzIG9mIHRoZSBlbnRpdHkgdGhhdCBpcyB0aGUgc3ViamVjdCBvZiB0aGlzIGF0dGVzdGF0aW9uAAAAAAAAB3N1YmplY3QAAAAAEwAAACpUaW1lc3RhbXAgd2hlbiB0aGUgYXR0ZXN0YXRpb24gd2FzIGNyZWF0ZWQAAAAAAAl0aW1lc3RhbXAAAAAAAAAGAAAAKFRoZSB1bmlxdWUgaWRlbnRpZmllciBvZiB0aGUgYXR0ZXN0YXRpb24AAAADdWlkAAAAA+4AAAAgAAAAJ1RoZSB2YWx1ZSBvciBjb250ZW50IG9mIHRoZSBhdHRlc3RhdGlvbgAAAAAFdmFsdWUAAAAAAAAQ",
         "AAAAAQAAAqTilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgICAgICAgIEJMUyBQdWJsaWMgS2V5ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhIEJMUzEyLTM4MSBwdWJsaWMga2V5IGZvciBhbiBhdHRlc3Rlci4KCkVhY2ggd2FsbGV0IGFkZHJlc3MgY2FuIGhhdmUgZXhhY3RseSBvbmUgQkxTIHB1YmxpYyBrZXkuIE5vIHVwZGF0ZXMgb3IgcmV2b2NhdGlvbnMuAAAAAAAAAAxCbHNQdWJsaWNLZXkAAAACAAAAMlRoZSBCTFMxMi0zODEgRzIgcHVibGljIGtleSAoMTkyIGJ5dGVzIGNvbXByZXNzZWQpAAAAAAADa2V5AAAAA+4AAADAAAAAJlRpbWVzdGFtcCB3aGVuIHRoaXMga2V5IHdhcyByZWdpc3RlcmVkAAAAAAANcmVnaXN0ZXJlZF9hdAAAAAAAAAY=",
         "AAAAAQAAArfilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgIERlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0ICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhIHJlcXVlc3QgZm9yIGRlbGVnYXRlZCByZXZvY2F0aW9uLgoKVGhpcyBhbGxvd3MgYW4gYXR0ZXN0ZXIgdG8gc2lnbiBhIHJldm9jYXRpb24gb2ZmLWNoYWluLCB3aGljaCBjYW4gdGhlbiBiZQpzdWJtaXR0ZWQgb24tY2hhaW4gYnkgYW55IHBhcnR5LgAAAAAAAAAAGkRlbGVnYXRlZFJldm9jYXRpb25SZXF1ZXN0AAAAAAAHAAAAMlRoZSB1bmlxdWUgaWRlbnRpZmllciBvZiB0aGUgYXR0ZXN0YXRpb24gdG8gcmV2b2tlAAAAAAAPYXR0ZXN0YXRpb25fdWlkAAAAA+4AAAAgAAAALEV4cGlyYXRpb24gdGltZXN0YW1wIGZvciB0aGlzIHNpZ25lZCByZXF1ZXN0AAAACGRlYWRsaW5lAAAABgAAACZUaGUgbm9uY2Ugb2YgdGhlIGF0dGVzdGF0aW9uIHRvIHJldm9rZQAAAAAABW5vbmNlAAAAAAAABgAAADtUaGUgYWRkcmVzcyBvZiB0aGUgb3JpZ2luYWwgYXR0ZXN0ZXIgKHdobyBzaWduZWQgb2ZmLWNoYWluKQAAAAAHcmV2b2tlcgAAAAATAAAAI1RoZSB1bmlxdWUgaWRlbnRpZmllciBvZiB0aGUgc2NoZW1hAAAAAApzY2hlbWFfdWlkAAAAAAPuAAAAIAAAADVCTFMxMi0zODEgRzEgc2lnbmF0dXJlIG9mIHRoZSByZXF1ZXN0IGRhdGEgKDk2IGJ5dGVzKQAAAAAAAAlzaWduYXR1cmUAAAAAAAPuAAAAYAAAAEpUaGUgYWRkcmVzcyBvZiB0aGUgZW50aXR5IHRoYXQgaXMgdGhlIHN1YmplY3Qgb2YgdGhlIGF0dGVzdGF0aW9uIHRvIHJldm9rZQAAAAAAB3N1YmplY3QAAAAAEw==",
         "AAAAAQAAAt/ilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZcK4pWRICAgICAgICAgICAgICAgICAgICAgIERlbGVnYXRlZEF0dGVzdGF0aW9uUmVxdWVzdCAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCuKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQoKUmVwcmVzZW50cyBhIHJlcXVlc3QgZm9yIGRlbGVnYXRlZCBhdHRlc3RhdGlvbnMuCgpUaGlzIGFsbG93cyBhbiBhdHRlc3RlciB0byBzaWduIGFuIGF0dGVzdGF0aW9uIG9mZi1jaGFpbiwgd2hpY2ggY2FuIHRoZW4gYmUKc3VibWl0dGVkIG9uLWNoYWluIGJ5IGFueSBwYXJ0eSAod2hvIHdpbGwgcGF5IHRoZSB0cmFuc2FjdGlvbiBmZWVzKS4AAAAAAAAAABtEZWxlZ2F0ZWRBdHRlc3RhdGlvblJlcXVlc3QAAAAACAAAADtUaGUgYWRkcmVzcyBvZiB0aGUgb3JpZ2luYWwgYXR0ZXN0ZXIgKHdobyBzaWduZWQgb2ZmLWNoYWluKQAAAAAIYXR0ZXN0ZXIAAAATAAAAeEV4cGlyYXRpb24gdGltZXN0YW1wIGZvciB0aGlzIHNpZ25lZCByZXF1ZXN0CgpBZnRlciB0aGlzIHRpbWUsIHRoZSBzaWduYXR1cmUgaXMgbm8gbG9uZ2VyIHZhbGlkIGFuZCBjYW5ub3QgYmUgc3VibWl0dGVkLgAAAAhkZWFkbGluZQAAAAYAAAAzT3B0aW9uYWwgZXhwaXJhdGlvbiB0aW1lIGZvciB0aGUgYXR0ZXN0YXRpb24gaXRzZWxmAAAAAA9leHBpcmF0aW9uX3RpbWUAAAAD6AAAAAYAAABRVGhlIG5vbmNlIGZvciB0aGlzIGF0dGVzdGF0aW9uIChtdXN0IGJlIHRoZSBuZXh0IGV4cGVjdGVkIG5vbmNlIGZvciB0aGUgYXR0ZXN0ZXIpAAAAAAAABW5vbmNlAAAAAAAABgAAADxUaGUgdW5pcXVlIGlkZW50aWZpZXIgb2YgdGhlIHNjaGVtYSB0aGlzIGF0dGVzdGF0aW9uIGZvbGxvd3MAAAAKc2NoZW1hX3VpZAAAAAAD7gAAACAAAAA1QkxTMTItMzgxIEcxIHNpZ25hdHVyZSBvZiB0aGUgcmVxdWVzdCBkYXRhICg5NiBieXRlcykAAAAAAAAJc2lnbmF0dXJlAAAAAAAD7gAAAGAAAABBVGhlIGFkZHJlc3Mgb2YgdGhlIGVudGl0eSB0aGF0IGlzIHRoZSBzdWJqZWN0IG9mIHRoaXMgYXR0ZXN0YXRpb24AAAAAAAAHc3ViamVjdAAAAAATAAAAJ1RoZSB2YWx1ZSBvciBjb250ZW50IG9mIHRoZSBhdHRlc3RhdGlvbgAAAAAFdmFsdWUAAAAAAAAQ",
-        "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAAGgAAAAAAAAAOVHJhbnNmZXJGYWlsZWQAAAAAAAEAAAAAAAAAFkF1dGhvcml0eU5vdFJlZ2lzdGVyZWQAAAAAAAIAAAAAAAAADlNjaGVtYU5vdEZvdW5kAAAAAAADAAAAAAAAABFBdHRlc3RhdGlvbkV4aXN0cwAAAAAAAAQAAAAAAAAAE0F0dGVzdGF0aW9uTm90Rm91bmQAAAAABQAAAAAAAAANTm90QXV0aG9yaXplZAAAAAAAAAYAAAAAAAAADVN0b3JhZ2VGYWlsZWQAAAAAAAAHAAAAAAAAAApJbnZhbGlkVWlkAAAAAAAJAAAAAAAAAA1SZXNvbHZlckVycm9yAAAAAAAACgAAAAAAAAATU2NoZW1hSGFzTm9SZXNvbHZlcgAAAAALAAAAAAAAAAtBZG1pbk5vdFNldAAAAAAMAAAAAAAAABJBbHJlYWR5SW5pdGlhbGl6ZWQAAAAAAA0AAAAAAAAADk5vdEluaXRpYWxpemVkAAAAAAAOAAAAAAAAABdBdHRlc3RhdGlvbk5vdFJldm9jYWJsZQAAAAAPAAAAAAAAABdJbnZhbGlkU2NoZW1hRGVmaW5pdGlvbgAAAAAQAAAAAAAAABdJbnZhbGlkQXR0ZXN0YXRpb25WYWx1ZQAAAAARAAAAAAAAABBJbnZhbGlkUmVmZXJlbmNlAAAAEgAAAAAAAAAMSW52YWxpZE5vbmNlAAAAEwAAAAAAAAAQRXhwaXJlZFNpZ25hdHVyZQAAABQAAAAAAAAAEEludmFsaWRTaWduYXR1cmUAAAAVAAAAAAAAABJBdHRlc3RhdGlvbkV4cGlyZWQAAAAAABYAAAAAAAAAD0ludmFsaWREZWFkbGluZQAAAAAXAAAAAAAAABJSZXNvbHZlckNhbGxGYWlsZWQAAAAAABgAAAAAAAAAFUludmFsaWRTaWduYXR1cmVQb2ludAAAAAAAABkAAAAAAAAAFkJsc1B1YktleU5vdFJlZ2lzdGVyZWQAAAAAABoAAAAAAAAAD0ludGVnZXJPdmVyZmxvdwAAAAAb" ]),
+        "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAAHAAAAAAAAAAOVHJhbnNmZXJGYWlsZWQAAAAAAAEAAAAAAAAAFkF1dGhvcml0eU5vdFJlZ2lzdGVyZWQAAAAAAAIAAAAAAAAADlNjaGVtYU5vdEZvdW5kAAAAAAADAAAAAAAAABFBdHRlc3RhdGlvbkV4aXN0cwAAAAAAAAQAAAAAAAAAE0F0dGVzdGF0aW9uTm90Rm91bmQAAAAABQAAAAAAAAANTm90QXV0aG9yaXplZAAAAAAAAAYAAAAAAAAADVN0b3JhZ2VGYWlsZWQAAAAAAAAHAAAAAAAAAApJbnZhbGlkVWlkAAAAAAAJAAACFVJldHVybmVkIGJ5IHRoZSBwcm90b2NvbCdzIHJlc29sdmVyLWRpc3BhdGNoIHBhdGggd2hlbiBhIHJlc29sdmVyCnJlamVjdHMgYW4gYXR0ZXN0YXRpb24gb3IgcmV2b2NhdGlvbiBieSByZXR1cm5pbmcgYE9rKGZhbHNlKWAgZnJvbQpgb25hdHRlc3RgIC8gYG9ucmV2b2tlYC4gVGhpcyBpcyB0aGUgcHJvdG9jb2wtc2lkZSByZWplY3Rpb24gc2lnbmFsCmFuZCBpcyAqKmRpc3RpbmN0KiogZnJvbSB0aGUgcmVzb2x2ZXJzLWNyYXRlIGBSZXNvbHZlckVycm9yYCBlbnVtLAp3aGljaCBpcyB0aGUgdHlwZWQgZXJyb3IgdHlwZSByZXR1cm5lZCAqYnkqIHJlc29sdmVyIGltcGxlbWVudGF0aW9ucwooTm90QXV0aG9yaXplZCwgSW52YWxpZEF0dGVzdGF0aW9uLCBWYWxpZGF0aW9uRmFpbGVkLCBldGMuKS4gV2hlbiBhCnJlc29sdmVyIHJldHVybnMgYEVycihSZXNvbHZlckVycm9yOjoqKWAgcmF0aGVyIHRoYW4gYE9rKGZhbHNlKWAsIHRoZQpwcm90b2NvbCBzdXJmYWNlcyBpdCBhcyBgUmVzb2x2ZXJDYWxsRmFpbGVkYCAodmFyaWFudCAyNCkuAAAAAAAADVJlc29sdmVyRXJyb3IAAAAAAAAKAAAAAAAAABNTY2hlbWFIYXNOb1Jlc29sdmVyAAAAAAsAAAAAAAAAC0FkbWluTm90U2V0AAAAAAwAAAAAAAAAEkFscmVhZHlJbml0aWFsaXplZAAAAAAADQAAAAAAAAAOTm90SW5pdGlhbGl6ZWQAAAAAAA4AAAAAAAAAF0F0dGVzdGF0aW9uTm90UmV2b2NhYmxlAAAAAA8AAAAAAAAAF0ludmFsaWRTY2hlbWFEZWZpbml0aW9uAAAAABAAAAAAAAAAF0ludmFsaWRBdHRlc3RhdGlvblZhbHVlAAAAABEAAAAAAAAAEEludmFsaWRSZWZlcmVuY2UAAAASAAAAAAAAAAxJbnZhbGlkTm9uY2UAAAATAAAAAAAAABBFeHBpcmVkU2lnbmF0dXJlAAAAFAAAAAAAAAAQSW52YWxpZFNpZ25hdHVyZQAAABUAAAAAAAAAEkF0dGVzdGF0aW9uRXhwaXJlZAAAAAAAFgAAAAAAAAAPSW52YWxpZERlYWRsaW5lAAAAABcAAAAAAAAAElJlc29sdmVyQ2FsbEZhaWxlZAAAAAAAGAAAAcBUaGUgc3VibWl0dGVkIEJMUyBwb2ludCBieXRlcyBoYXZlIGludmFsaWQgZW5jb2RpbmcgZmxhZ3MgKGUuZy4gdGhlCmNvbXByZXNzaW9uIGJpdCBpcyBzZXQgb24gd2hhdCBzaG91bGQgYmUgYW4gdW5jb21wcmVzc2VkIHBvaW50LCBvcgp0aGUgaW5maW5pdHkgYml0IGlzIHNldCBvbiBhIG5vbi1pZGVudGl0eSBwb2ludCkuIFJldHVybmVkIGJ5IHRoZQpIQUwtMDcgc3RydWN0dXJhbCBwcmUtY2hlY2sgaW4gYHJlZ2lzdGVyX2Jsc19wdWJsaWNfa2V5YCBhbmQKYHZlcmlmeV9ibHNfc2lnbmF0dXJlYCBiZWZvcmUgYGZyb21fYnl0ZXNgIGlzIGludm9rZWQuIE5vdGU6IG9mZi1jdXJ2ZQpvciB3cm9uZy1zdWJncm91cCBwb2ludHMgd2hvc2UgZmxhZyBieXRlIGhhcHBlbnMgdG8gYmUgMHgwMCBzdGlsbApjYXVzZSBhIFNvcm9iYW4gaG9zdCB0cmFwIHJhdGhlciB0aGFuIHRoaXMgZXJyb3IuAAAAFUludmFsaWRTaWduYXR1cmVQb2ludAAAAAAAABkAAACPVGhlIGF0dGVzdGVyIGhhcyBub3QgcmVnaXN0ZXJlZCBhIEJMUyBwdWJsaWMga2V5IHdpdGggdGhlIHByb3RvY29sLApzbyBkZWxlZ2F0ZWQgYXR0ZXN0YXRpb24gLyByZXZvY2F0aW9uIGNhbm5vdCBiZSBjcnlwdG9ncmFwaGljYWxseSB2ZXJpZmllZC4AAAAAFkJsc1B1YktleU5vdFJlZ2lzdGVyZWQAAAAAABoAAAAAAAAAD0ludGVnZXJPdmVyZmxvdwAAAAAbAAAAhEEgc2NoZW1hIHdpdGggdGhlIHNhbWUgZGVmaW5pdGlvbiwgYXV0aG9yaXR5LCBhbmQgcmVzb2x2ZXIgYWxyZWFkeSBleGlzdHMuClRoaXMgaW5kaWNhdGVzIGFuIGF0dGVtcHQgdG8gcmVnaXN0ZXIgYSBkdXBsaWNhdGUgc2NoZW1hLgAAABNTY2hlbWFBbHJlYWR5RXhpc3RzAAAAABwAAADnUmV0dXJuZWQgd2hlbiBhbiBhdHRlbXB0IGlzIG1hZGUgdG8gcmV2b2tlIGFuIGF0dGVzdGF0aW9uIHRoYXQgaXMgYWxyZWFkeSByZXZva2VkLgpEaXN0aW5jdCBmcm9tIGBBdHRlc3RhdGlvbk5vdEZvdW5kYCBzbyBjYWxsZXJzIChhbmQgaW5kZXhlcnMpIGNhbiB0ZWxsIGFwYXJ0IGEKbWlzc2luZyByZWNvcmQgZnJvbSBhIHRlcm1pbmFsIHJlY29yZC4KU291cmNlOiBIQUwtMDggKEhhbGJvcm4gwqc3LjgpAAAAAA5BbHJlYWR5UmV2b2tlZAAAAAAAHQ==",
+        "AAAAAgAAAAAAAAAAAAAADFJlc29sdmVyVHlwZQAAAAcAAAAAAAAAAAAAAAdEZWZhdWx0AAAAAAAAAAAAAAAACUF1dGhvcml0eQAAAAAAAAAAAAAAAAAAC1Rva2VuUmV3YXJkAAAAAAAAAAAAAAAADUZlZUNvbGxlY3Rpb24AAAAAAAAAAAAAAAAAAAZIeWJyaWQAAAAAAAAAAAAAAAAAB1N0YWtpbmcAAAAAAAAAAAAAAAAGQ3VzdG9tAAA=",
+        "AAAABAAAAAAAAAAAAAAADVJlc29sdmVyRXJyb3IAAAAAAAAIAAAAAAAAAA1Ob3RBdXRob3JpemVkAAAAAAAAAQAAAAAAAAASSW52YWxpZEF0dGVzdGF0aW9uAAAAAAACAAAAAAAAAA1JbnZhbGlkU2NoZW1hAAAAAAAAAwAAAAAAAAARSW5zdWZmaWNpZW50RnVuZHMAAAAAAAAEAAAAAAAAABNUb2tlblRyYW5zZmVyRmFpbGVkAAAAAAUAAAAAAAAADVN0YWtlUmVxdWlyZWQAAAAAAAAGAAAAAAAAABBWYWxpZGF0aW9uRmFpbGVkAAAABwAAAAAAAAALQ3VzdG9tRXJyb3IAAAAACA==",
+        "AAAAAQAAAAAAAAAAAAAAEFJlc29sdmVyTWV0YWRhdGEAAAAEAAAAAAAAAAtkZXNjcmlwdGlvbgAAAAAQAAAAAAAAAARuYW1lAAAAEAAAAAAAAAANcmVzb2x2ZXJfdHlwZQAAAAAAB9AAAAAMUmVzb2x2ZXJUeXBlAAAAAAAAAAd2ZXJzaW9uAAAAABA=",
+        "AAAAAQAAAAAAAAAAAAAAF1Jlc29sdmVyQXR0ZXN0YXRpb25EYXRhAAAAAAsAAAAAAAAACGF0dGVzdGVyAAAAEwAAAAAAAAAEZGF0YQAAAA4AAAAAAAAAD2V4cGlyYXRpb25fdGltZQAAAAAGAAAAAAAAAAlyZWNpcGllbnQAAAAAAAATAAAAAAAAAAdyZWZfdWlkAAAAAA4AAAAAAAAACXJldm9jYWJsZQAAAAAAAAEAAAAAAAAAD3Jldm9jYXRpb25fdGltZQAAAAAGAAAAAAAAAApzY2hlbWFfdWlkAAAAAAPuAAAAIAAAAAAAAAAEdGltZQAAAAYAAAAAAAAAA3VpZAAAAAPuAAAAIAAAAAAAAAAFdmFsdWUAAAAAAAAL" ]),
       options
     )
   }
@@ -809,6 +679,7 @@ export class Client extends ContractClient {
         get_bls_key: this.txFromJSON<Result<BlsPublicKey>>,
         get_attestation: this.txFromJSON<Result<Attestation>>,
         register_bls_key: this.txFromJSON<Result<void>>,
+        get_revoker_nonce: this.txFromJSON<u64>,
         get_attester_nonce: this.txFromJSON<u64>,
         attest_by_delegation: this.txFromJSON<Result<void>>,
         revoke_by_delegation: this.txFromJSON<Result<void>>,

@@ -11,8 +11,8 @@ import { isBuffer } from './common/buffer'
 import {
   type Client as ClientType,
   Client as ProtocolClient,
-  networks as ProtocolNetworks,
 } from '@attestprotocol/stellar-contracts/protocol'
+import { getContractId } from '@attestprotocol/stellar-contracts/registry'
 
 import {
   ClientOptions,
@@ -101,15 +101,8 @@ export class StellarAttestationClient {
     // Determine contract ID
     let contractId = options.contractId
     if (!contractId) {
-      switch (options.network) {
-        case 'mainnet':
-          contractId = ProtocolNetworks.mainnet.contractId || ''
-          break
-        case 'testnet':
-        default:
-          contractId = ProtocolNetworks.testnet.contractId || ''
-          break
-      }
+      const network = options.network === 'mainnet' ? 'mainnet' : 'testnet'
+      contractId = getContractId(network, options.contractVersion)
     }
 
     if (!contractId) {

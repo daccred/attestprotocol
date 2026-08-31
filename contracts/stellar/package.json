@@ -1,7 +1,7 @@
 {
   "name": "@attestprotocol/stellar-contracts",
   "description": "Stellar Attestation Service",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "author": "",
   "dependencies": {
     "@noble/curves": "^2.0.1",
@@ -19,7 +19,13 @@
       "types": "./dist/protocol.d.ts",
       "import": "./dist/protocol.js",
       "require": "./dist/protocol.js"
-    }
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "import": "./dist/registry.js",
+      "require": "./dist/registry.js"
+    },
+    "./contracts.json": "./dist/contracts.json"
   },
   "files": [
     "dist/",
@@ -35,7 +41,7 @@
   "license": "MIT",
   "main": "./dist/protocol.js",
   "peerDependencies": {
-    "@stellar/stellar-sdk": ">=14.3.0"
+    "@stellar/stellar-sdk": ">=16.0.0 <17"
   },
   "publishConfig": {
     "access": "public"
@@ -43,8 +49,20 @@
   "scripts": {
     "build": "tsc",
     "clean": "echo 'Use make clean in individual contract directories'",
+    "sync-deployments": "bash scripts/sync-deployments.sh",
+    "sync-networks": "node scripts/sync-networks.mjs",
     "test": "vitest"
   },
   "type": "module",
-  "types": "./dist/protocol.d.ts"
+  "types": "./dist/protocol.d.ts",
+  "typesVersions": {
+    "*": {
+      "registry": [
+        "./dist/registry.d.ts"
+      ],
+      "protocol": [
+        "./dist/protocol.d.ts"
+      ]
+    }
+  }
 }

@@ -160,7 +160,7 @@ fn test_nonce_incrementation() {
         &SorobanString::from_str(&env, "value1"),
         &None,
     );
-    let event_one = env.events().all().clone();
+    let event_one = testutils::all_events(&env).clone();
 
     client.attest(
         &attester,
@@ -168,7 +168,7 @@ fn test_nonce_incrementation() {
         &SorobanString::from_str(&env, "value2"),
         &None,
     );
-    let event_two = env.events().all().clone();
+    let event_two = testutils::all_events(&env).clone();
 
     client.attest(
         &attester,
@@ -176,7 +176,7 @@ fn test_nonce_incrementation() {
         &SorobanString::from_str(&env, "value3"),
         &None,
     );
-    let event_three = env.events().all().clone();
+    let event_three = testutils::all_events(&env).clone();
 
     let first_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_one.last().unwrap().2.try_into_val(&env).unwrap();
@@ -248,7 +248,7 @@ fn test_nonce_is_attester_specific() {
         &SorobanString::from_str(&env, "valueA"),
         &None,
     );
-    let event_from_att_one = env.events().all().clone();
+    let event_from_att_one = testutils::all_events(&env).clone();
 
     client.attest(
         &attester_b,
@@ -256,7 +256,7 @@ fn test_nonce_is_attester_specific() {
         &SorobanString::from_str(&env, "valueB"),
         &None,
     );
-    let event_from_att_two = env.events().all().clone();
+    let event_from_att_two = testutils::all_events(&env).clone();
 
     client.attest(
         &attester_a,
@@ -264,7 +264,7 @@ fn test_nonce_is_attester_specific() {
         &SorobanString::from_str(&env, "valueA2"),
         &None,
     );
-    let event_from_att_three = env.events().all().clone();
+    let event_from_att_three = testutils::all_events(&env).clone();
 
     let event_from_att_one_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         event_from_att_one.last().unwrap().2.try_into_val(&env).unwrap();
@@ -363,7 +363,7 @@ fn test_nonce_replay_future_nonce_rejection() {
             &None,
         );
 
-        let events = env.events().all();
+        let events = testutils::all_events(&env);
         let event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
             events.last().unwrap().2.try_into_val(&env).unwrap();
 
@@ -401,7 +401,7 @@ fn test_nonce_replay_future_nonce_rejection() {
         &None,
     );
 
-    let final_events = env.events().all();
+    let final_events = testutils::all_events(&env);
     let final_event_data: (BytesN<32>, BytesN<32>, Address, Address, SorobanString, u64, u64) =
         final_events.last().unwrap().2.try_into_val(&env).unwrap();
 
@@ -452,7 +452,7 @@ fn test_bls_key_registration_and_event() {
 
     client.register_bls_key(&attester, &public_key);
 
-    let events = env.events().all();
+    let events = testutils::all_events(&env);
     let last_event = events.last().unwrap();
 
     let expected_topics = (
@@ -556,7 +556,7 @@ fn test_delegated_attestation_with_valid_signature() {
     let delegated_attestation_request = create_delegated_attestation_request(&env, &contract_id, &attester, 0, &schema_uid, &subject);
     client.attest_by_delegation(&attester, &delegated_attestation_request);
 
-    let events = env.events().all();
+    let events = testutils::all_events(&env);
     dbg!(&events);
 
     assert!(!events.is_empty(), "Attestation event should be emitted");
@@ -714,7 +714,7 @@ fn test_end_to_end_bls_signature_verification() {
     let delegated_attestation = client.try_attest_by_delegation(&relayer, &request);
     dbg!(&delegated_attestation);
 
-    let event = env.events().all().last().unwrap();
+    let event = testutils::all_events(&env).last().unwrap();
 
     // Post HAL-09: ATTEST/CREATE tuple is (uid, schema_uid, subject, attester, value, nonce, timestamp)
     let (event_uid, _event_schema_uid, event_subject, event_attester, _event_value, event_nonce, _): (
@@ -1018,33 +1018,12 @@ fn test_hal07_infinity_signature_flag_returns_error_not_trap() {
     );
 }
 
-/// **HAL-07 Test 3 — RESIDUAL**: An all-zeros 96-byte signature has flag
-/// byte `0x00` (passes the structural pre-check), but its coordinates encode
-/// the affine zero point which is off-curve for G1. `G1Affine::from_bytes`
-/// therefore traps inside the Soroban host. This test documents the
-/// limitation of the pre-check — it cannot prevent off-curve / wrong-subgroup
-/// traps without an in-WASM subgroup check or a fallible host API.
-///
-/// The Soroban host trap surfaces in this test harness as a Rust panic, hence
-/// `#[should_panic]`. If a future soroban-sdk release adds `try_from_bytes`,
-/// this test should be removed and replaced with a structured-error assertion.
+/// **HAL-07 Test 3**: An all-zeros 96-byte signature has flag byte `0x00`,
+/// so it passes the encoding check, but its coordinates are not a point on
+/// the G1 curve. The host's on-curve check rejects it and the contract
+/// returns `Err(Error::InvalidSignaturePoint)` — no host abort.
 #[test]
-#[should_panic(expected = "InvokeError::Abort")]
-fn test_hal07_all_zeros_signature_still_traps() {
-    // HAL-07 residual: flag-byte check does not prevent off-curve trap. Documented limitation.
-    //
-    // The Soroban test harness surfaces the host abort as
-    // `Result<_, Result<_, InvokeError::Abort>>` from the `try_` client
-    // (rather than panicking the Rust thread directly). We assert that
-    // shape here and convert it into a panic — `#[should_panic]` then
-    // documents that this code path is unrecoverable from the contract's
-    // perspective: there is NO structured `Error` variant for off-curve
-    // signature bytes whose flag byte is structurally clean. Off-chain
-    // tooling sees the opaque `Abort` and cannot distinguish it from any
-    // other host-level failure. This is the documented limitation of the
-    // in-WASM mitigation; closing it requires a fallible `from_bytes` API
-    // in soroban-sdk (currently unavailable in 22.0.11) or an in-WASM
-    // subgroup check (cost-prohibitive).
+fn test_hal07_all_zeros_signature_returns_invalid_point() {
     let env = Env::default();
     env.mock_all_auths();
     let contract_id = env.register(AttestationContract {}, ());
@@ -1060,29 +1039,88 @@ fn test_hal07_all_zeros_signature_still_traps() {
     let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
     client.register_bls_key(&attester, &public_key);
 
-    // All zeros: flag byte clear (passes the structural pre-check), but the
-    // coordinates encode the affine zero point which is off-curve for G1.
-    // The Soroban host traps when `G1Affine::from_bytes` is reached.
     let sig_bytes = [0u8; 96];
     let request = build_request_with_raw_signature(&env, &attester, &schema_uid, &subject, 0, sig_bytes);
 
     let result = client.try_attest_by_delegation(&submitter, &request);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "all-zeros signature must return InvalidSignaturePoint, not abort"
+    );
+}
 
-    // We expect the host trap path: outer Err (non-contract failure)
-    // wrapping `Err(InvokeError::Abort)`. Anything else (including a
-    // structured `InvalidSignaturePoint`) would mean the residual trap
-    // surface has changed — re-run the test design in that case.
-    match result {
-        Err(Err(soroban_sdk::InvokeError::Abort)) => {
-            // Convert the documented residual into a panic so
-            // `#[should_panic(expected = ...)]` flags the residual surface.
-            panic!("InvokeError::Abort — HAL-07 residual host trap on off-curve G1 bytes");
-        }
-        other => panic!(
-            "expected InvokeError::Abort host trap (HAL-07 residual), got {:?}",
-            other
-        ),
+/// **HAL-07 Test 3b**: A 192-byte public key with a clean flag byte but
+/// arbitrary coordinates is not on the G2 curve. `register_bls_key` must
+/// return `Err(Error::InvalidSignaturePoint)` and store nothing.
+#[test]
+fn test_hal07_off_curve_pubkey_returns_invalid_point() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Clean flag byte, four in-range field elements that are not a curve
+    // point. Each 48-byte coordinate starts at 0 so it stays below the
+    // field modulus — otherwise the host rejects the encoding itself.
+    let mut pk_bytes = [0u8; 192];
+    for (i, b) in pk_bytes.iter_mut().enumerate() {
+        *b = if i % 48 == 0 { 0 } else { (i as u8).wrapping_mul(7).wrapping_add(3) };
     }
+    let public_key = BytesN::from_array(&env, &pk_bytes);
+
+    let result = client.try_register_bls_key(&attester, &public_key);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "off-curve G2 public key must return InvalidSignaturePoint"
+    );
+
+    let stored = client.try_get_bls_key(&attester);
+    assert!(
+        stored.is_err() || stored.unwrap().is_err(),
+        "no BLS key should have been stored when the point failed validation"
+    );
+}
+
+/// **HAL-07 Test 3c**: A 96-byte signature with a clean flag byte but
+/// arbitrary coordinates is not on the G1 curve. Delegated attestation must
+/// return `Err(Error::InvalidSignaturePoint)`.
+#[test]
+fn test_hal07_off_curve_signature_returns_invalid_point() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AttestationContract {}, ());
+    let client = AttestationContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let attester = Address::generate(&env);
+    let subject = Address::generate(&env);
+    let submitter = Address::generate(&env);
+
+    client.initialize(&admin);
+    let schema_uid = client.register(&attester, &SorobanString::from_str(&env, "schema"), &None, &true);
+
+    let public_key = BytesN::from_array(&env, &TEST_BLS_G2_PUBLIC_KEY);
+    client.register_bls_key(&attester, &public_key);
+
+    // Same construction as the G2 case: in-range coordinates that do not
+    // satisfy the curve equation.
+    let mut sig_bytes = [0u8; 96];
+    for (i, b) in sig_bytes.iter_mut().enumerate() {
+        *b = if i % 48 == 0 { 0 } else { (i as u8).wrapping_mul(11).wrapping_add(5) };
+    }
+    let request = build_request_with_raw_signature(&env, &attester, &schema_uid, &subject, 0, sig_bytes);
+
+    let result = client.try_attest_by_delegation(&submitter, &request);
+    assert_eq!(
+        result,
+        Err(Ok(ProtocolError::InvalidSignaturePoint.into())),
+        "off-curve G1 signature must return InvalidSignaturePoint"
+    );
 }
 
 /// **HAL-07 Test 4**: A 192-byte G2 public key whose byte 0 has the

@@ -4,8 +4,8 @@
 #
 # This workflow automates the release process for Soroban smart contracts:
 # 1. Triggers on new version tag push (v*)
-# 2. Builds and releases contract binaries
-# 3. Makes them available in GitHub Releases
+# 2. Builds and releases the protocol contract binary
+# 3. Makes it available in GitHub Releases
 # 4. Enables immediate contract verification on StellarExpert
 #
 name: Soroban Release
@@ -21,18 +21,8 @@ permissions:
   attestations: write
 
 jobs:
-  release-authority:
-    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@main
-    with:
-      release_name: ${{ github.ref_name }}
-      release_description: 'Authority Contract Release'
-      relative_path: 'contracts/stellar/authority'
-      package: 'authority'
-    secrets:
-      release_token: ${{ secrets.GITHUB_TOKEN }}
-
   release-protocol:
-    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@main
+    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@v27.0.0
     with:
       release_name: ${{ github.ref_name }}
       release_description: 'Protocol Contract Release'
@@ -45,8 +35,7 @@ jobs:
 # ----------------------------------------
 #
 # Release Process:
-# - Push a tag (e.g., 'v1.0.0') to create two releases:
-#   * v1.0.0-authority
+# - Push a tag (e.g., 'v1.0.0') to create one release:
 #   * v1.0.0-protocol
 #
 # Configuration Options:

@@ -30,6 +30,7 @@ export interface SchemaFilters {
   deployerAddress?: string
   type?: string
   revocable?: boolean
+  contractAddress?: string
   limit?: number
   offset?: number
 }
@@ -112,6 +113,7 @@ export async function getSchemas(filters: SchemaFilters = {}) {
       deployerAddress,
       type,
       revocable,
+      contractAddress,
       limit = 50,
       offset = 0,
     } = filters
@@ -123,6 +125,7 @@ export async function getSchemas(filters: SchemaFilters = {}) {
     if (deployerAddress) where.deployerAddress = deployerAddress
     if (type) where.type = type
     if (revocable !== undefined) where.revocable = revocable
+    if (contractAddress) where.contractAddress = contractAddress
 
     // Build query params, omitting empty where for exact test expectations
     const findParams: any = {

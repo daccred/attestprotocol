@@ -3,6 +3,8 @@ title: "Introduction"
 description: "Add proof to anything, on-chain without writing a line of code"
 ---
 
+import ContractAddresses from "/snippets/contracts.mdx"
+
 ## Whenever you need to prove something onchain — *identity, action, ownership, or permission* — you don't need to write a new smart contract or spin up a ZK system.
 
 Attest provides a proof infrastructure to build anything from **network states, DAOs, DePIN, and RWA**. With our **Unified Trust Framework,** developers on Stellar can integrate reputation and trust mechanisms in their dApps.
@@ -77,10 +79,9 @@ Teams building:
 
 ## Contract Addresses
 
-| Network     | Protocol Contract                                          |
-| ----------- | ---------------------------------------------------------- |
-| **Testnet** | `CBFE5YSUHCRYEYEOLNN2RJAWMQ2PW525KTJ6TPWPNS5XLIREZQ3NA4KP` |
-| **Mainnet** | `CBUUI7WKGOTPCLXBPCHTKB5GNATWM4WAH4KMADY6GFCXOCNVF5OCW2WI` |
+<ContractAddresses />
+
+Programmatic access: `getContractId(network, version?)` from `@attestprotocol/stellar-sdk`, or `GET /api/contracts` on horizon.
 
 ## Next Steps
 

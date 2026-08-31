@@ -1,3 +1,4 @@
+mod testutils;
 use protocol::{errors::Error, AttestationContract, AttestationContractClient};
 use soroban_sdk::{
     symbol_short,
@@ -84,7 +85,7 @@ fn revoke_by_nonce() {
     client.revoke(&attester, &attestation_uid);
 
     // verify revocation event shape
-    let events = env.events().all();
+    let events = testutils::all_events(&env);
     let last = events.last().unwrap();
     assert_eq!(last.0, contract_id);
     let expected_topics = (symbol_short!("ATTEST"), symbol_short!("REVOKE")).into_val(&env);
@@ -194,7 +195,7 @@ fn test_revocation_by_unauthorized_parties() {
     let result_unauthorized = client.try_revoke(&unauthorized_user, &attestation_uid);
     dbg!(&result_unauthorized);
     assert_eq!(result_unauthorized, Err(Ok(Error::NotAuthorized.into())));
-    assert!(env.events().all().is_empty());
+    assert!(testutils::all_events(&env).is_empty());
 
     // 2. Attempt revocation by the subject (who is not the attester)
     // This should fail because only the attester can revoke.
@@ -225,7 +226,7 @@ fn test_revocation_by_unauthorized_parties() {
     assert_eq!(result_admin, Err(Ok(Error::NotAuthorized.into())));
 
     // verify no new events were emitted
-    assert!(env.events().all().is_empty());
+    assert!(testutils::all_events(&env).is_empty());
 
     // verify state has not changed
     let fetched = client.get_attestation(&attestation_uid);
@@ -298,7 +299,7 @@ fn test_cannot_revoke_from_non_revocable_schema() {
     }]);
     let attestation_uid = client.attest(&attester, &schema_uid, &value, &expiration_time);
 
-    let _initial_events_count = env.events().all().len();
+    let _initial_events_count = testutils::all_events(&env).len();
 
     // Now try to revoke the attestation, it should fail with AttestationNotRevocable
     env.mock_auths(&[MockAuth {
@@ -314,7 +315,7 @@ fn test_cannot_revoke_from_non_revocable_schema() {
     dbg!(&result);
     assert_eq!(result, Err(Ok(Error::AttestationNotRevocable.into())));
 
-    assert!(env.events().all().is_empty());
+    assert!(testutils::all_events(&env).is_empty());
 
     let fetched = client.get_attestation(&attestation_uid);
     assert!(!fetched.revoked);
@@ -405,7 +406,7 @@ fn test_double_revocation_fails() {
     let fetched = client.get_attestation(&attestation_uid);
     assert!(fetched.revoked);
 
-    let events_after_first_revoke = env.events().all().len();
+    let events_after_first_revoke = testutils::all_events(&env).len();
 
     // try to revoke again
     env.mock_auths(&[MockAuth {
@@ -422,7 +423,7 @@ fn test_double_revocation_fails() {
     assert_eq!(result, Err(Ok(Error::AlreadyRevoked.into())));
 
     // verify no new events were emitted
-    assert_eq!(env.events().all().len(), events_after_first_revoke);
+    assert_eq!(testutils::all_events(&env).len(), events_after_first_revoke);
 
     // verify state is unchanged after failed second attempt
     let fetched_again = client.get_attestation(&attestation_uid);

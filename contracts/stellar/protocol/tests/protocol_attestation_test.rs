@@ -1,3 +1,4 @@
+mod testutils;
 use protocol::{
     errors::Error,
     state::{Attestation, DataKey},
@@ -169,7 +170,7 @@ fn create_and_get_attestation() {
     let attestation_uid: BytesN<32> = client.attest(&attester, &schema_uid, &value, &expiration_time);
 
     // verify event shape
-    let events = env.events().all();
+    let events = testutils::all_events(&env);
     let last = events.last().unwrap();
     assert_eq!(last.0, contract_id);
     let expected_topics = (symbol_short!("ATTEST"), symbol_short!("CREATE")).into_val(&env);
@@ -265,7 +266,7 @@ fn test_attestation_and_expiration() {
     let schema_uid: BytesN<32> = client.register(&attester, &schema_definition, &resolver, &revocable);
 
     let default_ledger_info = LedgerInfo {
-        protocol_version: 22,
+        protocol_version: 27,
         sequence_number: 0,
         network_id: Default::default(),
         base_reserve: 10,
@@ -429,7 +430,7 @@ fn test_can_revoke_non_revocable_schema() {
         },
     }]);
     client.revoke(&attester, &non_expired_attestation_uid);
-    let revoke_event_data = env.events().all().last().unwrap();
+    let revoke_event_data = testutils::all_events(&env).last().unwrap();
 
     let expected_topics = (symbol_short!("ATTEST"), symbol_short!("REVOKE")).into_val(&env);
     assert_eq!(revoke_event_data.1, expected_topics);
@@ -777,7 +778,7 @@ fn test_handling_expired_attestations() {
     // set the ledger timestamp to be in the "future"
     // relative to the expiration time
     env.ledger().set(soroban_sdk::testutils::LedgerInfo {
-        protocol_version: 22,
+        protocol_version: 27,
         sequence_number: 0,
         network_id: Default::default(),
         base_reserve: 10,

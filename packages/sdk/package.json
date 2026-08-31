@@ -1,7 +1,7 @@
 {
   "name": "@attestprotocol/sdk",
   "description": "SDK for interacting with Attest Protocol on Stellar",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "author": "daccred",
   "bugs": "https://github.com/daccred/attest.so/issues",
   "dependencies": {

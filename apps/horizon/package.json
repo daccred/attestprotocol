@@ -40,7 +40,7 @@
     "@attestprotocol/stellar-contracts": "workspace:*",
     "@attestprotocol/stellar-sdk": "workspace:*",
     "@prisma/client": "^6.19.3",
-    "@stellar/stellar-sdk": "^14.6.1",
+    "@stellar/stellar-sdk": "^16.3.0",
     "@types/pg": "^8.20.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",

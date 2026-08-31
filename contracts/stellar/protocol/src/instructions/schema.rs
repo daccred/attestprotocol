@@ -41,15 +41,15 @@ pub fn get_schema_or_fail(env: &Env, schema_uid: &BytesN<32>) -> Result<Schema, 
 /// * `env` - The Soroban environment providing access to blockchain services.
 /// * `caller` - The address registering the schema and becoming its authority.
 /// * `schema_definition` - The string representation of the schema definition, typically in JSON format
-///                        defining the fields and their types.
+///   defining the fields and their types.
 /// * `resolver` - An optional address of a resolver contract that can provide additional
-///               validation or resolution services for attestations using this schema.
+///   validation or resolution services for attestations using this schema.
 /// * `revocable` - A boolean flag indicating whether attestations made against this schema
-///                can be revoked later by the authority.
+///   can be revoked later by the authority.
 ///
 /// # Returns
 /// * `Result<BytesN<32>, Error>` - The unique 32-byte identifier (UID) of the newly registered schema,
-///                               or an error if the registration fails.
+///   or an error if the registration fails.
 ///
 /// # Example
 /// ```ignore
