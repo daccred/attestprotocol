@@ -1,5 +1,6 @@
 {
   "name": "attestprotocol",
+  "packageManager": "pnpm@11.5.0",
   "version": "2.0.0-0",
   "author": "Andrew Miracle <andrew@daccred.co>",
   "devDependencies": {
