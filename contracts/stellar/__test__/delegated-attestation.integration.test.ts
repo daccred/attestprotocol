@@ -24,9 +24,9 @@ import { bls12_381 } from '@noble/curves/bls12-381.js'
 import { Keypair, Transaction } from '@stellar/stellar-sdk'
 import * as ProtocolContract from '../bindings/src/protocol'
 import { TransactionSimulationPayload } from '../bindings/src/types'
-import { loadTestConfig, fundAccountIfNeeded, generateAttestationUid, createAttestationMessage, createRevocationMessage } from './testutils'
+import { loadTestConfig, fundAccountIfNeeded, generateAttestationUid, createAttestationMessage, createRevocationMessage, hasIntegrationTestEnv } from './testutils'
 
-describe('Delegated Attestation Integration Tests', () => {
+describe.skipIf(!hasIntegrationTestEnv)('Delegated Attestation Integration Tests', () => {
   let protocolClient: ProtocolContract.Client
   let adminKeypair: Keypair
   let config: {

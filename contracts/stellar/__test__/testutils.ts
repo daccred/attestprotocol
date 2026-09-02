@@ -53,6 +53,25 @@ export async function fundAccountIfNeeded(publicKey: string): Promise<void> {
 }
 
 /**
+ * True when the environment carries the testnet credentials the
+ * integration suites need. Used to skip them instead of failing.
+ */
+export const hasIntegrationTestEnv = Boolean(process.env.ADMIN_SECRET_KEY)
+
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable ${name}. ` +
+      `The integration tests run against a funded Stellar testnet account: ` +
+      `copy contracts/stellar/.env.example to contracts/stellar/.env, fill in ` +
+      `your keys, and source it (or export ${name}) before running vitest.`
+    )
+  }
+  return value
+}
+
+/**
  * Load test configuration from the contract registry and environment
  */
 export function loadTestConfig(): TestConfig {
@@ -63,7 +82,7 @@ export function loadTestConfig(): TestConfig {
     )
 
     /** MUST COME from .env file */
-    const adminSecretKey = process.env.ADMIN_SECRET_KEY as string;
+    const adminSecretKey = requireEnv('ADMIN_SECRET_KEY')
     const rpcUrl = 'https://soroban-testnet.stellar.org'
 
     return {

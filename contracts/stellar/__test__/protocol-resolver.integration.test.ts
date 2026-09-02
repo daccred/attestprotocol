@@ -12,9 +12,9 @@ import { describe, it, expect, beforeAll, test } from 'vitest'
 import { randomBytes } from 'crypto'
 import { Keypair, Transaction } from '@stellar/stellar-sdk'
 import * as ProtocolContract from '../bindings/src/protocol'
-import { loadTestConfig, fundAccountIfNeeded } from './testutils'
+import { loadTestConfig, fundAccountIfNeeded, hasIntegrationTestEnv } from './testutils'
 
-describe('Protocol Resolver Integration Tests', () => {
+describe.skipIf(!hasIntegrationTestEnv)('Protocol Resolver Integration Tests', () => {
   let protocolClient: ProtocolContract.Client
   let adminKeypair: Keypair
   let config: {

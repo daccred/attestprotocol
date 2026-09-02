@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { Keypair, rpc } from '@stellar/stellar-sdk'
 import * as ProtocolContract from '../bindings/src/protocol'
-import { generateAttestationUid, loadTestConfig } from './testutils'
+import { generateAttestationUid, loadTestConfig, hasIntegrationTestEnv } from './testutils'
 
-describe('Contract Status Check', () => {
+describe.skipIf(!hasIntegrationTestEnv)('Contract Status Check', () => {
   let protocolClient: ProtocolContract.Client
   let adminKeypair: Keypair
   let config: any
@@ -37,8 +37,11 @@ describe('Contract Status Check', () => {
   })
 })
 
-describe('UID Generation', () => {
-  const contractId = loadTestConfig().protocolContractId
+describe.skipIf(!hasIntegrationTestEnv)('UID Generation', () => {
+  let contractId: string
+  beforeAll(() => {
+    contractId = loadTestConfig().protocolContractId
+  })
   const subject = 'GD25F6Z56KYTB4I4EU7KHGLM43VRBNENAUQ3GP24FZIO6WNAAJMUA7P5';
   const attester = 'GBRHC2QOPZC2GM2EKGEXJSDPLXGXBHHHRAQQ5MFLAS2AST4ZKM6NCCUB';
   const schemaUid = Buffer.from('a8b158f4f0aadc903cd58111199d8f71e75614e647d3c28c390c904014281f6d', 'hex');
