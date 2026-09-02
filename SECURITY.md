@@ -33,7 +33,7 @@ Our backend services, including our Horizon indexer, are built on Node.js and Ex
 - **TLS/SSL Encryption**: All web communications with our services, including the Horizon API, require HTTPS to ensure data is encrypted in transit and to prevent man-in-the-middle attacks.
 - **Request Logging and Monitoring**: We use `morgan` for detailed request logging, which helps us monitor for suspicious activity, debug issues, and maintain a clear audit trail of API interactions.
 - **Dependency Scanning**: We regularly scan our third-party dependencies for known vulnerabilities to ensure our application's supply chain is secure.
-- **Phishing Prevention**: We will never ask for your private keys or passwords. Always verify that you are on an official domain (`attest.so`) before interacting with our services.
+- **Phishing Prevention**: We will never ask for your private keys or passwords. Always verify that you are on an official domain (`attestprotocol.org`) before interacting with our services.
 
 ### Key Management
 
@@ -104,8 +104,8 @@ We regularly update our security measures and will announce important security u
 For security-related questions or concerns:
 
 - **Security Issues**: `security@attestprotocol.org`
-- **General Support**: `support@attest.so`
-- **Documentation**: [https://docs.attest.so](https://docs.attest.so)
+- **General Support**: `support@attestprotocol.org`
+- **Documentation**: [https://docs.attestprotocol.org](https://docs.attestprotocol.org)
 
 ---
 

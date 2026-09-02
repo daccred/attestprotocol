@@ -163,6 +163,6 @@ npm test
 
 ## Support
 
-- [Documentation](https://docs.attest.so)
+- [Documentation](https://docs.attestprotocol.org)
 - [GitHub Issues](https://github.com/daccred/attest.so/issues)
 - [Discord Community](https://discord.gg/attestso)
