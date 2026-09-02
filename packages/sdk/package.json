@@ -12,7 +12,8 @@
     "@sebbo2002/semantic-release-jsr": "3.0.0",
     "@semantic-release/exec": "^7.1.0",
     "semantic-release-plugin-update-version-in-files": "^2.1.0",
-    "tsup": "^8.5.1"
+    "tsup": "^8.5.1",
+    "vitest": "^4.1.8"
   },
   "directories": {
     "test": "test"
@@ -41,8 +42,8 @@
     "build": "tsup",
     "clean": "rm -rf dist",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test": "vitest",
-    "test:coverage": "vitest --coverage"
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
   },
   "types": "dist/index.d.ts"
 }

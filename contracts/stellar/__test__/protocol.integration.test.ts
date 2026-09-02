@@ -11,11 +11,11 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { randomBytes } from 'crypto'
 import { Keypair, Transaction, xdr } from '@stellar/stellar-sdk'
 import * as ProtocolContract from '../bindings/src/protocol'
-import { loadTestConfig, fundAccountIfNeeded, createTestXDRSchema, parseXDRSchema } from './testutils'
+import { loadTestConfig, fundAccountIfNeeded, createTestXDRSchema, parseXDRSchema, hasIntegrationTestEnv } from './testutils'
 
 
  
-describe('Protocol Contract Integration Tests', () => {
+describe.skipIf(!hasIntegrationTestEnv)('Protocol Contract Integration Tests', () => {
   let protocolClient: ProtocolContract.Client
   let adminKeypair: Keypair
   let config: {
