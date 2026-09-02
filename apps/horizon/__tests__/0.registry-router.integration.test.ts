@@ -59,6 +59,14 @@ describe('Registry Router Integration Tests', () => {
           ]
         }
       })
+      await db.transaction.deleteMany({
+        where: {
+          OR: [
+            { transactionHash: { startsWith: 'test-' } },
+            { transactionHash: { startsWith: 'integration-test-' } }
+          ]
+        }
+      })
     }
   })
 
@@ -77,7 +85,8 @@ describe('Registry Router Integration Tests', () => {
         schemaEncoding: 'JSON',
         message: 'integration-test-attestation-message',
         value: { name: 'Test User', age: 25 },
-        revoked: false
+        revoked: false,
+        contractAddress: 'CDDRYX6CX4DLYTKXJFHX5BPHSQUCIPUFTEN74XJNK5YFFENYUBKYCITO'
       }
 
       // Insert test attestations with different properties for filtering tests
@@ -106,6 +115,24 @@ describe('Registry Router Integration Tests', () => {
       for (const attestation of testAttestations) {
         await singleUpsertAttestation(attestation)
       }
+
+      // Seed the transaction record backing the tx-hash lookup endpoint,
+      // mirroring what the event ingestion pipeline writes
+      await db.transaction.create({
+        data: {
+          action: 'ATTEST:CREATE',
+          transactionHash: baseAttestationData.transactionHash,
+          timestamp: new Date(),
+          sourceAccount: baseAttestationData.attesterAddress,
+          contractId: baseAttestationData.contractAddress,
+          ledger: REQUEST_LEDGER,
+          metadata: [
+            `integration-test-attestation-1-${testSuffix}`,
+            'integration-test-payload',
+            baseAttestationData.attesterAddress
+          ]
+        }
+      })
     })
 
     it('should correctly filter attestations by ledger number', async () => {
@@ -283,7 +310,8 @@ describe('Registry Router Integration Tests', () => {
       revocable: true,
       deployerAddress: 'GDEPLOYER1234567890ABCDEFGHIJKLMNOP1234567890ABCDEFGHIJ',
       type: 'identity',
-      transactionHash: 'test-schema-tx-hash-123456789abcdef'
+      transactionHash: 'test-schema-tx-hash-123456789abcdef',
+      contractAddress: 'CDDRYX6CX4DLYTKXJFHX5BPHSQUCIPUFTEN74XJNK5YFFENYUBKYCITO'
     }
 
     beforeEach(async () => {
@@ -293,6 +321,7 @@ describe('Registry Router Integration Tests', () => {
           ...baseSchemaData,
           uid: 'test-schema-1',
           ledger: REQUEST_LEDGER,
+          transactionHash: 'integration-test-schema-tx-hash-1',
         },
         {
           ...baseSchemaData,
@@ -313,6 +342,28 @@ describe('Registry Router Integration Tests', () => {
       for (const schema of testSchemas) {
         await singleUpsertSchema(schema)
       }
+
+      // Seed the transaction record backing the tx-hash lookup endpoint
+      await db.transaction.create({
+        data: {
+          action: 'SCHEMA:REGISTER',
+          transactionHash: 'integration-test-schema-tx-hash-1',
+          timestamp: new Date(),
+          sourceAccount: baseSchemaData.deployerAddress,
+          contractId: baseSchemaData.contractAddress,
+          ledger: REQUEST_LEDGER,
+          metadata: [
+            'test-schema-1',
+            {
+              resolver: baseSchemaData.resolverAddress,
+              authority: baseSchemaData.deployerAddress,
+              revocable: baseSchemaData.revocable,
+              definition: baseSchemaData.schemaDefinition
+            },
+            baseSchemaData.deployerAddress
+          ]
+        }
+      })
     })
 
     it('should correctly filter schemas by ledger number', async () => {
@@ -492,6 +543,7 @@ describe('Registry Router Integration Tests', () => {
         schemaEncoding: 'JSON',
         message: `test-message-${i}`,
         value: { index: i },
+        contractAddress: 'CDDRYX6CX4DLYTKXJFHX5BPHSQUCIPUFTEN74XJNK5YFFENYUBKYCITO',
         // Every 7th attestation is revoked
         revoked: i % 7 === 0
       }))
