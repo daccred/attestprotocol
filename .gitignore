@@ -127,3 +127,4 @@ test-ledger
 # Worktree planning artifacts (not for merge)
 PLAN.md
 REGRESSION_TESTS.md
+.jira/
