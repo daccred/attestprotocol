@@ -21,7 +21,7 @@
     "stellar"
   ],
   "private": "true",
-  "repository": "daccred/attest.so.git",
+  "repository": "daccred/attestprotocol",
   "scripts": {
     "build": "pnpm run --recursive build",
     "build:docs": "pnpm --filter @attestprotocol/docs build",
