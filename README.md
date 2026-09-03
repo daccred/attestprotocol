@@ -1,13 +1,13 @@
-# attest.so
+# Attest Protocol
 
 <div align="center">
 
-![attest.so Logo](https://github.com/user-attachments/assets/520b21ee-c8d7-4bda-9809-999c489551b9)
+![Attest Protocol Logo](https://github.com/user-attachments/assets/520b21ee-c8d7-4bda-9809-999c489551b9)
 
 **A Unified Trust Framework for Blockchain-Based Attestation Infrastructure**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![GitHub Issues](https://img.shields.io/github/issues/daccred/attest.so)](https://github.com/daccred/attest.so/issues)
+[![GitHub Issues](https://img.shields.io/github/issues/daccred/attestprotocol)](https://github.com/daccred/attestprotocol/issues)
 
 ---
 
@@ -25,7 +25,7 @@
 
 | Network | Stellar |
 |---------|---------|
-| **Sandbox** | [Try it now](https://sandbox.attest.so) |
+| **Sandbox** | [Try it now](https://sandbox.attestprotocol.org) |
 | **Testnet** | [Launch](https://testnet.attestprotocol.org) |
 | **Mainnet** | [Launch](https://stellar.attestprotocol.org) |
 
@@ -65,7 +65,7 @@ npm install @attestprotocol/cli
 
 ## Overview
 
-**attest.so** provides enterprise-grade infrastructure for builders to create "Reputation Authorities" on-chain with verifiable and comprehensive identity proofs on Stellar.
+**Attest Protocol** provides enterprise-grade infrastructure for builders to create "Reputation Authorities" on-chain with verifiable and comprehensive identity proofs on Stellar.
 
 Our framework addresses critical challenges in Web3:
 
@@ -168,7 +168,7 @@ Comprehensive documentation and example implementations to facilitate integratio
 The repository follows a monorepo structure using pnpm workspaces:
 
 ```
-attest.so/
+attestprotocol/
 ├── apps/
 │   ├── docs/          # Documentation site (Mintlify)
 │   └── horizon/       # Stellar blockchain indexer (Express.js + MongoDB)
@@ -200,8 +200,8 @@ See [NAMING.md](./NAMING.md) for detailed information about naming conventions a
 
 ```bash
 # Clone the repository
-git clone https://github.com/daccred/attest.so.git
-cd attest.so
+git clone https://github.com/daccred/attestprotocol.git
+cd attestprotocol
 
 # Install dependencies
 pnpm install
@@ -263,8 +263,8 @@ With Rust Analyzer installed, you can configure it to recognize our Rust-based c
 ## Resources & Links
 
 - [Product Development Log](https://daccred.notion.site/We-re-building-https-on-the-blockchain-df20b05cb5a04e379a165714aab024fb?pvs=4)
-- [Technical Documentation](https://attest.so) (Coming Soon)
-- [API Reference](https://attest.so) (Coming Soon)
+- [Technical Documentation](https://docs.attestprotocol.org)
+- [API Reference](https://docs.attestprotocol.org)
 
 ---
 
